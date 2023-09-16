@@ -81,7 +81,12 @@ internal class MqttListener : IHostedService
             SourceCall = config.Ssid
         };
 
-        stream.Write(request.ToOnAirFormat());
+        var bytes = request.ToOnAirFormat();
+        var lengthBytes = BitConverter.GetBytes((Int16)bytes.Length);
+        logger.LogInformation("We have {length} bytes to send", bytes.Length);
+        logger.LogInformation("lengthBytes is {length} bytes long", lengthBytes.Length);
+        stream.Write(lengthBytes);
+        stream.Write(bytes);
         logger.LogInformation("Sent request to far node, waiting...");
         streamReader.WaitToReceive("OK\r");
         logger.LogInformation("Received OK, disconnecting.");

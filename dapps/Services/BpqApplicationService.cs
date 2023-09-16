@@ -1,6 +1,8 @@
 ﻿using dapps.Models;
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Sockets;
+using System.Runtime.Intrinsics.Arm;
 using System.Text;
 
 namespace dapps.Services;
@@ -48,35 +50,24 @@ public class BpqApplicationService : IHostedService, IDisposable
 
                 writer.Write("This is DAPPS\r");
 
+                using var binaryReader = new BinaryReader(stream);
+
                 while (true)
                 {
-                    byte[] buffer = new byte[1024];
-
-                    int bytesRead;
-
-                    try
+                    while (!stream.DataAvailable)
                     {
-                        bytesRead = stream.ReadAtLeast(buffer, 1);
-                    }
-                    catch (IOException)
-                    {
-                        logger.LogInformation("Client disconnected");
-                        break;
+                        await Task.Delay(100);
                     }
 
-                    if (bytesRead == -1)
-                    {
-                        logger.LogInformation("Client disconnected");
-                        break;
-                    }
+                    var messageLength = binaryReader.ReadInt16();
 
-                    if (bytesRead == 0)
-                    {
-                        logger.LogInformation("No bytes read");
-                        continue;
-                    }
+                    logger.LogInformation("Message length: {length}", messageLength);
 
-                    var data = buffer[0..bytesRead];
+                    byte[] data = new byte[messageLength];
+                    for (int i = 0; i < messageLength; i++)
+                    {
+                        data[i] = (byte)stream.ReadByte();
+                    }
 
                     var s = Encoding.UTF8.GetString(data);
 
