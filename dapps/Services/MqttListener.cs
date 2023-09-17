@@ -55,41 +55,65 @@ internal class MqttListener : IHostedService
     /// <returns></returns>
     private async Task MqttClient_ApplicationMessageReceivedAsync(MqttApplicationMessageReceivedEventArgs arg)
     {
-        var topicParts = arg.ApplicationMessage.Topic.Split('/');
-
-        var destAppName = topicParts[2];
-        var destNode = topicParts[4];
-        var payload = arg.ApplicationMessage.PayloadSegment.ToArray();
-
-        logger.LogInformation("Received a request to send {bytes} bytes to app {app} on node {node}", payload.Length, destAppName, destNode);
-        using var tcpClient = new TcpClient();
-        await tcpClient.ConnectAsync(bpqHost, 8011);
-        using var stream = tcpClient.GetStream();
-        using var streamReader = new StreamReader(stream);
-        using var streamWriter = new StreamWriter(stream) { AutoFlush = true };
-        await streamWriter.WriteAsync($"{bpqUser}\r{bpqPassword}\rBPQTERMTCP\r");
-        streamReader.WaitToReceive("Connected to TelnetServer\r");
-        logger.LogInformation("Connected to local node");
-        await streamWriter.WriteAsync($"C {destNode}\r");
-        var connectResult = streamReader.WaitToReceive("This is DAPPS\r");
-        logger.LogInformation("Received handshake from remote node");
-
-        var request = new Request
+        try
         {
-            AppName = destAppName,
-            Payload = payload,
-            SourceCall = config.Ssid
-        };
+            var topicParts = arg.ApplicationMessage.Topic.Split('/');
 
-        var bytes = request.ToOnAirFormat();
-        var lengthBytes = BitConverter.GetBytes((Int16)bytes.Length);
-        logger.LogInformation("We have {length} bytes to send", bytes.Length);
-        logger.LogInformation("lengthBytes is {length} bytes long", lengthBytes.Length);
-        stream.Write(lengthBytes);
-        stream.Write(bytes);
-        logger.LogInformation("Sent request to far node, waiting...");
-        streamReader.WaitToReceive("OK\r");
-        logger.LogInformation("Received OK, disconnecting.");
+            var destAppName = topicParts[2];
+            var destNode = topicParts[4];
+            var payload = arg.ApplicationMessage.PayloadSegment.ToArray();
+
+            logger.LogInformation("Received a request to send {bytes} bytes to app {app} on node {node}", payload.Length, destAppName, destNode);
+            using var tcpClient = new TcpClient();
+            await tcpClient.ConnectAsync(bpqHost, 8011);
+            using var stream = tcpClient.GetStream();
+            using var streamReader = new StreamReader(stream);
+            using var streamWriter = new StreamWriter(stream) { AutoFlush = true };
+            await streamWriter.WriteAsync($"{bpqUser}\r{bpqPassword}\rBPQTERMTCP\r");
+            streamReader.WaitToReceive("Connected to TelnetServer\r");
+            logger.LogInformation("Connected to local node, connecting to far node...");
+            await streamWriter.WriteAsync($"C {destNode}\r");
+
+            var connectResult = streamReader.WaitToReceive("\r");
+
+            logger.LogInformation("connectResult: {connectResult}", connectResult); // NODE1:A0AAA} Connected to FARAPP:A0BBB-8
+
+
+            if (!streamReader.WaitToReceive("\r", TimeSpan.FromSeconds(10), out var appConnectResult))
+            {
+                logger.LogInformation("Received '{received}', expected '*** Connected to DAPPS'", appConnectResult);
+                return;
+            }
+            logger.LogInformation("appConnectResult: {appConnectResult}", appConnectResult); // 
+
+            logger.LogInformation("Waiting to receive 'This is DAPPS' from application...");
+            if (!streamReader.WaitToReceive("This is DAPPS\r", TimeSpan.FromSeconds(10), out var handshakeResult))
+            {
+                logger.LogInformation("Received '{received}'", handshakeResult);
+                return;
+            }
+            logger.LogInformation("handshakeResult: {handshakeResult}", handshakeResult); // This is DAPPS
+
+            var request = new Request
+            {
+                AppName = destAppName,
+                Payload = payload,
+                SourceCall = config.Ssid
+            };
+
+            byte[] onAirBytes = request.ToOnAirFormat();
+            byte[] lengthBytes = BitConverter.GetBytes((short)onAirBytes.Length);
+            logger.LogInformation("We have {length} bytes to send", onAirBytes.Length);
+            stream.Write(lengthBytes);
+            stream.Write(onAirBytes);
+            logger.LogInformation("Sent request to far node, waiting...");
+            streamReader.WaitToReceive("OK\r");
+            logger.LogInformation("Received OK, disconnecting.");
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Caught exception");
+        }
     }
 
     public Task StopAsync(CancellationToken cancellationToken)

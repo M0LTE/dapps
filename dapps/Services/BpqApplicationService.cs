@@ -54,14 +54,18 @@ public class BpqApplicationService : IHostedService, IDisposable
 
                 while (true)
                 {
+                    /*logger.LogInformation("Waiting for data...");
+
                     while (!stream.DataAvailable)
                     {
                         await Task.Delay(100);
-                    }
+                    }*/
+
+                    logger.LogInformation("There is data");
 
                     var messageLength = binaryReader.ReadInt16();
 
-                    logger.LogInformation("Message length: {length}", messageLength);
+                    logger.LogInformation("Read message length: {length}", messageLength);
 
                     byte[] data = new byte[messageLength];
                     for (int i = 0; i < messageLength; i++)
@@ -86,6 +90,7 @@ public class BpqApplicationService : IHostedService, IDisposable
                     logger.LogInformation("Sending back OK");
 
                     writer.Write("OK\r");
+                    break;
                 }
             }
             catch (Exception ex)
