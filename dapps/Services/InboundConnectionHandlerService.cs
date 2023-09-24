@@ -100,6 +100,6 @@ internal class InboundConnectionHandlerService
 
     public enum DappsCommandType : byte
     {
-        Message = 0,
+        Message = 1,
     }
 }
