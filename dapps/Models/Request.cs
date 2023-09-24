@@ -3,16 +3,17 @@ using System.Text.Json;
 
 namespace dapps.Models;
 
-public class Request
+public class DappsMessage
 {
+    public required DateTime Timestamp { get; set; }
     public required string AppName { get; set; }
     public required byte[] Payload { get; set; }
     public required string SourceCall { get; set; }
 
-    internal static Request FromOnAirFormat(byte[] data)
+    internal static DappsMessage FromOnAirFormat(byte[] data)
     {
         var json = Encoding.UTF8.GetString(data);
-        var obj = JsonSerializer.Deserialize<Request>(json);
+        var obj = JsonSerializer.Deserialize<DappsMessage>(json);
         return obj!;
     }
 

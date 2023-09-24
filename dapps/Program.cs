@@ -12,9 +12,11 @@ public class Program
             {
                 services.AddSingleton<MqttPublisher>();
                 services.AddHostedService<MqttListener>();
-                services.AddHostedService<BpqApplicationService>();
+                services.AddHostedService<BpqApplicationListener>();
                 services.AddHostedService<DbStartupService>();
                 services.AddSingleton<DbConnectionFactory>();
+                services.AddSingleton<InboundConnectionHandlerService>();
+                services.AddTransient<MessagesTableRepository>();
                 services.Configure<ServiceConfig>(context.Configuration);
             })
             .Build();
