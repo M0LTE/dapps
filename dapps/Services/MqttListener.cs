@@ -45,7 +45,7 @@ internal class MqttListener : IHostedService
     {
         mqttClient.ApplicationMessageReceivedAsync += MqttClient_ApplicationMessageReceivedAsync;
         await mqttClient.StartAsync(options);
-        await mqttClient.SubscribeAsync("dapps/apps/+/out/+");
+        await mqttClient.SubscribeAsync("dapps/out/+/+");
     }
 
     /// <summary>
@@ -60,7 +60,7 @@ internal class MqttListener : IHostedService
             var topicParts = arg.ApplicationMessage.Topic.Split('/');
 
             var destAppName = topicParts[2];
-            var destNode = topicParts[4];
+            var destNode = topicParts[3];
             var payload = arg.ApplicationMessage.PayloadSegment.ToArray();
 
             logger.LogInformation("Received a request to send {bytes} bytes to app {app} on node {node}", payload.Length, destAppName, destNode);
@@ -94,8 +94,9 @@ internal class MqttListener : IHostedService
             }
             logger.LogInformation("handshakeResult: {handshakeResult}", handshakeResult); // This is DAPPS
 
-            var request = new Request
+            var request = new DappsMessage
             {
+                Timestamp = DateTime.UtcNow, // TODO: get from header
                 AppName = destAppName,
                 Payload = payload,
                 SourceCall = config.Ssid
@@ -104,6 +105,7 @@ internal class MqttListener : IHostedService
             byte[] onAirBytes = request.ToOnAirFormat();
             byte[] lengthBytes = BitConverter.GetBytes((short)onAirBytes.Length);
             logger.LogInformation("We have {length} bytes to send", onAirBytes.Length);
+            stream.Write(new[] { (byte)'d' }, 0, 1);
             stream.Write(lengthBytes);
             stream.Write(onAirBytes);
             logger.LogInformation("Sent request to far node, waiting...");
