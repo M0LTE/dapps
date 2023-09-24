@@ -17,9 +17,12 @@ internal class DbConnectionFactory
     {
         using var connection = GetDbConnection();
 
-        await connection.ExecuteAsync(@"CREATE TABLE IF NOT EXISTS messageQueue ( 
+        await connection.ExecuteAsync(@"CREATE TABLE IF NOT EXISTS messages ( 
               id integer not null primary key autoincrement,
-              datetime not null default current_timestamp
+              datetime not null default current_timestamp,
+              sourceCall text not null,
+              appName text not null,
+              payload blob not null
             );");
 
         //await AddColumnIfNotExists(connection, tableName: "messageQueue", fieldName: "myfield", definition: "integer null");
