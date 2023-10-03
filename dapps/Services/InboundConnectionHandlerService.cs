@@ -19,23 +19,21 @@ internal class InboundConnectionHandlerService
         this.messagesTableRepository = messagesTableRepository;
     }
 
-    public async Task Handle(NetworkStream stream)
+    public async Task Handle(string sourceCallsign, NetworkStream stream, CancellationToken stoppingToken)
     {
         try
         {
-            using var streamWriter = new StreamWriter(stream);
-            using var streamReader = new StreamReader(stream);
-            using var binaryReader = new BinaryReader(stream);
+            var streamWriter = new StreamWriter(stream) { AutoFlush = true };
+            var streamReader = new StreamReader(stream);
+            var binaryReader = new BinaryReader(stream);
 
-            var callsign = await streamReader.ReadLineAsync();
-            logger.LogInformation($"Accepted connection from {callsign}");
-            streamWriter.Write("This is DAPPS\r");
-            streamWriter.Flush();
+            streamWriter.Write("This is DAPPS\n");
+            //streamWriter.Flush();
 
             int i = 0;
             while (true)
             {
-                var next = binaryReader.Read();
+                /*var next = binaryReader.Read();
                 if (next == -1)
                 {
                     logger.LogInformation("Client went away");
@@ -62,35 +60,19 @@ internal class InboundConnectionHandlerService
 
                 var data = binaryReader.ReadBytes(messageLength);
 
-                logger.LogInformation("Received '{data}'", data.ToPrintableString());
+                logger.LogInformation("Received '{data}'", data.ToPrintableString());*/
+
+                (DappsCommandType messageType, string[]? parameters) = ReadCommand(stream);
 
                 if (messageType == DappsCommandType.Message)
                 {
-                    var request = DappsMessage.FromOnAirFormat(data);
-
-                    try
-                    {
-                        await messagesTableRepository.Save(request.Timestamp, request.SourceCall, request.AppName, request.Payload);
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.LogError(ex, "Could not save");
-                        logger.LogInformation("Sending back ERROR");
-                        streamWriter.Write("ERROR\r");
-                        streamWriter.Flush();
-                    }
-
-                    logger.LogInformation("Saved, sending back OK");
-                    streamWriter.Write($"OK{++i}\r");
-                    streamWriter.Flush();
-                }
-                else
-                {
-                    logger.LogInformation("Unrecognised message type " + (byte)messageType);
-                    streamWriter.Write("?" + (byte)messageType + "\r");
-                    streamWriter.Flush();
+                    await HandleMessageCommand(stream, parameters![0], int.Parse(parameters[1]));
                 }
             }
+        }
+        catch (DappsProtocolException ex)
+        {
+            logger.LogInformation(ex.Message + ", connection ending.");
         }
         finally
         {
@@ -98,8 +80,62 @@ internal class InboundConnectionHandlerService
         }
     }
 
-    public enum DappsCommandType : byte
+    private async Task HandleMessageCommand(Stream stream, string destCallsign, int messageLength)
     {
-        Message = 1,
+        var streamWriter = new StreamWriter(stream) { AutoFlush = true };
+        var binaryReader = new BinaryReader(stream);
+
+        streamWriter.Write("OK\n");
+
+        var bytes = binaryReader.ReadBytes(messageLength);
+
+        var request = DappsMessage.FromOnAirFormat(bytes);
+
+        try
+        {
+            await messagesTableRepository.Save(request.Timestamp, request.SourceCall, request.AppName, request.Payload);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Could not save");
+            logger.LogInformation("Sending back ERROR");
+            streamWriter.Write("ERROR\r");
+        }
+
+        logger.LogInformation("Saved, sending back OK");
+        streamWriter.Write($"MSG OK\n");
+    }
+
+    private static (DappsCommandType messageType, string[]? parameters) ReadCommand(Stream stream)
+    {
+        var streamReader = new StreamReader(stream);
+        var streamWriter = new StreamWriter(stream) { AutoFlush = true };
+
+        if (!streamReader.WaitToReceive("\n", TimeSpan.FromSeconds(60), out var received))
+        {
+            throw new DappsProtocolException("Timeout waiting for command");
+        }
+
+        var parts = received.Trim().Split(" ");
+        if (parts.Length == 3 && parts[0] == "MSG")
+        {
+            return (DappsCommandType.Message, parts[1..3]);
+        }
+
+        streamWriter.Write("EH?\n");
+        return (DappsCommandType.Invalid, default);
+    }
+
+    public enum DappsCommandType
+    {
+        Invalid,
+        Message
+    }
+}
+
+internal class DappsProtocolException : Exception
+{
+    public DappsProtocolException(string message) : base(message)
+    {
     }
 }
