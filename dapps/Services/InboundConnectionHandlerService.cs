@@ -28,40 +28,9 @@ internal class InboundConnectionHandlerService
             var binaryReader = new BinaryReader(stream);
 
             streamWriter.Write("This is DAPPS\n");
-            //streamWriter.Flush();
 
-            int i = 0;
             while (true)
             {
-                /*var next = binaryReader.Read();
-                if (next == -1)
-                {
-                    logger.LogInformation("Client went away");
-                    return;
-                }
-
-                if (next != 'd')
-                {
-                    logger.LogInformation("Got unexpected character " + ((byte)next).ToHex());
-                }
-
-                logger.LogInformation("Waiting for message length");
-
-                var messageLength = binaryReader.ReadInt16();
-                logger.LogInformation("Read message length: {length}", messageLength);
-
-                logger.LogInformation("Waiting for message type byte");
-
-                var messageType = (DappsCommandType)binaryReader.ReadByte();
-
-                logger.LogInformation("Message type " + messageType);
-
-                logger.LogInformation($"Waiting for {messageLength} bytes");
-
-                var data = binaryReader.ReadBytes(messageLength);
-
-                logger.LogInformation("Received '{data}'", data.ToPrintableString());*/
-
                 (DappsCommandType messageType, string[]? parameters) = ReadCommand(stream);
 
                 if (messageType == DappsCommandType.Message)
@@ -89,7 +58,7 @@ internal class InboundConnectionHandlerService
 
         var bytes = binaryReader.ReadBytes(messageLength);
 
-        var request = DappsMessage.FromOnAirFormat(bytes);
+        DappsMessage request = DappsMessageFormatter.FromOnAirFormat(bytes);
 
         try
         {

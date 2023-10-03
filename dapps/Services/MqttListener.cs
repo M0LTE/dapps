@@ -102,7 +102,7 @@ internal class MqttListener : IHostedService
                 SourceCall = config.Ssid
             };
 
-            byte[] onAirBytes = request.ToOnAirFormat();
+            byte[] onAirBytes = DappsMessageFormatter.ToOnAirFormat(request);
             byte[] lengthBytes = BitConverter.GetBytes((short)onAirBytes.Length);
             logger.LogInformation("We have {length} bytes to send", onAirBytes.Length);
             stream.Write(new[] { (byte)'d' }, 0, 1);
