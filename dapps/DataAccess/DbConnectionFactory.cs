@@ -6,9 +6,21 @@ namespace dapps.DataAccess;
 
 internal class DbConnectionFactory
 {
+    private readonly ILogger<DbConnectionFactory> logger;
+
+    public DbConnectionFactory(ILogger<DbConnectionFactory> logger)
+    {
+        this.logger = logger;
+    }
+
     public IDbConnection GetDbConnection()
     {
-        var connection = new SQLiteConnection("data source=dapps.sqlite");
+        var path = Path.Combine(Environment.CurrentDirectory, "dapps.sqlite");
+        var cs = $"data source={path}";
+
+        logger.LogInformation("path:{path}", path);
+        logger.LogInformation("cs:{cs}", cs);
+        var connection = new SQLiteConnection(cs, true);
         connection.Open();
         return connection;
     }
