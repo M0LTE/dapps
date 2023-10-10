@@ -30,4 +30,9 @@ internal static partial class ExtensionMethods
         }
         return hex;
     }
+
+    public static void WriteNewline(this StreamWriter streamWriter, string text)
+    {
+        streamWriter.Write(text + "\n");
+    }
 }

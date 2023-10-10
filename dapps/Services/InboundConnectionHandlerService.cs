@@ -27,15 +27,19 @@ internal class InboundConnectionHandlerService
             var streamReader = new StreamReader(stream);
             var binaryReader = new BinaryReader(stream);
 
-            streamWriter.Write("This is DAPPS\n");
+            streamWriter.WriteNewline("This is DAPPS");
 
             while (true)
             {
                 (DappsCommandType messageType, string[]? parameters) = ReadCommand(stream);
 
-                if (messageType == DappsCommandType.Message)
+                if (messageType == DappsCommandType.Message && parameters?.Length == 2)
                 {
                     await HandleMessageCommand(stream, parameters![0], int.Parse(parameters[1]));
+                }
+                else
+                {
+                    logger.LogInformation("Unrecognised command");
                 }
             }
         }
@@ -54,7 +58,7 @@ internal class InboundConnectionHandlerService
         var streamWriter = new StreamWriter(stream) { AutoFlush = true };
         var binaryReader = new BinaryReader(stream);
 
-        streamWriter.Write("OK\n");
+        streamWriter.WriteNewline("OK");
 
         var bytes = binaryReader.ReadBytes(messageLength);
 
@@ -68,11 +72,11 @@ internal class InboundConnectionHandlerService
         {
             logger.LogError(ex, "Could not save");
             logger.LogInformation("Sending back ERROR");
-            streamWriter.Write("ERROR\r");
+            streamWriter.WriteNewline("ERROR");
         }
 
         logger.LogInformation("Saved, sending back OK");
-        streamWriter.Write($"MSG OK\n");
+        streamWriter.WriteNewline($"MSG OK");
     }
 
     private static (DappsCommandType messageType, string[]? parameters) ReadCommand(Stream stream)
@@ -91,7 +95,7 @@ internal class InboundConnectionHandlerService
             return (DappsCommandType.Message, parts[1..3]);
         }
 
-        streamWriter.Write("EH?\n");
+        streamWriter.WriteNewline("EH?");
         return (DappsCommandType.Invalid, default);
     }
 
