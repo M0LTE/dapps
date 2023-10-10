@@ -12,14 +12,16 @@ internal class InboundConnectionHandlerService
 {
     private readonly ILogger<InboundConnectionHandlerService> logger;
     private readonly MessagesTableRepository messagesTableRepository;
+    private readonly NodeConnectionsManager nodeConnectionsManager;
 
-    public InboundConnectionHandlerService(ILogger<InboundConnectionHandlerService> logger, MessagesTableRepository messagesTableRepository)
+    public InboundConnectionHandlerService(ILogger<InboundConnectionHandlerService> logger, MessagesTableRepository messagesTableRepository, NodeConnectionsManager nodeConnectionsManager)
     {
         this.logger = logger;
         this.messagesTableRepository = messagesTableRepository;
+        this.nodeConnectionsManager = nodeConnectionsManager;
     }
 
-    public async Task Handle(string sourceCallsign, NetworkStream stream, CancellationToken stoppingToken)
+    public async Task Handle(string connectedStation, NetworkStream stream, CancellationToken stoppingToken)
     {
         try
         {
@@ -31,15 +33,15 @@ internal class InboundConnectionHandlerService
 
             while (true)
             {
-                (DappsCommandType messageType, string[]? parameters) = ReadCommand(stream);
+                (DappsCommandType messageType, string[]? parameters) = ParseCommand(stream);
 
-                if (messageType == DappsCommandType.Message && parameters?.Length == 2)
+                if (messageType == DappsCommandType.Invalid)
                 {
-                    await HandleMessageCommand(stream, parameters![0], int.Parse(parameters[1]));
+                    logger.LogInformation("Unrecognised command rejected");
                 }
-                else
+                else if (messageType == DappsCommandType.Message && parameters?.Length == 2 && int.TryParse(parameters[1], out var messageLength) && messageLength > 0)
                 {
-                    logger.LogInformation("Unrecognised command");
+                    await HandleMessageCommand(stream, messageLength, connectedStation, destCallsign: parameters![0]);
                 }
             }
         }
@@ -53,7 +55,7 @@ internal class InboundConnectionHandlerService
         }
     }
 
-    private async Task HandleMessageCommand(Stream stream, string destCallsign, int messageLength)
+    private async Task HandleMessageCommand(Stream stream, int messageLength, string receivedFrom, string destCallsign)
     {
         var streamWriter = new StreamWriter(stream) { AutoFlush = true };
         var binaryReader = new BinaryReader(stream);
@@ -67,19 +69,20 @@ internal class InboundConnectionHandlerService
         try
         {
             await messagesTableRepository.Save(request.Timestamp, request.SourceCall, request.AppName, request.Payload);
+            await nodeConnectionsManager.SignalMessageReceivedFor(destCallsign);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Could not save");
-            logger.LogInformation("Sending back ERROR");
+            logger.LogError(ex, "Could not save, sending back ERROR");
             streamWriter.WriteNewline("ERROR");
+            return;
         }
 
         logger.LogInformation("Saved, sending back OK");
         streamWriter.WriteNewline($"MSG OK");
     }
 
-    private static (DappsCommandType messageType, string[]? parameters) ReadCommand(Stream stream)
+    private static (DappsCommandType messageType, string[]? parameters) ParseCommand(Stream stream)
     {
         var streamReader = new StreamReader(stream);
         var streamWriter = new StreamWriter(stream) { AutoFlush = true };
@@ -90,9 +93,16 @@ internal class InboundConnectionHandlerService
         }
 
         var parts = received.Trim().Split(" ");
-        if (parts.Length == 3 && parts[0] == "MSG")
+        var command = parts[0];
+
+        switch (command)
         {
-            return (DappsCommandType.Message, parts[1..3]);
+            case "MSG" when parts.Length == 3:
+                return (DappsCommandType.Message, parts[1..3]);
+            case "CANFWD" when parts.Length == 2:
+                return (DappsCommandType.ForwardingClaim, parts[1..2]);
+            case "NOFWD" when parts.Length == 2:
+                return (DappsCommandType.ForwardingDisclaim, parts[1..2]);
         }
 
         streamWriter.WriteNewline("EH?");
@@ -102,7 +112,9 @@ internal class InboundConnectionHandlerService
     public enum DappsCommandType
     {
         Invalid,
-        Message
+        Message,
+        ForwardingClaim,
+        ForwardingDisclaim
     }
 }
 
