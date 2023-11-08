@@ -2,5 +2,5 @@
 
 internal class ServiceConfig
 {
-    public string Ssid { get; set; }
+    public string Ssid { get; set; } = "";
 }
