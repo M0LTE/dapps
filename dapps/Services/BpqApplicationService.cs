@@ -36,7 +36,6 @@ internal class BpqApplicationListener : IHostedService
             {
                 logger.LogInformation("Listening for connection from BPQ...");
                 var client = await tcpListener.AcceptTcpClientAsync(cancellationTokenSource.Token);
-                logger.LogInformation("Accepted client");
                 _ = Task.Run(async () => await AcceptConnection(client.GetStream(), cancellationTokenSource.Token));
             }
             catch (Exception ex)
@@ -49,6 +48,8 @@ internal class BpqApplicationListener : IHostedService
 
     private async Task AcceptConnection(NetworkStream stream, CancellationToken cancellationToken)
     {
+        logger.LogInformation("Accepted connection from BPQ, awaiting callsign...");
+
         try
         {
             using var streamReader = new StreamReader(stream);

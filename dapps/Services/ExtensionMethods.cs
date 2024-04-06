@@ -33,6 +33,7 @@ internal static partial class ExtensionMethods
 
     public static void WriteNewline(this StreamWriter streamWriter, string text)
     {
-        streamWriter.Write(text + "\n");
+        //streamWriter.Write(text + "\n");
+        streamWriter.Write(text + "\r\n");
     }
 }

@@ -29,10 +29,10 @@ internal class InboundConnectionHandlerService
             var streamReader = new StreamReader(stream);
             var binaryReader = new BinaryReader(stream);
 
-            streamWriter.WriteNewline("This is DAPPS");
-
             while (true)
             {
+                streamWriter.Write("DAPPS>");
+
                 (DappsCommandType messageType, string[]? parameters) = ParseCommand(stream);
 
                 if (messageType == DappsCommandType.Invalid)
@@ -42,6 +42,10 @@ internal class InboundConnectionHandlerService
                 else if (messageType == DappsCommandType.Message && parameters?.Length == 2 && int.TryParse(parameters[1], out var messageLength) && messageLength > 0)
                 {
                     await HandleMessageCommand(stream, messageLength, connectedStation, destCallsign: parameters![0]);
+                }
+                else if (messageType == DappsCommandType.Interactive)
+                {
+                    await EnterInteractiveState(stream, connectedStation);
                 }
             }
         }
@@ -53,6 +57,29 @@ internal class InboundConnectionHandlerService
         {
             await stream.DisposeAsync();
         }
+    }
+
+    private Task EnterInteractiveState(NetworkStream stream, string connectedStation)
+    {
+        var streamWriter = new StreamWriter(stream) { AutoFlush = true };
+        var streamReader = new StreamReader(stream);
+
+        streamWriter.WriteNewline("Hi " + connectedStation);
+
+        while (true)
+        {
+            streamWriter.Write(">");
+            var line = streamReader.ReadLine();
+            if (line!.Trim() == "q")
+            {
+                break;
+            }
+            streamWriter.WriteNewline($"you said \"{line!.Trim()}\"");
+        }
+
+        logger.LogInformation("Exiting interactive mode");
+
+        return Task.CompletedTask;
     }
 
     private async Task HandleMessageCommand(Stream stream, int messageLength, string receivedFrom, string destCallsign)
@@ -97,6 +124,8 @@ internal class InboundConnectionHandlerService
 
         switch (command)
         {
+            case "INTERACTIVE":
+                return (DappsCommandType.Interactive, null);
             case "MSG" when parts.Length == 3:
                 return (DappsCommandType.Message, parts[1..3]);
             case "CANFWD" when parts.Length == 2:
@@ -114,7 +143,8 @@ internal class InboundConnectionHandlerService
         Invalid,
         Message,
         ForwardingClaim,
-        ForwardingDisclaim
+        ForwardingDisclaim,
+        Interactive
     }
 }
 

@@ -17,6 +17,7 @@ public class Program
                 services.AddSingleton<DbConnectionFactory>();
                 services.AddSingleton<InboundConnectionHandlerService>();
                 services.AddTransient<MessagesTableRepository>();
+                services.AddSingleton<NodeConnectionsManager>();
                 services.Configure<ServiceConfig>(context.Configuration);
             })
             .Build();

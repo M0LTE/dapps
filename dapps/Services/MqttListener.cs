@@ -86,13 +86,13 @@ internal class MqttListener : IHostedService
             }
             logger.LogInformation("appConnectResult: {appConnectResult}", appConnectResult); // 
 
-            logger.LogInformation("Waiting to receive 'This is DAPPS' from application...");
-            if (!streamReader.WaitToReceive("This is DAPPS\r", TimeSpan.FromSeconds(10), out var handshakeResult))
+            logger.LogInformation("Waiting to receive 'DAPPS>' from application...");
+            if (!streamReader.WaitToReceive("DAPPS>\r", TimeSpan.FromSeconds(10), out var handshakeResult))
             {
                 logger.LogInformation("Received '{received}'", handshakeResult);
                 return;
             }
-            logger.LogInformation("handshakeResult: {handshakeResult}", handshakeResult); // This is DAPPS
+            logger.LogInformation("handshakeResult: {handshakeResult}", handshakeResult); // DAPPS>
 
             var request = new DappsMessage
             {
