@@ -73,15 +73,11 @@ public class BpqConnectionHandler(TcpClient tcpClient, ILoggerFactory loggerFact
                     logger.LogInformation("Client has asked to quit");
                     return;
                 }
-                else if (command == "ja") // JSON array
+                else if (command!.StartsWith("ihave "))
                 {
-                    logger.LogInformation("Client is giving us an array of JSON objects");
-                    await HandleJson(stream);
-                }
-                else if (command == "cja") // compressed JSON array
-                {
-                    logger.LogInformation("Client is giving us a compressed array of JSON objects");
-                    await HandleCompressedJson(stream);
+                    var parts = command.Split(' ');
+                    logger.LogInformation("Client is offering us message {0}", parts[1]);
+                    await HandleMessageOffer(stream, parts[1], parts[2..].Select(p => p.Split('=')).ToDictionary(item => item[0], item => item[1]), stoppingToken);
                 }
             }
         }
@@ -89,6 +85,48 @@ public class BpqConnectionHandler(TcpClient tcpClient, ILoggerFactory loggerFact
         {
             tcpClient.Dispose();
         }
+    }
+
+    private async Task HandleMessageOffer(NetworkStream stream, string id, Dictionary<string, string> kvps, CancellationToken stoppingToken)
+    {
+        logger.LogInformation("Accepting message {0} with params {1}", id, string.Join(", ", kvps.Select(item => $"{item.Key}={item.Value}")));
+
+        // for now let's just accept all messages
+        await stream.WriteAsync(Encoding.UTF8.GetBytes("send " + id + "\n"));
+
+
+        if (!kvps.TryGetValue("len", out var lenStr))
+        {
+            logger.LogInformation("No length specified in message offer");
+            return;
+        }
+
+        if (!int.TryParse(lenStr, out var len))
+        {
+            logger.LogInformation("Invalid length specified in message offer");
+            return;
+        }
+
+        if (!kvps.TryGetValue("fmt", out var fmt))
+        {
+            logger.LogInformation("No format specified in message offer");
+            return;
+        }
+
+        var buffer = new byte[len];
+
+        if (fmt == "d") // deflate
+        {
+            using var decompressor = new DeflateStream(stream, CompressionMode.Decompress, leaveOpen: true);
+            await decompressor.ReadExactlyAsync(buffer, stoppingToken);
+        }
+        else if (fmt == "p") // plain
+        {
+            await stream.ReadExactlyAsync(buffer, stoppingToken);
+        }
+
+        var text = Encoding.UTF8.GetString(buffer);
+        logger.LogInformation("Got message {0}", text);
     }
 
     private async Task HandleJson(NetworkStream stream)

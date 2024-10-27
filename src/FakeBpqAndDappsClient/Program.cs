@@ -35,15 +35,33 @@ var r = new DappsMessage
 
 var json = JsonSerializer.Serialize(new[] { r });
 
-if (true)
+int i = 1;
+
+if (i == 0)
 {
+    var msg = "Hello world";
+    tcpStreamWriter.Write($"ihave aabbccd len={msg.Length} mykey=myvalue fmt=d\n");
+    using var compressor = new DeflateStream(tcpStream, CompressionLevel.Optimal, leaveOpen: true);
+    using var writer = new StreamWriter(compressor) { AutoFlush = true };
+    writer.Write(msg);
+}
+else if (i == 1)
+{
+    var msg = "Hello world";
+    tcpStreamWriter.Write($"ihave aabbccd len={msg.Length} mykey=myvalue fmt=p\n"); // plain
+    tcpStreamWriter.Write(msg);
+}
+else if (i == 2)
+{
+    // removed
     tcpStreamWriter.Write("cja\n"); // sending compressed json array
     using var compressor = new DeflateStream(tcpStream, CompressionLevel.Optimal, leaveOpen: true);
     using var writer = new StreamWriter(compressor) { AutoFlush = true };
     writer.WriteLine(json);
 }
-else
+else if (i == 3)
 {
+    // removed
     tcpStreamWriter.Write("ja\n"); // sending json array
     tcpStreamWriter.Write(json);
 }
