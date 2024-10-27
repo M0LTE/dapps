@@ -1,6 +1,7 @@
 ﻿using System.IO.Compression;
 using System.Net;
 using System.Net.Sockets;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -94,22 +95,39 @@ public class BpqConnectionHandler(TcpClient tcpClient, ILoggerFactory loggerFact
         // for now let's just accept all messages
         await stream.WriteAsync(Encoding.UTF8.GetBytes("send " + id + "\n"));
 
+        async Task ReplyWithError(string message)
+        {
+            logger.LogError(message);
+            await stream.WriteAsync(Encoding.UTF8.GetBytes("error " + id + "\n"), stoppingToken);
+        }
 
         if (!kvps.TryGetValue("len", out var lenStr))
         {
-            logger.LogInformation("No length specified in message offer");
+            await ReplyWithError("Fatal: no length specified in message offer");
             return;
         }
 
         if (!int.TryParse(lenStr, out var len))
         {
-            logger.LogInformation("Invalid length specified in message offer");
+            await ReplyWithError("Fatal: invalid length specified in message offer");
             return;
         }
 
         if (!kvps.TryGetValue("fmt", out var fmt))
         {
-            logger.LogInformation("No format specified in message offer");
+            logger.LogWarning("No format specified in message offer, assuming plain");
+            fmt = "p";
+        }
+
+        if (!kvps.TryGetValue("ts", out var tsStr))
+        {
+            logger.LogWarning("No timestamp specified in message offer, no dupe check");
+            tsStr = "0";
+        }
+
+        if (!long.TryParse(tsStr, out var ts))
+        {
+            await ReplyWithError("Fatal: invalid timestamp specified in message offer");
             return;
         }
 
@@ -124,9 +142,55 @@ public class BpqConnectionHandler(TcpClient tcpClient, ILoggerFactory loggerFact
         {
             await stream.ReadExactlyAsync(buffer, stoppingToken);
         }
+        else
+        {
+            await ReplyWithError($"Fatal: unknown format {fmt}");
+            return;
+        }
 
         var text = Encoding.UTF8.GetString(buffer);
         logger.LogInformation("Got message {0}", text);
+
+        string hash;
+
+        if (ts == 0)
+        {
+            hash = ComputeHash(buffer, null);
+        }
+        else
+        {
+            hash = ComputeHash(buffer, ts);
+        }
+
+        if (hash[..7] == id)
+        {
+            logger.LogInformation("Hash matches, acknowledging message {0}", id);
+            await stream.WriteAsync(Encoding.UTF8.GetBytes("ack " + id + "\n"));
+        }
+        else
+        {
+            logger.LogWarning("Hash does not match - payload corrupt");
+            await stream.WriteAsync(Encoding.UTF8.GetBytes("bad " + id + "\n"));
+        }
+    }
+
+    private static string ComputeHash(byte[] data, long? timestamp)
+    {
+        byte[] toHash;
+        if (timestamp != null)
+        {
+            var tsBytes = BitConverter.GetBytes(timestamp.Value);
+            toHash = [.. tsBytes, .. data];
+        }
+        else
+        {
+            toHash = data;
+        }
+
+        var sha = SHA1.Create();
+        byte[] hashBytes = sha.ComputeHash(toHash);
+        var str = BitConverter.ToString(hashBytes).Replace("-", "").ToLower();
+        return str;
     }
 
     private async Task HandleJson(NetworkStream stream)
