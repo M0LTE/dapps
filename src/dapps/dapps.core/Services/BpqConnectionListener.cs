@@ -1,6 +1,4 @@
-﻿using Microsoft.AspNetCore.Components.Forms;
-using System.Diagnostics;
-using System.IO.Compression;
+﻿using System.IO.Compression;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -72,7 +70,7 @@ public class BpqConnectionHandler(TcpClient tcpClient, ILoggerFactory loggerFact
 
                 if (command == "q") // quit
                 {
-                    logger.LogInformation("Client has quit");
+                    logger.LogInformation("Client has asked to quit");
                     return;
                 }
                 else if (command == "ja") // JSON array
@@ -99,6 +97,7 @@ public class BpqConnectionHandler(TcpClient tcpClient, ILoggerFactory loggerFact
         await foreach (JsonNode? obj in enumerable)
         {
             logger.LogInformation("Got object {0}", obj);
+            await HandleObject(obj);
         }
     }
 
@@ -109,11 +108,15 @@ public class BpqConnectionHandler(TcpClient tcpClient, ILoggerFactory loggerFact
         await foreach (JsonNode? obj in enumerable)
         {
             logger.LogInformation("Got object {0}", obj);
+            await HandleObject(obj);
+        }
+    }
 
-            if (obj["type"] != null && obj["type"]!.GetValue<string>() == "Msg")
-            {
-                var deserialised = JsonSerializer.Deserialize<DappsMessage>(obj);
-            }
+    private async Task HandleObject(JsonNode? obj)
+    {
+        if (obj["type"] != null && obj["type"]!.GetValue<string>() == "Msg")
+        {
+            var deserialised = JsonSerializer.Deserialize<DappsMessage>(obj);
         }
     }
 }
@@ -125,7 +128,7 @@ readonly record struct DappsMessage
     public string SourceCall { get; init; }
     public string DestNode { get; init; }
     public string DestTopic { get; init; }
-    public object Data { get; init; }
+    public JsonObject Data { get; init; }
 }
 
 public static class Extensions

@@ -10,6 +10,7 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddSingleton<BpqConnectionHandlerFactory>();
 builder.Services.AddHostedService<BpqConnectionListener>();
+builder.Services.AddHostedService<DbStartup>();
 
 var app = builder.Build();
 
