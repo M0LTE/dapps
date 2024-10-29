@@ -135,11 +135,21 @@ rev\n
 
 ### Discovering neighbours and exchanging routes
 
-tbc
+Very much tbc. 
+
+I see a hand-wavey model along the lines of:
+
+- DAPPS instance advertises its presence on air with short UI frame broadcasts (requiring the node to allow external applications to send UI frames)
+- Other DAPPS instances listen out for those broadcasts (requiring the node to provide a feed of frames heard - MQTT?)
+- At randomised long intervals, DAPPS instances connect to other instances they have heard and tell each other about DAPPS nodes they know about. Not all the routing information needs to go every time, more along the lines of "oh, by the way, I can connect to GB7AUG". This could be based on keeping track of what stations the node is able to successfully link to. (Requires the node to provide a feed of link connect / disconnect events to DAPPS)
+- From those exchanges, each DAPPS instance should build up a local routing table (space is no longer a problem)
+- From that routing table, DAPPS can route messages appropriately, including to intermediate DAPPS instances.
 
 ## Application interface
 
-tbc
+The application interface is likely to be something like MQTT, with DAPPS holding on to messages until it knows it has delivered them to integrated applications.
+
+Details tbc.
 
 ## Progress
 
