@@ -175,7 +175,7 @@ public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory logger
         if (hash[..7] == id)
         {
             logger.LogInformation("Hash matches, saving and acknowledging message {0}", id);
-            await database.SaveMessage(id, buffer, offer.Timestamp, offer.Destination);
+            await database.SaveMessage(id, buffer, offer.Timestamp, offer.Destination, offer.AdditionalProperties);
             await database.DeleteOffer(id);
             await stream.WriteAsync(Encoding.UTF8.GetBytes("ack " + id + "\n"));
         }

@@ -52,7 +52,7 @@ while (true)
     var truncatedHash = hash[..7];
     var dst = "queuename@gb7rdg-4";
 
-    var ihave = $"ihave {truncatedHash} len={bytes.Length} fmt={(deflated ? 'd' : 'p')} ts={ts} dst={dst}";
+    var ihave = $"ihave {truncatedHash} len={bytes.Length} fmt={(deflated ? 'd' : 'p')} ts={ts} mykey=myvalue 💩=💩 dst={dst}";
     var chk = Checksum(ihave);
 
     tcpStreamWriter.Write($"{ihave} chk={chk}\n");

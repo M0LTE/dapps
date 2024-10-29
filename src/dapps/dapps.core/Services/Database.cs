@@ -1,5 +1,6 @@
 ﻿
 using dapps.core.Models;
+using System.Text.Json;
 
 namespace dapps.core.Services;
 
@@ -17,7 +18,7 @@ public class Database(ILogger<Database> logger)
         return data;
     }
 
-    internal async Task SaveMessage(string id, byte[] buffer, long? timestamp, string destination)
+    internal async Task SaveMessage(string id, byte[] buffer, long? timestamp, string destination, string additionalProperties)
     {
         var connection = DbInfo.GetAsyncConnection();
 
@@ -28,19 +29,21 @@ public class Database(ILogger<Database> logger)
             Id = id,
             Timestamp = timestamp,
             Payload = buffer,
-            Destination = destination
+            Destination = destination,
+            AdditionalProperties = additionalProperties
         });
     }
 
-    internal async Task SaveOfferMetadata(string id,  Dictionary<string, string> kvps)
+    internal async Task SaveOfferMetadata(string id, Dictionary<string, string> kvps)
     {
         await DbInfo.GetAsyncConnection().InsertAsync(new DbOffer
         {
             Id = id,
             Length = int.Parse(kvps["len"]),
             Format = kvps["fmt"],
-            Timestamp = kvps.ContainsKey("ts") ? long.Parse(kvps["ts"]) : null,
+            Timestamp = kvps.TryGetValue("ts", out string? value) ? long.Parse(value) : null,
             Destination = kvps["dst"],
+            AdditionalProperties = JsonSerializer.Serialize(kvps.Keys.Except(["ts", "chk", "dst", "fmt", "len"]).ToDictionary(k => k, k => kvps[k]))
         });
 
         logger.LogInformation("Saved metadata for offer {0}", id);

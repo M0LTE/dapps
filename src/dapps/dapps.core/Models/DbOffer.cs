@@ -12,4 +12,5 @@ internal sealed class DbOffer
     public string Format { get; init; } = "";
     public long? Timestamp { get; init; }
     public string Destination { get; init; } = "";
+    public string AdditionalProperties { get; set; } = "{}";
 }

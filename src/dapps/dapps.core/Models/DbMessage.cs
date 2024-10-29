@@ -10,4 +10,5 @@ public class DbMessage
     public byte[] Payload { get; init; } = [];
     public long? Timestamp { get; init; }
     public string Destination { get; init; } = "";
+    public string AdditionalProperties { get; init; } = "";
 }
