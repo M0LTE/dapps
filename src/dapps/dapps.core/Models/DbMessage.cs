@@ -8,4 +8,6 @@ public class DbMessage
     [PrimaryKey, NotNull]
     public string Id { get; init; } = "";
     public byte[] Payload { get; init; } = [];
+    public long? Timestamp { get; init; }
+    public string Destination { get; init; } = "";
 }

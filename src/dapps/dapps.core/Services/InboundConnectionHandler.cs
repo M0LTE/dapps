@@ -1,11 +1,11 @@
-﻿using System.IO;
+﻿using dapps.core.Models;
 using System.IO.Compression;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
-using dapps.core.Models;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace dapps.core.Services;
 
@@ -39,7 +39,7 @@ public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory logger
                 {
                     var parts = command.Split(' ');
                     logger.LogInformation("Client is offering us message {0}", parts[1]);
-                    await HandleMessageOffer(stream, parts[1], parts[2..].Select(p => p.Split('=')).ToDictionary(item => item[0], item => item[1]), stoppingToken);
+                    await HandleMessageOffer(stream, command, stoppingToken);
                 }
                 else if (command!.StartsWith("data "))
                 {
@@ -55,8 +55,12 @@ public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory logger
         }
     }
 
-    private async Task HandleMessageOffer(NetworkStream stream, string id, Dictionary<string, string> kvps, CancellationToken stoppingToken)
+    private async Task HandleMessageOffer(NetworkStream stream, string command, CancellationToken stoppingToken)
     {
+        var parts = command.Split(' ');
+        var id = parts[1];
+        var kvps = parts[2..].Select(p => p.Split('=')).ToDictionary(item => item[0], item => item[1]);
+
         async Task ReplyWithError(string message)
         {
             logger.LogError(message);
@@ -99,9 +103,19 @@ public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory logger
             return;
         }
 
+        if (!kvps.TryGetValue("dst", out var dst))
+        {
+            await ReplyWithError("Fatal: no destination specified in message offer");
+            return;
+        }
+
         if (kvps.TryGetValue("chk", out var chk))
         {
-            //TODO: implement checksum verification of the offer line
+            if (chk != ComputeChecksum(command, chk))
+            {
+                await ReplyWithError("Fatal: corrupt command");
+                return;
+            }
         }
 
         logger.LogInformation("Accepting message {0} with params {1}", id, string.Join(", ", kvps.Select(item => $"{item.Key}={item.Value}")));
@@ -109,6 +123,17 @@ public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory logger
         await stream.WriteAsync(Encoding.UTF8.GetBytes("send " + id + "\n")); // this can send multiple space-separated IDs if we want
 
         await database.SaveOfferMetadata(id, kvps);
+    }
+
+    private static string ComputeChecksum(string ihaveCommand, string chk)
+    {
+        // remove the checksum part
+        ihaveCommand = ihaveCommand.Replace("chk=" + chk, "").Trim();
+
+        var hash = SHA1.HashData(Encoding.UTF8.GetBytes(ihaveCommand));
+        var sum = BitConverter.ToString(hash).Replace("-", "").ToLower()[..2];
+
+        return sum;
     }
 
     private async Task HandleData(NetworkStream stream, string id, CancellationToken stoppingToken)
@@ -122,24 +147,13 @@ public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory logger
             logger.LogInformation("Waiting for deflated data");
             using var decompressor = new DeflateStream(stream, CompressionMode.Decompress, leaveOpen: true);
             await decompressor.ReadExactlyAsync(buffer, stoppingToken);
+            logger.LogInformation("Received deflated data");
         }
         else if (offer.Format == "p") // plain
         {
-            //await stream.WriteAsync(Encoding.UTF8.GetBytes("ok " + id + "\n"), stoppingToken);
-            //await stream.FlushAsync();
-
             logger.LogInformation("Waiting for uncompressed data");
-
-            //BUG: this blocks despite the client having sent data. Even just the first byte. It's as if the data wasn't sent. A 10ms delay in the client is enough to fix it.
-            //await stream.ReadExactlyAsync(buffer, stoppingToken);
-            byte[] nothing = new byte[0];
-            stream.Read(nothing, 0, 0);
-
-            for (int i = 0; i < offer.Length; i++)
-            {
-                buffer[i] = (byte)stream.ReadByte();
-            }
-            
+            await stream.ReadExactlyAsync(buffer, stoppingToken);
+            logger.LogInformation("Received uncompressed data");
         }
 
         var text = Encoding.UTF8.GetString(buffer);
@@ -160,7 +174,8 @@ public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory logger
         if (hash[..7] == id)
         {
             logger.LogInformation("Hash matches, saving and acknowledging message {0}", id);
-            await database.SaveMessage(id, buffer);
+            await database.SaveMessage(id, buffer, offer.Timestamp, offer.Destination);
+            await database.DeleteOffer(id);
             await stream.WriteAsync(Encoding.UTF8.GetBytes("ack " + id + "\n"));
         }
         else

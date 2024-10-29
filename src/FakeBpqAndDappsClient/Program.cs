@@ -37,7 +37,7 @@ var r = new DappsMessage
 
 var json = JsonSerializer.Serialize(new[] { r });
 
-bool deflated = false;
+bool deflated = true;
 
 while (true)
 {
@@ -50,8 +50,12 @@ while (true)
     var ts = ((long)(DateTime.UtcNow - DateTime.UnixEpoch).TotalMilliseconds) - 1730068046000;
     var hash = ComputeHash(Encoding.UTF8.GetBytes(msg), ts);
     var truncatedHash = hash[..7];
+    var dst = "queuename@gb7rdg-4";
 
-    tcpStreamWriter.Write($"ihave {truncatedHash} len={bytes.Length} fmt={(deflated ? 'd' : 'p')} ts={ts}\n");
+    var ihave = $"ihave {truncatedHash} len={bytes.Length} fmt={(deflated ? 'd' : 'p')} ts={ts} dst={dst}";
+    var chk = Checksum(ihave);
+
+    tcpStreamWriter.Write($"{ihave} chk={chk}\n");
 
     var ihaveresponse = await tcpStreamReader.ReadLineAsync();
 
@@ -59,21 +63,20 @@ while (true)
     {
         tcpStreamWriter.Write($"data {truncatedHash}\n");
         Console.WriteLine($"Sent data {truncatedHash}\\n");
-        //Console.WriteLine(await tcpStreamReader.ReadLineAsync());
         if (deflated)
         {
             using var compressor = new DeflateStream(tcpStream, CompressionLevel.Optimal, leaveOpen: true);
             using var deflateWriter = new StreamWriter(compressor) { AutoFlush = true };
             await deflateWriter.WriteAsync(msg);
+            await deflateWriter.FlushAsync();
         }
         else
         {
-            //await tcpStreamWriter.WriteAsync(msg);
-            //await Task.Delay(10); // required due to bug in dapps core
             await tcpStream.WriteAsync(bytes);
             await tcpStream.FlushAsync();
-            Console.WriteLine($"Sent {bytes.Length} bytes and flushed");
         }
+        
+        Console.WriteLine($"Sent {bytes.Length} bytes and flushed");
     }
     else
     {
@@ -83,6 +86,12 @@ while (true)
 
     var response = await tcpStreamReader.ReadLineAsync();
     Console.WriteLine(response);
+}
+
+static string Checksum(string ihave)
+{
+    var hash = SHA1.HashData(Encoding.UTF8.GetBytes(ihave));
+    return BitConverter.ToString(hash).Replace("-", "").ToLower()[..2];
 }
 
 static string ComputeHash(byte[] data, long? timestamp)
@@ -97,9 +106,7 @@ static string ComputeHash(byte[] data, long? timestamp)
     {
         toHash = data;
     }
-
-    var sha = SHA1.Create();
-    byte[] hashBytes = sha.ComputeHash(toHash);
+    byte[] hashBytes = SHA1.HashData(toHash);
     var str = BitConverter.ToString(hashBytes).Replace("-", "").ToLower();
     return str;
 }
