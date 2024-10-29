@@ -18,8 +18,6 @@ This does not replace AX.25, but can run over it. It could also run over other t
 
 ## On-air protocol
 
-Caution, the code in this repo doesn't implement quite what is described below.
-
 ### Prompt
 
 When connecting to a DAPPS instance, expect a prompt:
