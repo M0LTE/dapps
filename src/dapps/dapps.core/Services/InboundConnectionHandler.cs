@@ -8,9 +8,9 @@ using dapps.core.Models;
 
 namespace dapps.core.Services;
 
-public class BpqConnectionHandler(TcpClient tcpClient, ILoggerFactory loggerFactory)
+public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory loggerFactory)
 {
-    private readonly ILogger logger = loggerFactory.CreateLogger<BpqConnectionHandler>();
+    private readonly ILogger logger = loggerFactory.CreateLogger<InboundConnectionHandler>();
 
     internal async Task Handle(CancellationToken stoppingToken)
     {

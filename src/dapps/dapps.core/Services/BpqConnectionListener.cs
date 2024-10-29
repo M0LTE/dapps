@@ -3,7 +3,7 @@ using System.Net.Sockets;
 
 namespace dapps.core.Services;
 
-public class BpqConnectionListener(BpqConnectionHandlerFactory bpqConnectionHandlerFactory, ILogger<BpqConnectionListener> logger) : IHostedService
+public class BpqConnectionListener(InboundConnectionHandlerFactory bpqConnectionHandlerFactory, ILogger<BpqConnectionListener> logger) : IHostedService
 {
     private readonly CancellationTokenSource stoppingTokenSource = new();
 

@@ -8,7 +8,7 @@ builder.Services.AddControllers();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
-builder.Services.AddSingleton<BpqConnectionHandlerFactory>();
+builder.Services.AddSingleton<InboundConnectionHandlerFactory>();
 builder.Services.AddHostedService<BpqConnectionListener>();
 builder.Services.AddHostedService<DbStartup>();
 
