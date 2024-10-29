@@ -2,11 +2,10 @@
 
 namespace dapps.core.Models;
 
+[Table("messages")]
 public class DbMessage
 {
-    [PrimaryKey, AutoIncrement]
-    public int Id { get; set; }
-    public required string DestNode { get; set; }
-    public required string DestTopic { get; set; }
-    public required byte[] Payload { get; set; }
+    [PrimaryKey, NotNull]
+    public string Id { get; init; } = "";
+    public byte[] Payload { get; init; } = [];
 }

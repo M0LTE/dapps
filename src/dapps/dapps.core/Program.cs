@@ -11,6 +11,7 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddSingleton<InboundConnectionHandlerFactory>();
 builder.Services.AddHostedService<BpqConnectionListener>();
 builder.Services.AddHostedService<DbStartup>();
+builder.Services.AddSingleton<Database>();
 
 var app = builder.Build();
 

@@ -1,4 +1,5 @@
-﻿using System.IO.Compression;
+﻿using System.IO;
+using System.IO.Compression;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
@@ -8,7 +9,7 @@ using dapps.core.Models;
 
 namespace dapps.core.Services;
 
-public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory loggerFactory)
+public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory loggerFactory, Database database)
 {
     private readonly ILogger logger = loggerFactory.CreateLogger<InboundConnectionHandler>();
 
@@ -17,7 +18,6 @@ public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory logger
         try
         {
             logger.LogInformation("Got connection from {0}", tcpClient.Client.RemoteEndPoint!.ToString());
-
             var stream = tcpClient.GetStream();
             using var reader = new StreamReader(stream);
             using var writer = new StreamWriter(stream) { AutoFlush = true };
@@ -42,6 +42,12 @@ public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory logger
                     logger.LogInformation("Client is offering us message {0}", parts[1]);
                     await HandleMessageOffer(stream, parts[1], parts[2..].Select(p => p.Split('=')).ToDictionary(item => item[0], item => item[1]), stoppingToken);
                 }
+                else if (command!.StartsWith("data ")) // there's a bug in here somewhere
+                {
+                    var parts = command.Split(' ');
+                    logger.LogInformation("Client is sending us data for message {0}", parts[1]);
+                    await HandleData(stream, parts[1], stoppingToken);
+                }
             }
         }
         finally
@@ -52,11 +58,6 @@ public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory logger
 
     private async Task HandleMessageOffer(NetworkStream stream, string id, Dictionary<string, string> kvps, CancellationToken stoppingToken)
     {
-        logger.LogInformation("Accepting message {0} with params {1}", id, string.Join(", ", kvps.Select(item => $"{item.Key}={item.Value}")));
-
-        // for now let's just accept all messages
-        await stream.WriteAsync(Encoding.UTF8.GetBytes("send " + id + "\n"));
-
         async Task ReplyWithError(string message)
         {
             logger.LogError(message);
@@ -75,12 +76,6 @@ public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory logger
             return;
         }
 
-        if (!kvps.TryGetValue("fmt", out var fmt))
-        {
-            logger.LogWarning("No format specified in message offer, assuming plain");
-            fmt = "p";
-        }
-
         if (!kvps.TryGetValue("ts", out var tsStr))
         {
             logger.LogWarning("No timestamp specified in message offer, no dupe check");
@@ -93,40 +88,80 @@ public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory logger
             return;
         }
 
-        var buffer = new byte[len];
-
-        if (fmt == "d") // deflate
+        if (!kvps.TryGetValue("fmt", out var fmt))
         {
+            logger.LogWarning("No format specified in message offer, assuming plain");
+            fmt = "p";
+        }
+
+        if (fmt != "d" && fmt != "p")
+        {
+            await ReplyWithError("Fatal: unknown format specified in message offer");
+            return;
+        }
+
+        if (kvps.TryGetValue("chk", out var chk))
+        {
+            //TODO: implement checksum verification of the offer line
+        }
+
+        logger.LogInformation("Accepting message {0} with params {1}", id, string.Join(", ", kvps.Select(item => $"{item.Key}={item.Value}")));
+
+        await stream.WriteAsync(Encoding.UTF8.GetBytes("send " + id + "\n")); // this can send multiple space-separated IDs if we want
+
+        await database.SaveOfferMetadata(id, kvps);
+    }
+
+    private async Task HandleData(NetworkStream stream, string id, CancellationToken stoppingToken)
+    { 
+        var offer = await database.LoadOfferMetadata(id);
+
+        var buffer = new byte[offer.Length];
+
+        if (offer.Format == "d") // deflate
+        {
+            logger.LogInformation("Waiting for deflated data");
             using var decompressor = new DeflateStream(stream, CompressionMode.Decompress, leaveOpen: true);
             await decompressor.ReadExactlyAsync(buffer, stoppingToken);
         }
-        else if (fmt == "p") // plain
+        else if (offer.Format == "p") // plain
         {
-            await stream.ReadExactlyAsync(buffer, stoppingToken);
-        }
-        else
-        {
-            await ReplyWithError($"Fatal: unknown format {fmt}");
-            return;
+            //await stream.WriteAsync(Encoding.UTF8.GetBytes("ok " + id + "\n"), stoppingToken);
+            //await stream.FlushAsync();
+
+            logger.LogInformation("Waiting for uncompressed data");
+
+            //BUG: this blocks despite the client having sent data. Even just the first byte. It's as if the data wasn't sent. A 10ms delay in the client is enough to fix it.
+            //await stream.ReadExactlyAsync(buffer, stoppingToken);
+            byte[] nothing = new byte[0];
+            stream.Read(nothing, 0, 0);
+
+            for (int i = 0; i < offer.Length; i++)
+            {
+                buffer[i] = (byte)stream.ReadByte();
+            }
+            
         }
 
         var text = Encoding.UTF8.GetString(buffer);
         logger.LogInformation("Got message {0}", text);
-
+        
         string hash;
 
-        if (ts == 0)
+        if (offer.Timestamp == null)
         {
+            logger.LogWarning("No timestamp specified in message offer, no dupe check");
             hash = ComputeHash(buffer, null);
         }
         else
         {
-            hash = ComputeHash(buffer, ts);
+            hash = ComputeHash(buffer, offer.Timestamp);
         }
 
         if (hash[..7] == id)
         {
-            logger.LogInformation("Hash matches, acknowledging message {0}", id);
+            logger.LogInformation("Hash matches, saving and acknowledging message {0}", id);
+            await database.SaveMessage(id, buffer);
             await stream.WriteAsync(Encoding.UTF8.GetBytes("ack " + id + "\n"));
         }
         else

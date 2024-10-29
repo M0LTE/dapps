@@ -37,56 +37,49 @@ var r = new DappsMessage
 
 var json = JsonSerializer.Serialize(new[] { r });
 
-int i = 0;
+bool deflated = false;
 
 while (true)
 {
     Console.Write("Press enter to send a message");
     Console.ReadLine();
 
-    if (i == 0)
+    var msg = "Hello world";
+    var bytes = Encoding.UTF8.GetBytes(msg);
+
+    var ts = ((long)(DateTime.UtcNow - DateTime.UnixEpoch).TotalMilliseconds) - 1730068046000;
+    var hash = ComputeHash(Encoding.UTF8.GetBytes(msg), ts);
+    var truncatedHash = hash[..7];
+
+    tcpStreamWriter.Write($"ihave {truncatedHash} len={bytes.Length} fmt={(deflated ? 'd' : 'p')} ts={ts}\n");
+
+    var ihaveresponse = await tcpStreamReader.ReadLineAsync();
+
+    if (ihaveresponse == "send " + truncatedHash)
     {
-        var msg = "Hello world";
-
-        var ts = ((long)(DateTime.UtcNow - DateTime.UnixEpoch).TotalMilliseconds) - 1730068046000;
-        var hash = ComputeHash(Encoding.UTF8.GetBytes(msg), ts);
-        var truncatedHash = hash[..7];
-
-        tcpStreamWriter.Write($"ihave {truncatedHash} len={msg.Length} fmt=d ts={ts}\n");
-
-        var ihaveresponse = await tcpStreamReader.ReadLineAsync();
-
-        if (ihaveresponse == "send " + truncatedHash)
+        tcpStreamWriter.Write($"data {truncatedHash}\n");
+        Console.WriteLine($"Sent data {truncatedHash}\\n");
+        //Console.WriteLine(await tcpStreamReader.ReadLineAsync());
+        if (deflated)
         {
             using var compressor = new DeflateStream(tcpStream, CompressionLevel.Optimal, leaveOpen: true);
-            using var writer = new StreamWriter(compressor) { AutoFlush = true };
-            writer.Write(msg);
+            using var deflateWriter = new StreamWriter(compressor) { AutoFlush = true };
+            await deflateWriter.WriteAsync(msg);
         }
         else
         {
-            Console.WriteLine($"Expected 'send aabbccd', but got '{ihaveresponse}'");
+            //await tcpStreamWriter.WriteAsync(msg);
+            //await Task.Delay(10); // required due to bug in dapps core
+            await tcpStream.WriteAsync(bytes);
+            await tcpStream.FlushAsync();
+            Console.WriteLine($"Sent {bytes.Length} bytes and flushed");
         }
     }
-    else if (i == 1)
+    else
     {
-        var msg = "Hello world";
-        tcpStreamWriter.Write($"ihave aabbccd len={msg.Length} mykey=myvalue fmt=p\n"); // plain
-        tcpStreamWriter.Write(msg);
+        Console.WriteLine($"Expected 'send aabbccd', but got '{ihaveresponse}'");
     }
-    else if (i == 2)
-    {
-        // removed
-        tcpStreamWriter.Write("cja\n"); // sending compressed json array
-        using var compressor = new DeflateStream(tcpStream, CompressionLevel.Optimal, leaveOpen: true);
-        using var writer = new StreamWriter(compressor) { AutoFlush = true };
-        writer.WriteLine(json);
-    }
-    else if (i == 3)
-    {
-        // removed
-        tcpStreamWriter.Write("ja\n"); // sending json array
-        tcpStreamWriter.Write(json);
-    }
+
 
     var response = await tcpStreamReader.ReadLineAsync();
     Console.WriteLine(response);
