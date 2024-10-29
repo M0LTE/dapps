@@ -180,6 +180,7 @@ Details tbc.
 - compatibility with nodes other than BPQ
 - a human-interactive mode in the node application - to allow a human to enter a message by hand for testing/fun
 - multi-part messages
+- some kind of web interface for config
 
 ## Previous writing
 
