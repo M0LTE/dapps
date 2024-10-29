@@ -128,6 +128,7 @@ public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory logger
     private static string ComputeChecksum(string ihaveCommand, string chk)
     {
         // remove the checksum part
+        ///TODO: Do this properly- the chk command could be in the middle of the string and double-spaces could be present
         ihaveCommand = ihaveCommand.Replace("chk=" + chk, "").Trim();
 
         var hash = SHA1.HashData(Encoding.UTF8.GetBytes(ihaveCommand));
