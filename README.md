@@ -87,6 +87,8 @@ and the sum is the first two characters of the hash:
 
 `a1` - which matches that sent over the air, i.e. the command is valid.
 
+If `chk=nn` appears somewhere other than at the end of the line, the checksum should be calculated on a string which takes that into account, i.e. when `chk=nn` is removed from the string, all of the other key-value pairs in the string should be left separated by just a single space each (in other words, doing just a `string.replace("chk=nn", "")` is not good enough).
+
 ### Sending a message
 
 If the remote instance wants a message, it will reply with:
