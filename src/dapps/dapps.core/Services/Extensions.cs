@@ -4,25 +4,27 @@ namespace dapps.core.Services;
 
 public static class Extensions
 {
-    public static Task<string> ReadToCr(this StreamReader reader)
+    public static Task<string> ReadLine(this Stream stream, CancellationToken stoppingToken)
     {
-        var sb = new StringBuilder();
+        var buffer = new List<byte>();
+
         while (true)
         {
-            var c = reader.Read();
+            var c = stream.ReadByte();
 
             if (c == -1)
             {
                 break;
             }
 
-            if (c == '\r')
+            if (c == '\n')
             {
                 break;
             }
 
-            sb.Append((char)c);
+            buffer.Add((byte)c);
         }
-        return Task.FromResult(sb.ToString());
+
+        return Task.FromResult(Encoding.UTF8.GetString(buffer.ToArray()));
     }
 }

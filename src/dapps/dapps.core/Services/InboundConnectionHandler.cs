@@ -19,17 +19,16 @@ public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory logger
         {
             logger.LogInformation("Got connection from {0}", tcpClient.Client.RemoteEndPoint!.ToString());
             var stream = tcpClient.GetStream();
-            using var reader = new StreamReader(stream);
             using var writer = new StreamWriter(stream) { AutoFlush = true };
 
-            var callsign = await reader.ReadLineAsync(stoppingToken);
-            logger.LogInformation("Got callsign {0}", callsign);
+            var callsign = await stream.ReadLine(stoppingToken);
+            logger.LogInformation("Connection is from callsign {0}", callsign);
 
             await writer.WriteLineAsync("DAPPSv1>");
 
             while (!stoppingToken.IsCancellationRequested)
             {
-                var command = await reader.ReadLineAsync(stoppingToken);
+                var command = await stream.ReadLine(stoppingToken);
 
                 if (command == "q") // quit
                 {
@@ -42,7 +41,7 @@ public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory logger
                     logger.LogInformation("Client is offering us message {0}", parts[1]);
                     await HandleMessageOffer(stream, parts[1], parts[2..].Select(p => p.Split('=')).ToDictionary(item => item[0], item => item[1]), stoppingToken);
                 }
-                else if (command!.StartsWith("data ")) // there's a bug in here somewhere
+                else if (command!.StartsWith("data "))
                 {
                     var parts = command.Split(' ');
                     logger.LogInformation("Client is sending us data for message {0}", parts[1]);
