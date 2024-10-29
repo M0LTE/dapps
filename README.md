@@ -35,10 +35,10 @@ ihave abcdeff len=11 fmt=p ts=12345678 dst=topicname@gb7aaa-4 ttl=1730070725 dst
 ```
 
 where:
-- `abcdeff` is the SHA1 hash of the four bytes of the 64 bit integer timestamp, if any, followed by the payload bytes (i.e. `sha1(pppppppp..pppp)[..7]` or `sha1(ttttpppppppp..pppp)[..7]`), serving as a message id
-- `11` is the number of bytes in the payload, after decompression if applicable
-- `p` is `p` for when the payload is to be interpreted byte-for-byte, or `d` for Deflate algorithm compression
-- `12345678` is an optional de-duplication salt, suggestion is the number of milliseconds after some epoch of your choice
+- `abcdeff` is the SHA1 hash of the four bytes of the 64 bit integer timestamp, if any, concatenated with all of the payload bytes (i.e. `sha1(pppppppp..pppp)[..7]` or `sha1(ttttpppppppp..pppp)[..7]`), serving as a unique message id (inspired by git hashes)
+- `len=11` is the number of bytes in the payload, after decompression if applicable
+- `fmt=p` is `p` for when the payload is to be interpreted byte-for-byte, or `d` for Deflate algorithm compression
+- `ts=12345678` is an optional de-duplication salt, suggestion is the number of milliseconds after some epoch of your choice
 - `dst=topicname@gb7aaa-4` is routing information- in this case the ultimate destination for this message is pub/sub topic `topicname` hosted at remote DAPPS instance `gb7aaa-4`
 - `ttl=1730070725` is an optional TTL for the message, in seconds since epoch. DAPPS will make no attempt to deliver a message past its TTL.
 - `dst=queuename@gb7aaa-4` is the ultimate destination of this message. In this example, `gb7aaa-4` is the call + ssid of the node and DAPPS instance which the DAPPS system will attempt to deliver this message to, and `queuename` relates to the remote DAPPS-using application.
