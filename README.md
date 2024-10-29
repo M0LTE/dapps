@@ -44,8 +44,8 @@ where:
 - `dst=topicname@gb7aaa-4` is routing information- in this case the ultimate destination for this message is pub/sub topic `topicname` hosted at remote DAPPS instance `gb7aaa-4`
 - `ttl=1730070725` is an optional TTL for the message, in seconds since epoch. DAPPS will make no attempt to deliver a message past its TTL.
 - `dst=queuename@gb7aaa-4` is the ultimate destination of this message. In this example, `gb7aaa-4` is the call + ssid of the node and DAPPS instance which the DAPPS system will attempt to deliver this message to, and `queuename` relates to the remote DAPPS-using application.
-- `key=value` is zero or more key/value pairs, akin to arbitrary headers
-- `chk=0f` is an optional checksum, calculated as below, validated at the receiving side
+- `key=value` is zero or more key/value pairs, akin to arbitrary headers. These should be used sparingly and not in place of a message payload.
+- `chk=0f` is an optional checksum, calculated as below, validated at the receiving side. For ease, this should be the last key-value pair.
 - `\n` is a newline character, not the string literal `\n`
 
 #### "ihave" command checksum
@@ -101,7 +101,11 @@ At any time, send the message as follows:
 data abcdeff\n
 ```
 
-followed immediately by the raw payload bytes. When the remote DAPPS instance has received the expected number of bytes, it will reply with:
+followed immediately by the raw payload bytes. 
+
+Similarly to MQTT, the payload encoding is completely delegated to the consuming application - DAPPS just passes byte arrays.
+
+When the remote DAPPS instance has received the expected number of bytes, it will reply with:
 
 ```
 ack abcdeff\n
@@ -163,6 +167,7 @@ tbc
 - `rev` command - polling for waiting remote messages - not a huge priority because, like with mail, if both partners are set up for forward connections and immediate sending, polling should not be required
 - compatibility with nodes other than BPQ
 - a human-interactive mode in the node application - to allow a human to enter a message by hand for testing/fun
+- multi-part messages
 
 ## Previous writing
 
