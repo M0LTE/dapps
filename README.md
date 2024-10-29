@@ -33,7 +33,7 @@ DAPPSv1>\n
 To offer a message to a remote DAPPS instance, send the following as bytes:
 
 ```
-ihave abcdeff len=11 fmt=p ts=12345678 dst=topicname@gb7aaa-4 ttl=1730070725 key=value\n
+ihave abcdeff len=11 fmt=p ts=12345678 dst=topicname@gb7aaa-4 ttl=1730070725 dst=queuename@gb7aaa-4 key=value chk=0f\n
 ```
 
 where:
@@ -43,8 +43,49 @@ where:
 - `12345678` is an optional de-duplication salt, suggestion is the number of milliseconds after some epoch of your choice
 - `dst=topicname@gb7aaa-4` is routing information- in this case the ultimate destination for this message is pub/sub topic `topicname` hosted at remote DAPPS instance `gb7aaa-4`
 - `ttl=1730070725` is an optional TTL for the message, in seconds since epoch. DAPPS will make no attempt to deliver a message past its TTL.
+- `dst=queuename@gb7aaa-4` is the ultimate destination of this message. In this example, `gb7aaa-4` is the call + ssid of the node and DAPPS instance which the DAPPS system will attempt to deliver this message to, and `queuename` relates to the remote DAPPS-using application.
 - `key=value` is zero or more key/value pairs, akin to arbitrary headers
+- `chk=0f` is an optional checksum, calculated as below, validated at the receiving side
 - `\n` is a newline character, not the string literal `\n`
+
+#### "ihave" command checksum
+
+Since packet doesn't guarantee corruption-free transmission, and it's pretty important that the `ihave` command is received
+free of errors, it makes sense to be able to provide a checksum. This one is calculated as follows:
+
+`sha1([the ihave command, with chk=nn removed, and trimmed of whitespace])`
+
+The first two characters of the hex representation of the resulting SHA1 checksum should match the value of `chk`.
+
+##### Example
+
+To validate the checksum `a1` for this `ihave` command sent over the air:
+
+```
+ihave abcdeff len=11 fmt=p ts=12345678 dst=topicname@gb7aaa-4 ttl=1730070725 dst=queuename@gb7aaa-4 key=value chk=a1\n
+```
+
+we remove `chk=a1`:
+
+```
+ihave abcdeff len=11 fmt=p ts=12345678 dst=topicname@gb7aaa-4 ttl=1730070725 dst=queuename@gb7aaa-4 key=value\n
+```
+
+we trim off the line ending:
+
+```
+ihave abcdeff len=11 fmt=p ts=12345678 dst=topicname@gb7aaa-4 ttl=1730070725 dst=queuename@gb7aaa-4 key=value
+```
+
+and we calculate its SHA1 hash:
+
+```
+a1732af9a48b161f30299cbff93a41fdb3037e18
+```
+
+and the sum is the first two characters of the hash:
+
+`a1` - which matches that sent over the air, i.e. the command is valid.
 
 ### Sending a message
 
@@ -88,13 +129,40 @@ rev\n
 
 `ihave` and `send` may be sent multiple times in a session. `send` may be followed by multiple message ids, space separated, to signify that the remote server wants to accept multiple messages which have been offered.
 
-### Exchanging routes
+### Discovering neighbours and exchanging routes
 
 tbc
 
 ## Application interface
 
 tbc
+
+## Progress
+
+### Implemented
+
+- A dummy app which pretends to be a DAPPS client connecting through from a correctly configured BPQ instance, to emulate receiving a call from a remote DAPPS instance over the air without involving any hardware
+- A real DAPPS server which implements:
+  - `ihave` command - allowing a message to be offered - with all of the documented bits supported
+  - `chk=nn` checksum validation of `ihave` command
+  - `data` command - allowing a message payload to be sent
+  - payload integrity checking and error responses
+  - saving of offers and payloads into a sqlite database
+  - `ack` and `bad` responses to the `data` command
+  - Deflate-compressed and uncompressed message payloads
+
+### Roadmap
+
+- onward transmission of messages to another DAPPS instance
+  - starting with having DAPPS make outbound connections to other nodes through BPQ telnet
+  - this will include validating a real DAPPS server against a real BPQ instance
+- manual routing between DAPPS instances
+- application interface and a sample app
+- packaging / distribution
+- automatic routing (route discovery) between DAPPS instances
+- `rev` command - polling for waiting remote messages - not a huge priority because, like with mail, if both partners are set up for forward connections and immediate sending, polling should not be required
+- compatibility with nodes other than BPQ
+- a human-interactive mode in the node application - to allow a human to enter a message by hand for testing/fun
 
 ## Previous writing
 
