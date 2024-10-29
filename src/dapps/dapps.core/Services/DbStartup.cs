@@ -18,14 +18,15 @@ public static class DbInfo
     }
 }
 
-public class DbStartup : IHostedService
+public class DbStartup(ILogger<DbStartup> logger) : IHostedService
 {
     public Task StartAsync(CancellationToken cancellationToken)
     {
         var db = DbInfo.GetConnection();
+        logger.LogInformation($"DB: {db.DatabasePath}");
         db.CreateTable<DbOffer>();
         db.CreateTable<DbMessage>();
-
+        logger.LogInformation("DB schema refreshed");
         return Task.CompletedTask;
     }
 
