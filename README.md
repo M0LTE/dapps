@@ -180,9 +180,12 @@ Details tbc.
 - multi-part messages
 - some kind of web interface for config
 
-## Previous writing
+## References
+
+BPQ binary transparency tests: https://github.com/M0LTE/bpq-fbb-test-apps
+
+### Previous writing
 
 Caution, may not align with current thinking.
 
 https://gist.github.com/M0LTE/be1fd071ca1867703d1f2d4c17fabca2
-

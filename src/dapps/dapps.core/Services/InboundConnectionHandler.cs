@@ -19,12 +19,12 @@ public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory logger
         {
             logger.LogInformation("Got connection from {0}", tcpClient.Client.RemoteEndPoint!.ToString());
             var stream = tcpClient.GetStream();
-            using var writer = new StreamWriter(stream) { AutoFlush = true };
 
             var callsign = await stream.ReadLine(stoppingToken);
             logger.LogInformation("Connection is from callsign {0}", callsign);
 
-            await writer.WriteLineAsync("DAPPSv1>");
+            await stream.WriteAsync(Encoding.UTF8.GetBytes("DAPPSv1>\n"));
+            await stream.FlushAsync();
 
             while (!stoppingToken.IsCancellationRequested)
             {

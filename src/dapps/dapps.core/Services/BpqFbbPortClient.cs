@@ -1,12 +1,13 @@
 ﻿using dapps.core.Models;
 using Microsoft.Extensions.Options;
 using System.Diagnostics;
+using System.IO;
 using System.Net.Sockets;
 using System.Text;
 
 namespace dapps.core.Services;
 
-public class BpqTelnetClient(IOptions<BpqOptions> options, ILogger logger) : IDisposable
+public class BpqFbbPortClient(IOptions<BpqOptions> options, ILogger logger) : IDisposable
 {
     private readonly TcpClient client = new();
     private NetworkStream? stream;
@@ -16,68 +17,37 @@ public class BpqTelnetClient(IOptions<BpqOptions> options, ILogger logger) : IDi
     public enum BpqSessionState
     {
         PreLogin, LoggedIn,
-        Bbs
     }
 
-    public async Task<TelnetLoginResult> Login(string user, string password)
+    public async Task<FbbLoginResult> Login(string user, string password)
     {
         if (State != BpqSessionState.PreLogin)
         {
             throw new InvalidOperationException("Already logged in");
         }
 
-        if (0 == options.Value.TelnetTcpPort)
+        if (0 == options.Value.BpqFbbPort)
         {
-            throw new InvalidOperationException("TelnetTcpPort is not configured");
+            throw new InvalidOperationException("BpqFbbPort is not configured");
         }
 
-        await client.ConnectAsync(options.Value.Host, options.Value.TelnetTcpPort);
+        await client.ConnectAsync(options.Value.Host, options.Value.BpqFbbPort);
         client.ReceiveTimeout = 50000;
         stream = client.GetStream();
         writer = new(stream);
         writer.AutoFlush = true;
-        writer.NewLine = "\r\n"; // seems even Linux BPQ expects CRLF
 
-        var userPromptResult = stream.Expect("user:");
-        if (!userPromptResult.success)
+        await writer.WriteAsync($"{user}\r{password}\rBPQTERMTCP\r");
+
+        var loginResult = stream.Expect("Connected to TelnetServer\r"); // lies
+
+        if (!loginResult.success)
         {
-            throw new ProtocolErrorException("Expected 'user:' - is this a BPQ telnet port?");
+            return FbbLoginResult.UserInvalid;
         }
 
-        writer.WriteLine(user);
-
-        var usernameCorrect = stream.ReadUntil(new Dictionary<string, bool> {
-            { "user:", false }, {"password:", true }
-        });
-
-        if (!usernameCorrect)
-        {
-            return TelnetLoginResult.UserInvalid;
-        }
-
-        writer.WriteLine(password);
-
-        // a CTEXT line that reads as follows:
-        //   CTEXT=Welcome to GB7RDG Telnet Server\n Enter ? for list of commands\n\n
-        // comes through like this:
-        //   {0d}{0a}Welcome to GB7RDG Telnet Server{0d}{0a} Enter ? for list of commands{0d}{0a}{0d}{0a}{0d}
-
-        // i.e. each "\n" (not newline but the actual characters '\', 'n' in the ctext, which is single-line)
-        // is replaced with a CR LF, and a \r is added to the end
-
-        var successMatch = options.Value.Ctext.Replace("\\n", "\r\n") + "\r";
-
-        var result = stream.ReadUntil(new Dictionary<string, TelnetLoginResult> {
-            { "password:",  TelnetLoginResult.PasswordInvalid },
-            { successMatch, TelnetLoginResult.Success }
-        });
-
-        if (result == TelnetLoginResult.Success)
-        {
-            State = BpqSessionState.LoggedIn;
-        }
-
-        return result;
+        State = BpqSessionState.LoggedIn;
+        return FbbLoginResult.Success;
     }
 
     public Stream GetStream() => stream!;
@@ -94,7 +64,7 @@ public class BpqTelnetClient(IOptions<BpqOptions> options, ILogger logger) : IDi
             throw new InvalidOperationException("Not logged in");
         }
 
-        writer!.WriteLine(command);
+        await writer!.WriteAsync(command);
 
         var result = stream!.ReadUntil(new Dictionary<string, bool> { { expect, true } });
 
@@ -178,7 +148,9 @@ internal static class ExtensionMethods
 
             foreach (var match in matches)
             {
-                if (buffer.EndsWith(match.Key))
+                var str = Encoding.UTF8.GetString(buffer.ToArray());
+
+                if (str.EndsWith(match.Key))
                 {
                     return match.Value;
                 }
@@ -205,25 +177,6 @@ internal static class ExtensionMethods
         return sb.ToString();
     }
 
-    public static bool EndsWith(this List<byte> list, string value)
-    {
-        if (list.Count < value.Length)
-        {
-            return false;
-        }
-
-        for (int i = 0; i < value.Length; i++)
-        {
-            if (list[list.Count - value.Length + i] != value[i])
-            {
-                return false;
-            }
-        }
-
-        Debug.WriteLine($"Matched '{Printable(value)}'");
-        return true;
-    }
-
     public static string Printable(this string value)
     {
         var sb = new StringBuilder();
@@ -244,7 +197,7 @@ internal static class ExtensionMethods
     }
 }
 
-public enum TelnetLoginResult
+public enum FbbLoginResult
 {
     UserInvalid, PasswordInvalid, Success
 }

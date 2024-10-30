@@ -20,15 +20,15 @@ public class UnitTest1 (ITestOutputHelper output)
     [Fact]
     public async Task Test1()
     {
-        BpqTelnetClient client = new BpqTelnetClient(
-            new Options("gb7rdg-node", 8010, @"Welcome to GB7RDG Telnet Server\n Enter ? for list of commands\n\n"),
+        BpqFbbPortClient client = new BpqFbbPortClient(
+            new Options("gb7rdg-node", 8011),
             new XunitLogAdapter(output));
 
         var loginResult = await client.Login("tf", "rad10stuff");
-        loginResult.Should().Be(TelnetLoginResult.Success);
-        client.State.Should().Be(BpqTelnetClient.BpqSessionState.LoggedIn);
+        loginResult.Should().Be(FbbLoginResult.Success);
+        client.State.Should().Be(BpqFbbPortClient.BpqSessionState.LoggedIn);
 
-        (await client.SendCommand("dapps", "DAPPSv1>\n")).Should().BeTrue();
+        (await client.SendCommand("dapps\r", "DAPPSv1>\n")).Should().BeTrue();
 
         var stream = client.GetStream();
 
@@ -74,7 +74,7 @@ public class UnitTest1 (ITestOutputHelper output)
     }
 }
 
-internal class Options(string host, int telnetTcpPort, string ctext) : IOptions<BpqOptions>
+internal class Options(string bpqHost, int fbbPort) : IOptions<BpqOptions>
 {
-    public BpqOptions Value => new() { Host = host, TelnetTcpPort = telnetTcpPort, Ctext = ctext };
+    public BpqOptions Value => new() { Host = bpqHost, BpqFbbPort = fbbPort };
 }
