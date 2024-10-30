@@ -28,7 +28,14 @@ public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory logger
 
             while (!stoppingToken.IsCancellationRequested)
             {
+                logger.LogInformation("Waiting for command");
                 var command = await stream.ReadLine(stoppingToken);
+
+                if (string.IsNullOrWhiteSpace(command))
+                {
+                    logger.LogInformation("Empty command, closing connection");
+                    return;
+                }
 
                 if (command == "q") // quit
                 {

@@ -4,6 +4,8 @@ namespace dapps.core.Services;
 
 public static class Extensions
 {
+    public static Task<string> ReadLine(this Stream stream) => ReadLine(stream, CancellationToken.None);
+
     public static Task<string> ReadLine(this Stream stream, CancellationToken stoppingToken)
     {
         var buffer = new List<byte>();

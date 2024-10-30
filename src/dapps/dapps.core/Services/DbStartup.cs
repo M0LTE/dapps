@@ -26,6 +26,7 @@ public class DbStartup(ILogger<DbStartup> logger) : IHostedService
         logger.LogInformation($"DB: {db.DatabasePath}");
         db.CreateTable<DbOffer>();
         db.CreateTable<DbMessage>();
+        db.CreateTable<BpqOptions>();
         logger.LogInformation("DB schema refreshed");
         return Task.CompletedTask;
     }

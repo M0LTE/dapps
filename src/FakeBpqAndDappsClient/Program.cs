@@ -10,7 +10,7 @@ using System.Text.Json.Serialization;
 Console.WriteLine("Hello, World!");
 
 var client = new TcpClient();
-client.Connect("localhost", 11000);
+client.Connect("gb7rdg-node", 11000);
 
 using var tcpStream = client.GetStream();
 using var tcpStreamReader = new StreamReader(tcpStream);
@@ -24,18 +24,6 @@ if (prompt != "DAPPSv1>")
     Console.WriteLine($"Expected 'DAPPSv1> ', but got '{prompt}'");
     return;
 }
-
-var r = new DappsMessage
-{
-    SourceNode = "GB7RDG",
-    SourceCall = "M0LTE",
-    DestNode = "GB7IOW",
-    DestTopic = "someapp/in",
-    Ttl = DateTime.UtcNow.AddHours(1),
-    Data = "Hello, World!"
-};
-
-var json = JsonSerializer.Serialize(new[] { r });
 
 bool deflated = true;
 
