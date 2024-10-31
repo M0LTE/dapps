@@ -67,9 +67,9 @@ public class Database(ILogger<Database> logger, IOptions<SystemOptions> options)
         logger.LogInformation("Saved metadata for offer {0}", id);
     }
 
-    internal async Task<DbRouteHint> GetRouteHint(string destination)
+    internal async Task<DbRouteHint?> GetRouteHint(string destination)
     {
-        return await DbInfo.GetAsyncConnection().GetAsync<DbRouteHint>(destination);
+        return await DbInfo.GetAsyncConnection().FindAsync<DbRouteHint>(destination);
     }
 
     internal async Task<DbNeighbour> GetNeighbour(string callsign)
