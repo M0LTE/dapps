@@ -21,7 +21,9 @@ public class OutboundMessageManager(Database database, ILogger<OutboundMessageMa
 
             if (neighbour == null)
             {
-                routeHint = await database.GetRouteHint(message.Destination);
+                var destSystem = message.Destination.Split('@').Last();
+
+                routeHint = await database.GetRouteHint(destSystem);
 
                 if (routeHint == null)
                 {
@@ -61,7 +63,7 @@ public class OutboundMessageManager(Database database, ILogger<OutboundMessageMa
 
             var stream = bpqFbbPortClient.GetStream();
 
-            var lines = neighbour.ConnectScript.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+            var lines = neighbour.ConnectScript.Split(new char[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
             foreach (var line in lines)
             {
                 await stream.WriteAsync(Encoding.UTF8.GetBytes(line + "\r"));
