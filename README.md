@@ -16,6 +16,12 @@ This does not replace packet mail, but could piggy back on some the peering/rout
 
 This does not replace AX.25, but can run over it. It could also run over other transports, so conceptually isn't limited strictly to packet radio.
 
+This implementation is not intended to be the only implementation - multiple implementations are healthy. The application interface and on-air protocol need to be compatible, but that's it. Nothing in here is technology-specific.
+
+## Credits
+
+To all at OARC who participated in the RFC, helping take this from a rough idea to a workable system.
+
 ## On-air protocol
 
 ### Prompt
@@ -147,11 +153,13 @@ I see a hand-wavey model along the lines of:
 
 ## Application interface
 
-The application interface is likely to be something like MQTT, with DAPPS holding on to messages until it knows it has delivered them to integrated applications.
+The application interface is likely to be something like MQTT, with DAPPS holding on to messages until it knows it has delivered them to integrated applications. Collaboration very welcome.
 
 Details tbc.
 
 ## Progress
+
+Very much work in progress.
 
 ### Implemented
 
