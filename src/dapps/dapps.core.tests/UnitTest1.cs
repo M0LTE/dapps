@@ -45,6 +45,22 @@ public class UnitTest1 (ITestOutputHelper output)
 
         var stream = client.GetStream();
 
+        var ihave = "ihave de75866 len=11 fmt=p ts=100000000 dst=testqueue@gb7rdg";
+        stream.Write(Encoding.UTF8.GetBytes($"{ihave}\n"));
+        stream.Flush();
+
+        var ihaveresponse = await stream.ReadLine();
+        ihaveresponse.Should().Be($"send de75866");
+
+        await stream.WriteAsync(Encoding.UTF8.GetBytes("data de75866\n"));
+        await stream.WriteAsync(Encoding.UTF8.GetBytes("hello world"));
+        await stream.FlushAsync();
+
+        var dataResponse = await stream.ReadLine();
+        dataResponse.Should().Be($"ack de75866");
+    }
+
+    /*
         var msg = "Hello world";
         var bytes = Encoding.UTF8.GetBytes(msg);
         var ts = ((long)(DateTime.UtcNow - DateTime.UnixEpoch).TotalMilliseconds) - 1730068046000;
@@ -54,14 +70,8 @@ public class UnitTest1 (ITestOutputHelper output)
         bool deflated = true;
         var ihave = $"ihave {truncatedHash} len={bytes.Length} fmt={(deflated ? 'd' : 'p')} ts={ts} mykey=myvalue 💩=💩 dst={dst}";
         var chk = Checksum(ihave);
-
         stream.Write(Encoding.UTF8.GetBytes($"{ihave} chk={chk}\n"));
-        stream.Flush();
-
-        var ihaveresponse = await stream.ReadLine();
-
-        ihaveresponse.Should().Be($"send {truncatedHash}");
-    }
+     */
 
     static string Checksum(string ihave)
     {

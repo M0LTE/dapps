@@ -42,6 +42,14 @@ public class Database(ILogger<Database> logger, IOptions<SystemOptions> options)
 
         var offer = connection.GetAsync<DbOffer>(id);
 
+        var message = await connection.FindAsync<DbMessage>(id);
+
+        if (message != null)
+        {
+            logger.LogWarning("Message {0} already exists, overwriting", id);
+            await connection.DeleteAsync<DbMessage>(id);
+        }
+
         await DbInfo.GetAsyncConnection().InsertAsync(new DbMessage
         {
             Id = id,
@@ -54,7 +62,16 @@ public class Database(ILogger<Database> logger, IOptions<SystemOptions> options)
 
     internal async Task SaveOfferMetadata(string id, Dictionary<string, string> kvps)
     {
-        await DbInfo.GetAsyncConnection().InsertAsync(new DbOffer
+        var connection = DbInfo.GetAsyncConnection();
+
+        var offer = await connection.FindAsync<DbOffer>(id);
+        if (offer != null)
+        {
+            logger.LogWarning("We already have metadata for offer {0}, overwriting", id);
+            await connection.DeleteAsync<DbOffer>(id);
+        }
+
+        await connection.InsertAsync(new DbOffer
         {
             Id = id,
             Length = int.Parse(kvps["len"]),
