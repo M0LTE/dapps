@@ -74,7 +74,7 @@ public class UnitTest1 (ITestOutputHelper output)
     }
 }
 
-internal class Options(string bpqHost, int fbbPort) : IOptions<BpqOptions>
+internal class Options(string bpqHost, int fbbPort) : IOptions<SystemOptions>
 {
-    public BpqOptions Value => new() { Host = bpqHost, BpqFbbPort = fbbPort };
+    public SystemOptions Value => new() { Host = bpqHost, BpqFbbPort = fbbPort };
 }

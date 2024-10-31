@@ -7,7 +7,7 @@ using System.Text;
 
 namespace dapps.core.Services;
 
-public class BpqFbbPortClient(IOptions<BpqOptions> options, ILogger logger) : IDisposable
+public class BpqFbbPortClient(IOptions<SystemOptions> options, ILogger logger) : IDisposable
 {
     private readonly TcpClient client = new();
     private NetworkStream? stream;

@@ -20,15 +20,36 @@ public static class DbInfo
 
 public class DbStartup(ILogger<DbStartup> logger) : IHostedService
 {
+    private readonly SQLiteConnection db = DbInfo.GetConnection();
+
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        var db = DbInfo.GetConnection();
         logger.LogInformation($"DB: {db.DatabasePath}");
+        
         db.CreateTable<DbOffer>();
         db.CreateTable<DbMessage>();
-        db.CreateTable<BpqOptions>();
+        db.CreateTable<DbSystemOption>();
+        db.CreateTable<DbRouteHint>();
+        db.CreateTable<DbNeighbour>();
+
+        var options = db.Query<DbSystemOption>($"select * from {db.Table<DbSystemOption>().Table.TableName};");
+        InsertIfNotPresent(options, "NodeType", "BPQ");
+        InsertIfNotPresent(options, "NodeHost", "localhost");
+        InsertIfNotPresent(options, "FbbPort", "8010");
+        InsertIfNotPresent(options, "FbbUser", "telnetportuser");
+        InsertIfNotPresent(options, "FbbPassword", "telnetportpassword");
+        InsertIfNotPresent(options, "Callsign", "N0CALL");
+        
         logger.LogInformation("DB schema refreshed");
         return Task.CompletedTask;
+    }
+
+    private void InsertIfNotPresent(List<DbSystemOption> options, string key, string defaultValue)
+    {
+        if (!options.Any(o => string.Equals(o.Option, key, StringComparison.OrdinalIgnoreCase)))
+        {
+            db.Insert(new DbSystemOption { Option = key, Value = defaultValue });
+        }
     }
 
     public Task StopAsync(CancellationToken cancellationToken)
