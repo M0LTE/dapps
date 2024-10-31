@@ -1,6 +1,7 @@
 ﻿using dapps.core.Models;
 using dapps.core.Services;
 using FluentAssertions;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Security.Cryptography;
 using System.Text;
@@ -15,14 +16,26 @@ public class NullDisposable : IDisposable
     }
 }
 
+public class XUnitLoggerProvider(XunitLogAdapter xunitLogAdapter) : ILoggerProvider
+{
+    public ILogger CreateLogger(string categoryName) => xunitLogAdapter;
+
+    public void Dispose()
+    {
+    }
+}
+
 public class UnitTest1 (ITestOutputHelper output)
 {
     [Fact]
     public async Task Test1()
     {
+        var loggerFactory = new LoggerFactory();
+        var loggerProvider = new XUnitLoggerProvider(new XunitLogAdapter(output));
+        loggerFactory.AddProvider(loggerProvider);
+        
         BpqFbbPortClient client = new BpqFbbPortClient(
-            new Options("gb7rdg-node", 8011),
-            new XunitLogAdapter(output));
+            new Options("gb7rdg-node", 8011), loggerFactory);
 
         var loginResult = await client.Login("tf", "rad10stuff");
         loginResult.Should().Be(FbbLoginResult.Success);

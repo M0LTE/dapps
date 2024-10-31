@@ -1,3 +1,4 @@
+using dapps.core.Models;
 using dapps.core.Services;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -12,6 +13,18 @@ builder.Services.AddSingleton<InboundConnectionHandlerFactory>();
 builder.Services.AddHostedService<BpqConnectionListener>();
 builder.Services.AddHostedService<DbStartup>();
 builder.Services.AddSingleton<Database>();
+builder.Services.AddSingleton<OptionsRepo>();
+builder.Services.AddOptions<SystemOptions>().Configure<OptionsRepo>(async (o, db) =>
+{
+    var options = await db.GetOptions();
+    o.Host = options.Single(o => o.Option == "NodeHost").Value;
+    o.BpqFbbPort = int.Parse(options.Single(o => o.Option == "FbbPort").Value);
+    o.BpqFbbUser = options.Single(o => o.Option == "FbbUser").Value;
+    o.BpqFbbPassword = options.Single(o => o.Option == "FbbPassword").Value;
+    o.Callsign = options.Single(o => o.Option == "Callsign").Value;
+});
+builder.Services.AddSingleton<OutboundMessageManager>();
+builder.Services.AddSingleton<BpqFbbPortClient>();
 
 var app = builder.Build();
 

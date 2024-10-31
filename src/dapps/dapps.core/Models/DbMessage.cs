@@ -11,4 +11,5 @@ public class DbMessage
     public long? Timestamp { get; init; }
     public string Destination { get; init; } = "";
     public string AdditionalProperties { get; init; } = "";
+    public bool Forwarded { get; init; }
 }

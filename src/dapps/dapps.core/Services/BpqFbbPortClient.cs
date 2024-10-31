@@ -1,14 +1,14 @@
 ﻿using dapps.core.Models;
 using Microsoft.Extensions.Options;
 using System.Diagnostics;
-using System.IO;
 using System.Net.Sockets;
 using System.Text;
 
 namespace dapps.core.Services;
 
-public class BpqFbbPortClient(IOptions<SystemOptions> options, ILogger logger) : IDisposable
+public class BpqFbbPortClient(IOptions<SystemOptions> options, ILoggerFactory logger) : IDisposable
 {
+    private ILogger<BpqFbbPortClient> logger = logger.CreateLogger<BpqFbbPortClient>();
     private readonly TcpClient client = new();
     private NetworkStream? stream;
     private StreamWriter? writer;
@@ -119,9 +119,8 @@ internal static class ExtensionMethods
                 throw new ProtocolErrorException("Failed to match predicate. Buffer contents: " + buffer.AsString().Printable(), buffer.AsString().Printable());
             }
 
-            //Debug.WriteLine(buffer.AsString());
-
             var s = Encoding.UTF8.GetString(buffer.ToArray());
+            Debug.WriteLine(s);
             if (predicate(s))
             {
                 return (true, s);
@@ -143,7 +142,12 @@ internal static class ExtensionMethods
 
         while (true)
         {
-            buffer.Add((byte)stream.ReadByte());
+            var b = stream.ReadByte();
+            if (b == -1)
+            {
+                throw new IOException("End of stream");
+            }
+            buffer.Add((byte)b);
             Debug.WriteLine(buffer.AsString());
 
             foreach (var match in matches)

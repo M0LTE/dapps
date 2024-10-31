@@ -1,14 +1,32 @@
 ﻿
 using dapps.core.Models;
+using Microsoft.Extensions.Options;
 using System.Text.Json;
 
 namespace dapps.core.Services;
 
-public class Database(ILogger<Database> logger)
+public class OptionsRepo
+{
+    internal async Task<ICollection<DbSystemOption>> GetOptions()
+    {
+        var connection = DbInfo.GetAsyncConnection();
+        var rows = await connection.QueryAsync<DbSystemOption>("select * from systemoptions");
+        return rows;
+    }
+}
+
+public class Database(ILogger<Database> logger, IOptions<SystemOptions> options)
 {
     internal async Task DeleteOffer(string id)
     {
         await DbInfo.GetAsyncConnection().DeleteAsync<DbOffer>(id);
+    }
+
+    public async Task<ICollection<DbMessage>> GetPendingOutboundMessages()
+    {
+        var connection = DbInfo.GetAsyncConnection();
+        var rows = await connection.QueryAsync<DbMessage>("select * from messages where destination != ? and forwarded=0;", options.Value.Callsign.Split('-')[0]);
+        return rows;
     }
 
     internal async Task<DbOffer> LoadOfferMetadata(string id)
@@ -47,5 +65,25 @@ public class Database(ILogger<Database> logger)
         });
 
         logger.LogInformation("Saved metadata for offer {0}", id);
+    }
+
+    internal async Task<DbRouteHint> GetRouteHint(string destination)
+    {
+        return await DbInfo.GetAsyncConnection().GetAsync<DbRouteHint>(destination);
+    }
+
+    internal async Task<DbNeighbour> GetNeighbour(string callsign)
+    {
+        return await DbInfo.GetAsyncConnection().FindWithQueryAsync<DbNeighbour>("select * from neighbours where callsign=?", callsign);
+    }
+
+    internal async Task MarkMessageAsForwarded(string id)
+    {
+        await DbInfo.GetAsyncConnection().ExecuteAsync("update messages set forwarded=1 where id=?", id);
+    }
+
+    internal async Task<ICollection<DbNeighbour>> GetNeighbours()
+    {
+        return await DbInfo.GetAsyncConnection().QueryAsync<DbNeighbour>("select * from neighbours");
     }
 }

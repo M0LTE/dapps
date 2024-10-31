@@ -1,11 +1,7 @@
-﻿using dapps.core.Models;
-using System.IO.Compression;
+﻿using System.IO.Compression;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.Json;
-using System.Text.Json.Nodes;
-using static System.Net.Mime.MediaTypeNames;
 
 namespace dapps.core.Services;
 
@@ -210,34 +206,5 @@ public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory logger
         byte[] hashBytes = sha.ComputeHash(toHash);
         var str = BitConverter.ToString(hashBytes).Replace("-", "").ToLower();
         return str;
-    }
-
-    private async Task HandleJson(NetworkStream stream)
-    {
-        IAsyncEnumerable<JsonNode?> enumerable = JsonSerializer.DeserializeAsyncEnumerable<JsonNode?>(stream);
-        await foreach (JsonNode? obj in enumerable)
-        {
-            logger.LogInformation("Got object {0}", obj);
-            await HandleObject(obj);
-        }
-    }
-
-    private async Task HandleCompressedJson(NetworkStream stream)
-    {
-        using var decompressor = new DeflateStream(stream, CompressionMode.Decompress, leaveOpen: true);
-        IAsyncEnumerable<JsonNode?> enumerable = JsonSerializer.DeserializeAsyncEnumerable<JsonNode?>(decompressor);
-        await foreach (JsonNode? obj in enumerable)
-        {
-            logger.LogInformation("Got object {0}", obj);
-            await HandleObject(obj);
-        }
-    }
-
-    private async Task HandleObject(JsonNode? obj)
-    {
-        if (obj["type"] != null && obj["type"]!.GetValue<string>() == "Msg")
-        {
-            var deserialised = JsonSerializer.Deserialize<DappsMessage>(obj);
-        }
     }
 }

@@ -5,8 +5,7 @@ namespace dapps.core.Models;
 [Table("routehints")]
 public class DbRouteHint
 {
-    [PrimaryKey, AutoIncrement]
-    public int Id { get; set; }
+    [PrimaryKey]
     public string Destination { get; set; } = "";
     public string NextHop { get; set; } = "";
 }
@@ -16,6 +15,9 @@ public class DbNeighbour
 {
     [PrimaryKey, AutoIncrement]
     public int Id { get; set; }
+
+    [Indexed(Unique = true)]
     public string Callsign { get; set; } = "";
+    
     public string ConnectScript { get; set; } = "";
 }

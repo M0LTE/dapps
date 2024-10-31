@@ -3,7 +3,7 @@ using Xunit.Abstractions;
 
 namespace dapps.core.tests;
 
-public class XunitLogAdapter(ITestOutputHelper testOutputHelper)  : ILogger
+public class XunitLogAdapter(ITestOutputHelper testOutputHelper) : ILogger
 {
     public IDisposable? BeginScope<TState>(TState state) where TState : notnull
     {
