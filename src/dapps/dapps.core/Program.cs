@@ -1,5 +1,6 @@
 using dapps.core.Models;
 using dapps.core.Services;
+using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -33,6 +34,9 @@ if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
+    app.MapScalarApiReference(options => {
+        options.OpenApiRoutePattern = "../swagger/v1/swagger.json";
+    });
 }
 
 app.UseAuthorization();
