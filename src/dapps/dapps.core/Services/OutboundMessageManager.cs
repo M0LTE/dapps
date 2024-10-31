@@ -95,7 +95,7 @@ public class OutboundMessageManager(Database database, ILogger<OutboundMessageMa
             await stream.WriteAsync(Encoding.UTF8.GetBytes(cmd + "\n"));
             await stream.FlushAsync();
 
-            var ihaveResponse = stream.ReadUntil(new Dictionary<string, bool> { { $"send {message.Id}", true } });
+            var ihaveResponse = stream.ReadUntil(new Dictionary<string, bool> { { $"send {message.Id}\n", true } });
 
             if (!ihaveResponse)
             {
@@ -104,6 +104,7 @@ public class OutboundMessageManager(Database database, ILogger<OutboundMessageMa
             }
 
             await stream.WriteAsync(Encoding.UTF8.GetBytes("data " + message.Id + "\n"));
+            await stream.FlushAsync();
             await stream.WriteAsync(dappsMessage.Payload);
             await stream.FlushAsync();
 

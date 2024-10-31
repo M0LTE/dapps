@@ -27,6 +27,10 @@ public static class Extensions
             buffer.Add((byte)c);
         }
 
-        return Task.FromResult(Encoding.UTF8.GetString(buffer.ToArray()));
+        var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole());
+        var logger = loggerFactory.CreateLogger("");
+        var line = Encoding.UTF8.GetString(buffer.ToArray());
+        logger.LogInformation("Read line: {0}", line);
+        return Task.FromResult(line);
     }
 }
