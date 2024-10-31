@@ -1,6 +1,7 @@
 using dapps.core.Models;
 using dapps.core.Services;
 using Scalar.AspNetCore;
+using System.Diagnostics;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -26,6 +27,15 @@ builder.Services.AddOptions<SystemOptions>().Configure<OptionsRepo>(async (o, db
 });
 builder.Services.AddSingleton<OutboundMessageManager>();
 builder.Services.AddSingleton<BpqFbbPortClient>();
+builder.Services.AddLogging(logging =>
+{
+    logging.AddSimpleConsole(options =>
+    {
+        options.SingleLine = true;
+        options.UseUtcTimestamp = true;
+        options.TimestampFormat = "HH:mm:ss.fff ";
+    });
+});
 
 var app = builder.Build();
 
