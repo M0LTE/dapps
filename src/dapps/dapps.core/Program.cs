@@ -1,22 +1,15 @@
 using dapps.core.Models;
 using dapps.core.Services;
 using Scalar.AspNetCore;
-using System.Diagnostics;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-
 builder.Services.AddControllers();
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
-builder.Services.AddSingleton<InboundConnectionHandlerFactory>();
-builder.Services.AddHostedService<BpqConnectionListener>();
-builder.Services.AddHostedService<DbStartup>();
-builder.Services.AddSingleton<Database>();
-builder.Services.AddSingleton<OptionsRepo>();
-builder.Services.AddOptions<SystemOptions>().Configure<OptionsRepo>(async (o, db) =>
+
+builder.Services.AddOptions<SystemOptions>().Configure<OptionsRepo, ILogger<SystemOptions>>(async (o, db, logger) =>
 {
     var options = await db.GetOptions();
     o.Host = options.Single(o => o.Option == "NodeHost").Value;
@@ -24,7 +17,16 @@ builder.Services.AddOptions<SystemOptions>().Configure<OptionsRepo>(async (o, db
     o.BpqFbbUser = options.Single(o => o.Option == "FbbUser").Value;
     o.BpqFbbPassword = options.Single(o => o.Option == "FbbPassword").Value;
     o.Callsign = options.Single(o => o.Option == "Callsign").Value;
+
+    logger.LogInformation($"Callsign: {o.Callsign}");
+    logger.LogInformation($"BPQ node: {o.BpqFbbUser}@{o.Host}:{o.BpqFbbPort}");
 });
+
+builder.Services.AddSingleton<InboundConnectionHandlerFactory>();
+builder.Services.AddHostedService<BpqConnectionListener>();
+builder.Services.AddHostedService<DbStartup>();
+builder.Services.AddSingleton<Database>();
+builder.Services.AddSingleton<OptionsRepo>();
 builder.Services.AddSingleton<OutboundMessageManager>();
 builder.Services.AddSingleton<BpqFbbPortClient>();
 builder.Services.AddLogging(logging =>
@@ -36,7 +38,6 @@ builder.Services.AddLogging(logging =>
         options.TimestampFormat = "HH:mm:ss.fff ";
     });
 });
-
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -48,9 +49,7 @@ if (app.Environment.IsDevelopment())
         options.OpenApiRoutePattern = "../swagger/v1/swagger.json";
     });
 }
-
 app.UseAuthorization();
-
 app.MapControllers();
 
 app.Run();

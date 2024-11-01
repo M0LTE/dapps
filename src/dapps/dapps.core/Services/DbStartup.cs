@@ -1,5 +1,7 @@
 ﻿using dapps.core.Models;
+using Microsoft.Extensions.Options;
 using SQLite;
+using System.Diagnostics;
 
 namespace dapps.core.Services;
 
@@ -18,13 +20,14 @@ public static class DbInfo
     }
 }
 
-public class DbStartup(ILogger<DbStartup> logger) : IHostedService
+public class DbStartup(IOptions<SystemOptions> optionsObj, ILogger<DbStartup> logger) : IHostedService
 {
     private readonly SQLiteConnection db = DbInfo.GetConnection();
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
         logger.LogInformation($"DB: {db.DatabasePath}");
+        Debug.WriteLine(optionsObj.Value.BpqFbbPort);
         
         db.CreateTable<DbOffer>();
         db.CreateTable<DbMessage>();
