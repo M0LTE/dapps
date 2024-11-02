@@ -8,7 +8,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
-
+builder.Services.AddHostedService<DbStartup>();
 builder.Services.AddOptions<SystemOptions>().Configure<OptionsRepo, ILogger<SystemOptions>>(async (o, db, logger) =>
 {
     var options = await db.GetOptions();
@@ -24,7 +24,6 @@ builder.Services.AddOptions<SystemOptions>().Configure<OptionsRepo, ILogger<Syst
 
 builder.Services.AddSingleton<InboundConnectionHandlerFactory>();
 builder.Services.AddHostedService<BpqConnectionListener>();
-builder.Services.AddHostedService<DbStartup>();
 builder.Services.AddSingleton<Database>();
 builder.Services.AddSingleton<OptionsRepo>();
 builder.Services.AddSingleton<OutboundMessageManager>();
