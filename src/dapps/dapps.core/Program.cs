@@ -12,14 +12,14 @@ builder.Services.AddHostedService<DbStartup>();
 builder.Services.AddOptions<SystemOptions>().Configure<OptionsRepo, ILogger<SystemOptions>>(async (o, db, logger) =>
 {
     var options = await db.GetOptions();
-    o.Host = options.Single(o => o.Option == "NodeHost").Value;
-    o.BpqFbbPort = int.Parse(options.Single(o => o.Option == "FbbPort").Value);
-    o.BpqFbbUser = options.Single(o => o.Option == "FbbUser").Value;
-    o.BpqFbbPassword = options.Single(o => o.Option == "FbbPassword").Value;
+    o.NodeHost = options.Single(o => o.Option == "NodeHost").Value;
+    o.FbbPort = int.Parse(options.Single(o => o.Option == "FbbPort").Value);
+    o.FbbUser = options.Single(o => o.Option == "FbbUser").Value;
+    o.FbbPassword = options.Single(o => o.Option == "FbbPassword").Value;
     o.Callsign = options.Single(o => o.Option == "Callsign").Value;
 
     logger.LogInformation($"Callsign: {o.Callsign}");
-    logger.LogInformation($"BPQ node: {o.BpqFbbUser}@{o.Host}:{o.BpqFbbPort}");
+    logger.LogInformation($"BPQ node: {o.FbbUser}@{o.NodeHost}:{o.FbbPort}");
 });
 
 builder.Services.AddSingleton<InboundConnectionHandlerFactory>();

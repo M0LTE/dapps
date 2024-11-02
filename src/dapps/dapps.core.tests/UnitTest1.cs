@@ -97,7 +97,17 @@ public class UnitTest1 (ITestOutputHelper output)
     }
 }
 
-internal class Options(string bpqHost, int fbbPort) : IOptions<SystemOptions>
+internal class Options(string bpqHost, int fbbPort) : IOptionsMonitor<SystemOptions>
 {
-    public SystemOptions Value => new() { Host = bpqHost, BpqFbbPort = fbbPort };
+    public SystemOptions CurrentValue => new() { NodeHost = bpqHost, FbbPort = fbbPort };
+
+    public SystemOptions Get(string? name)
+    {
+        return CurrentValue;
+    }
+
+    public IDisposable? OnChange(Action<SystemOptions, string?> listener)
+    {
+        throw new NotImplementedException();
+    }
 }

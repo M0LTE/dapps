@@ -5,11 +5,13 @@ using System.Text.Json;
 
 namespace dapps.core.Services;
 
-public class OutboundMessageManager(Database database, ILogger<OutboundMessageManager> logger, BpqFbbPortClient bpqFbbPortClient, IOptions<SystemOptions> options)
+public class OutboundMessageManager(Database database, ILogger<OutboundMessageManager> logger, BpqFbbPortClient bpqFbbPortClient, IOptionsMonitor<SystemOptions> options)
 {
     public async Task DoRun()
     {
         logger.LogInformation("Starting a run");
+
+        var optionsValue = options.CurrentValue;
 
         var messages = await database.GetPendingOutboundMessages();
         var neighhours = await database.GetNeighbours();
@@ -52,7 +54,7 @@ public class OutboundMessageManager(Database database, ILogger<OutboundMessageMa
 
             if (bpqFbbPortClient.State != BpqFbbPortClient.BpqSessionState.LoggedIn)
             {
-                var loginResult = await bpqFbbPortClient.Login(options.Value.BpqFbbUser, options.Value.BpqFbbPassword);
+                var loginResult = await bpqFbbPortClient.Login(optionsValue.FbbUser, optionsValue.FbbPassword);
 
                 if (loginResult != FbbLoginResult.Success)
                 {

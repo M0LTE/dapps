@@ -6,7 +6,7 @@ using System.Text;
 
 namespace dapps.core.Services;
 
-public class BpqFbbPortClient(IOptions<SystemOptions> options, ILoggerFactory logger) : IDisposable
+public class BpqFbbPortClient(IOptionsMonitor<SystemOptions> options, ILoggerFactory logger) : IDisposable
 {
     private ILogger<BpqFbbPortClient> logger = logger.CreateLogger<BpqFbbPortClient>();
     private readonly TcpClient client = new();
@@ -26,12 +26,16 @@ public class BpqFbbPortClient(IOptions<SystemOptions> options, ILoggerFactory lo
             throw new InvalidOperationException("Already logged in");
         }
 
-        if (0 == options.Value.BpqFbbPort)
+        var optionsValue = options.CurrentValue;
+
+        if (0 == optionsValue.FbbPort)
         {
             throw new InvalidOperationException("BpqFbbPort is not configured");
         }
 
-        await client.ConnectAsync(options.Value.Host, options.Value.BpqFbbPort);
+        logger.LogInformation("Connecting to BPQ: {user}@{node}:{port}", user, optionsValue.NodeHost, optionsValue.FbbPort);
+
+        await client.ConnectAsync(optionsValue.NodeHost, optionsValue.FbbPort);
         client.ReceiveTimeout = 50000;
         stream = client.GetStream();
         writer = new(stream);

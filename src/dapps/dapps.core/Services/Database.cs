@@ -1,6 +1,6 @@
-﻿
-using dapps.core.Models;
+﻿using dapps.core.Models;
 using Microsoft.Extensions.Options;
+using SQLite;
 using System.Text.Json;
 
 namespace dapps.core.Services;
@@ -15,7 +15,7 @@ public class OptionsRepo
     }
 }
 
-public class Database(ILogger<Database> logger, IOptions<SystemOptions> options)
+public class Database(ILogger<Database> logger, IOptionsMonitor<SystemOptions> options)
 {
     internal async Task DeleteOffer(string id)
     {
@@ -25,7 +25,7 @@ public class Database(ILogger<Database> logger, IOptions<SystemOptions> options)
     public async Task<ICollection<DbMessage>> GetPendingOutboundMessages()
     {
         var connection = DbInfo.GetAsyncConnection();
-        var rows = await connection.QueryAsync<DbMessage>("select * from messages where destination != ? and forwarded=0;", options.Value.Callsign.Split('-')[0]);
+        var rows = await connection.QueryAsync<DbMessage>("select * from messages where destination != ? and forwarded=0;", options.CurrentValue.Callsign.Split('-')[0]);
         return rows;
     }
 
@@ -102,5 +102,44 @@ public class Database(ILogger<Database> logger, IOptions<SystemOptions> options)
     internal async Task<ICollection<DbNeighbour>> GetNeighbours()
     {
         return await DbInfo.GetAsyncConnection().QueryAsync<DbNeighbour>("select * from neighbours");
+    }
+
+    internal async Task SaveSystemOptions(SystemOptions systemOptions)
+    {
+        var connection = DbInfo.GetAsyncConnection();
+
+        var options = await connection.QueryAsync<DbSystemOption>("select * from systemoptions;");
+        
+        await Upsert(connection, options, systemOptions.FbbPort.ToString(), nameof(systemOptions.FbbPort));
+        await Upsert(connection, options, systemOptions.FbbPassword, nameof(systemOptions.FbbPassword));
+        await Upsert(connection, options, systemOptions.FbbUser, nameof(systemOptions.FbbUser));
+        await Upsert(connection, options, systemOptions.NodeHost, nameof(systemOptions.NodeHost));
+        await Upsert(connection, options, systemOptions.Callsign, nameof(systemOptions.Callsign));
+    }
+
+    private static async Task Upsert(SQLiteAsyncConnection connection, List<DbSystemOption> options, string value, string field)
+    {
+        if (options.Any(o => string.Equals(o.Option, field, StringComparison.OrdinalIgnoreCase)))
+        {
+            await connection.ExecuteAsync("update systemoptions set value=? where option=?", value, field);
+        }
+        else
+        {
+            await connection.InsertAsync(new DbSystemOption { Option = field, Value = value });
+        }
+    }
+
+    internal async Task<SystemOptions> GetSystemOptions()
+    {
+        var connection = DbInfo.GetAsyncConnection();
+        var options = (await connection.QueryAsync<DbSystemOption>("select * from systemoptions;")).ToDictionary(item => item.Option, item => item.Value);
+        return new SystemOptions
+        {
+            FbbPort = int.Parse(options[nameof(SystemOptions.FbbPort)]),
+            FbbPassword = options[nameof(SystemOptions.FbbPassword)],
+            FbbUser = options[nameof(SystemOptions.FbbUser)],
+            NodeHost = options[nameof(SystemOptions.NodeHost)],
+            Callsign = options[nameof(SystemOptions.Callsign)]
+        };
     }
 }

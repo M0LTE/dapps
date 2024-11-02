@@ -12,9 +12,9 @@ public class DbSystemOption
 
 public class SystemOptions
 {
-    public string Host { get; set; } = "";
-    public int BpqFbbPort { get; set; }
-    public string BpqFbbUser { get; set; } = "";
-    public string BpqFbbPassword { get; set; } = "";
+    public string NodeHost { get; set; } = "";
+    public int FbbPort { get; set; }
+    public string FbbUser { get; set; } = "";
+    public string FbbPassword { get; set; } = "";
     public string Callsign { get; set; } = "";
 }

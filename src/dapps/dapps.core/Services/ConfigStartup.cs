@@ -3,17 +3,18 @@ using Microsoft.Extensions.Options;
 
 namespace dapps.core.Services;
 
-public class ConfigStartup(ILogger<ConfigStartup> logger, IOptions<SystemOptions> options) : IHostedService
+public class ConfigStartup(ILogger<ConfigStartup> logger, IOptionsMonitor<SystemOptions> options) : IHostedService
 {
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        while (options.Value.BpqFbbPort == 0)
+        var optionsValue = options.CurrentValue;
+        while (optionsValue.FbbPort == 0)
         {
             await Task.Delay(1000);
         }
 
-        logger.LogInformation($"Callsign: {options.Value.Callsign}");
-        logger.LogInformation($"BPQ node: {options.Value.BpqFbbUser}@{options.Value.Host}:{options.Value.BpqFbbPort}");
+        logger.LogInformation($"Callsign: {optionsValue.Callsign}");
+        logger.LogInformation($"BPQ node: {optionsValue.FbbUser}@{optionsValue.NodeHost}:{optionsValue.FbbPort}");
     }
 
     public Task StopAsync(CancellationToken cancellationToken)
