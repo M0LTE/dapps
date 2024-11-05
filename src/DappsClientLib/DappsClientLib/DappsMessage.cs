@@ -33,6 +33,6 @@ public class DappsMessage
         }
         byte[] hashBytes = SHA1.HashData(toHash);
         var str = BitConverter.ToString(hashBytes).Replace("-", "").ToLower();
-        return str;
+        return str[..7];
     }
 }

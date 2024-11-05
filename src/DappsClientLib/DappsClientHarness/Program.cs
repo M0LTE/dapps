@@ -4,7 +4,7 @@ using System.Text;
 
 try
 {
-    var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole());
+    var loggerFactory = LoggerFactory.Create(builder => builder.AddSimpleConsole(options => { options.SingleLine = true; options.TimestampFormat = "HH:mm:ss.fff "; }));
 
     var logger = loggerFactory.CreateLogger<Program>();
 
@@ -12,25 +12,28 @@ try
 
     if (!await client.Login("telnetuser", "telnetpass"))
     {
-        logger.LogError("Failed to log in");
+        logger.LogError("Failed to log in to local BPQ's FBBPORT");
         return;
     }
 
-    logger.LogInformation("Logged in successfully");
+    logger.LogInformation("Login success");
 
-    if (!await client.ConnectToDappsInstance(["C 1 q0bbb", "DAPPS"]))
+    // Need to understand the need for the pause here. Without it, BPQ says invalid command (presumably it is wrongly being interpreted by the local BPQ rather than passed to the remote one)
+    if (!await client.ConnectToDappsInstance(["C 1 q0bbb", "PAUSE 1000", "DAPPS"]))   
     {
-        logger.LogError("Failed to connect to DAPPS instance");
+        logger.LogError("Failed to connect to remote DAPPS instance through local BPQ");
         return;
     }
 
-    logger.LogInformation("Connected to remote DAPPS instance");
+    logger.LogInformation("Got remote DAPPS prompt");
 
-    var payload = Encoding.UTF8.GetBytes("hello world");
+    var payload = "hello world";
+    var payloadBytes = Encoding.UTF8.GetBytes(payload);
     var timestamp = (long)(DateTime.UtcNow - DateTime.UnixEpoch).TotalMilliseconds;
-    var id = DappsMessage.ComputeHash(payload, timestamp);
+    var id = DappsMessage.ComputeHash(payloadBytes, timestamp);
+    var dest = "testqueue@gb7rdg";
 
-    if (!await client.OfferMessage(id: id, timestamp: timestamp, destination: "testqueue@gb7rdg", len: payload.Length))
+    if (!await client.OfferMessage(id: id, timestamp: timestamp, destination: dest, len: payload.Length))
     {
         logger.LogError("Failed to offer message with ID {id}", id);
         return;
@@ -38,13 +41,14 @@ try
 
     logger.LogInformation("Offered message with ID {id}", id);
 
-    if (!await client.SendMessage(id, payload: "Hello, World!"))
+    if (!await client.SendMessage(id, payload: payload))
     {
         logger.LogError("Failed to send message with ID {id}", id);
     }
 
     logger.LogInformation("Sent message with ID {id}", id);
 
+    await client.Disconnect();
 }
 finally
 {
