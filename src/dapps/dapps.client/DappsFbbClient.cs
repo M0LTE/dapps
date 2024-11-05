@@ -1,12 +1,14 @@
 ﻿using Microsoft.Extensions.Logging;
+using System.Text;
+using static dapps.client.DappsMessage;
 
-namespace DappsClientLib;
+namespace dapps.client;
 
 public class DappsFbbClient(string host, int port, ILoggerFactory loggerFactory)
     : FbbPortClient(host, port, loggerFactory)
 {
     private bool connectedToDapps;
-    private ILogger logger = loggerFactory.CreateLogger<DappsFbbClient>();
+    private readonly ILogger logger = loggerFactory.CreateLogger<DappsFbbClient>();
 
     /// <summary>
     /// Execute the login sequence, expect DAPPS prompt
@@ -54,12 +56,27 @@ public class DappsFbbClient(string host, int port, ILoggerFactory loggerFactory)
     /// <param name="destination"></param>
     /// <returns></returns>
     /// <exception cref="NotImplementedException"></exception>
-    public async Task<bool> OfferMessage(string id, long timestamp, string destination, int len)
+    public async Task<bool> OfferMessage(string id, long? timestamp, MessageFormat messageFormat, string destination, int len)
     {
         connectedToDapps.AssertTruth("Not connected to DAPPS");
         logger.LogInformation("Offering message with ID {id} to remote DAPPS...", id);
-        var command = $"ihave {id} len={len} fmt=p ts={timestamp} dst={destination}";
-        await networkStream!.WriteUtf8AndFlush(command + "\n");
+        var commandBuilder = new StringBuilder($"ihave {id} len={len} fmt={messageFormat.ToString().ToLower()[0]} dst={destination}");
+        if (timestamp.HasValue)
+        {
+            commandBuilder.Append($" ts={timestamp}");
+        }
+
+        var command = commandBuilder.ToString();
+
+        if (messageFormat == MessageFormat.Plain)
+        {
+            await networkStream!.WriteUtf8AndFlush(command + "\n");
+        }
+        else
+        {
+            throw new NotImplementedException("Deflate format not yet ported to this library");
+        }
+
         var ihaveResponse = networkStream!.ReadUntil(new Dictionary<string, bool> { { $"send {id}\n", true } });
         return ihaveResponse;
     }
@@ -71,18 +88,19 @@ public class DappsFbbClient(string host, int port, ILoggerFactory loggerFactory)
     /// <param name="payload"></param>
     /// <returns></returns>
     /// <exception cref="NotImplementedException"></exception>
-    public async Task<bool> SendMessage(string id, string payload)
+    public async Task<bool> SendMessage(string id, byte[] payload)
     {
         connectedToDapps.AssertTruth("Not connected to DAPPS");
         logger.LogInformation("Sending message with ID {0}...", id);
         await networkStream!.WriteUtf8AndFlush("data " + id + "\n");
-        await networkStream!.WriteUtf8AndFlush(payload);
+        await networkStream!.WriteAndFlush(payload);
         var dataResponse = networkStream!.ReadUntil(new Dictionary<string, bool> {
-                { $"ack {id}", true },
-                { $"bad {id}", false },
-            });
+            { $"ack {id}", true },
+            { $"bad {id}", false },
+        });
         return dataResponse;
     }
+
     public Task Disconnect()
     {
         networkStream!.Socket.Close();

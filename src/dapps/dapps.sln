@@ -5,7 +5,11 @@ VisualStudioVersion = 17.11.35327.3
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "dapps.core", "dapps.core\dapps.core.csproj", "{67B8E458-A30F-4894-BBA5-2FF16B75E935}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "dapps.core.tests", "dapps.core.tests\dapps.core.tests.csproj", "{E930DF70-1389-4F80-BE68-DAC5F9CA5E85}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "dapps.core.tests", "dapps.core.tests\dapps.core.tests.csproj", "{E930DF70-1389-4F80-BE68-DAC5F9CA5E85}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "dapps.client", "dapps.client\dapps.client.csproj", "{06ECD3AD-162F-426D-9F38-0B51B3825C5F}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "dapps.client.harness", "dapps.client.harness\dapps.client.harness.csproj", "{90B61E95-0D0F-4833-B076-DC83B53EE92C}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -21,6 +25,14 @@ Global
 		{E930DF70-1389-4F80-BE68-DAC5F9CA5E85}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{E930DF70-1389-4F80-BE68-DAC5F9CA5E85}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{E930DF70-1389-4F80-BE68-DAC5F9CA5E85}.Release|Any CPU.Build.0 = Release|Any CPU
+		{06ECD3AD-162F-426D-9F38-0B51B3825C5F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{06ECD3AD-162F-426D-9F38-0B51B3825C5F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{06ECD3AD-162F-426D-9F38-0B51B3825C5F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{06ECD3AD-162F-426D-9F38-0B51B3825C5F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{90B61E95-0D0F-4833-B076-DC83B53EE92C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{90B61E95-0D0F-4833-B076-DC83B53EE92C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{90B61E95-0D0F-4833-B076-DC83B53EE92C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{90B61E95-0D0F-4833-B076-DC83B53EE92C}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

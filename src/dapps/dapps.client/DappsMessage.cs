@@ -1,6 +1,6 @@
 ﻿using System.Security.Cryptography;
 
-namespace DappsClientLib;
+namespace dapps.client;
 
 public class DappsMessage
 {

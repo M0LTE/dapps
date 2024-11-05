@@ -1,7 +1,7 @@
 ﻿using System.Security.Cryptography;
 using System.Text;
 
-namespace DappsClientLib;
+namespace dapps.client;
 
 public class IHaveCommand
 {

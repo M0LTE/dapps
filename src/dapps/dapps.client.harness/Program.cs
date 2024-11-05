@@ -1,4 +1,4 @@
-﻿using DappsClientLib;
+﻿using dapps.client;
 using Microsoft.Extensions.Logging;
 using System.Text;
 
@@ -33,7 +33,7 @@ try
     var id = DappsMessage.ComputeHash(payloadBytes, timestamp);
     var dest = "testqueue@gb7rdg";
 
-    if (!await client.OfferMessage(id: id, timestamp: timestamp, destination: dest, len: payload.Length))
+    if (!await client.OfferMessage(id: id, timestamp: timestamp, messageFormat: DappsMessage.MessageFormat.Plain, destination: dest, len: payload.Length))
     {
         logger.LogError("Failed to offer message with ID {id}", id);
         return;
@@ -41,7 +41,7 @@ try
 
     logger.LogInformation("Offered message with ID {id}", id);
 
-    if (!await client.SendMessage(id, payload: payload))
+    if (!await client.SendMessage(id, payloadBytes))
     {
         logger.LogError("Failed to send message with ID {id}", id);
     }

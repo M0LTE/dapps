@@ -2,7 +2,7 @@
 using Microsoft.Extensions.Logging;
 using System.Net.Sockets;
 
-namespace DappsClientLib;
+namespace dapps.client;
 
 public class FbbPortClient(string host, int port, ILoggerFactory loggerFactory)
 {

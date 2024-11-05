@@ -1,4 +1,4 @@
-﻿namespace DappsClientLib;
+﻿namespace dapps.client;
 
 public class ProtocolErrorException(string? message) : Exception(message)
 {
