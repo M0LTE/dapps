@@ -55,7 +55,7 @@ public class OutboundMessageManager(Database database, ILoggerFactory loggerFact
 
             var dappsClient = new DappsFbbClient(optionsValue.NodeHost, optionsValue.FbbPort, loggerFactory);
 
-            if (!await dappsClient.Login(optionsValue.FbbUser, optionsValue.FbbPassword))
+            if (!await dappsClient.FbbLogin(optionsValue.FbbUser, optionsValue.FbbPassword))
             {
                 logger.LogInformation("FBB login failed, skipping message {0}", message.Id);
                 return;

@@ -10,43 +10,8 @@ public class DappsFbbClient(string host, int port, ILoggerFactory loggerFactory)
     private bool connectedToDapps;
     private readonly ILogger logger = loggerFactory.CreateLogger<DappsFbbClient>();
 
-    /// <summary>
-    /// Execute the login sequence, expect DAPPS prompt
-    /// </summary>
-    /// <param name="connectScript"></param>
-    /// <returns></returns>
-    /// <exception cref="NotImplementedException"></exception>
-    public async Task<bool> ConnectToDappsInstance(string[] connectScript)
-    {
-        State.AssertIsLoggedInToLocalBpq();
-
-        logger.LogInformation("Connecting to DAPPS instance using connect script: {0}", string.Join(", ", connectScript));
-
-        foreach (var scriptLine in connectScript)
-        {
-            if (scriptLine.StartsWith("PAUSE ", StringComparison.OrdinalIgnoreCase))
-            {
-                var parts = scriptLine.Split(" ");
-                if (parts.Length == 2 && int.TryParse(parts[1], out var pause))
-                {
-                    await Task.Delay(pause);
-                }
-                else
-                {
-                    logger.LogWarning("Could not parse PAUSE command: '{0}'", scriptLine);
-                    return false;
-                }
-            }
-                
-            await networkStream!.WriteUtf8AndFlush(scriptLine + "\r");
-        }
-
-        var (gotPrompt, _) = networkStream!.Expect("DAPPSv1>\n");
-
-        connectedToDapps = gotPrompt;
-
-        return gotPrompt;
-    }
+    public Task<bool> ConnectToDappsInstance(string[] connectScript)
+        => ExecuteScript(connectScript, "DAPPSv1>\n");
 
     /// <summary>
     /// Send ihave, expect send

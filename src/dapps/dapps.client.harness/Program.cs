@@ -10,7 +10,7 @@ try
 
     var client = new DappsFbbClient("debian1", 8011, loggerFactory);
 
-    if (!await client.Login("telnetuser", "telnetpass"))
+    if (!await client.FbbLogin("telnetuser", "telnetpass"))
     {
         logger.LogError("Failed to log in to local BPQ's FBBPORT");
         return;
