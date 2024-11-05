@@ -10,7 +10,7 @@ public class ConfigStartup(ILogger<ConfigStartup> logger, IOptionsMonitor<System
         var optionsValue = options.CurrentValue;
         while (optionsValue.FbbPort == 0)
         {
-            await Task.Delay(1000);
+            await Task.Delay(1000, cancellationToken);
         }
 
         logger.LogInformation($"Callsign: {optionsValue.Callsign}");

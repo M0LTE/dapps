@@ -6,7 +6,7 @@ namespace dapps.core.Controllers;
 
 [ApiController]
 [Route("[controller]")]
-public class ConfigController(Database database, ILogger<ConfigController> logger) : ControllerBase
+public class ConfigController(Database database) : ControllerBase
 {
     [HttpGet]
     public async Task<SystemOptions> Get()

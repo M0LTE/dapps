@@ -27,7 +27,6 @@ builder.Services.AddHostedService<BpqConnectionListener>();
 builder.Services.AddSingleton<Database>();
 builder.Services.AddSingleton<OptionsRepo>();
 builder.Services.AddSingleton<OutboundMessageManager>();
-builder.Services.AddSingleton<BpqFbbPortClient>();
 builder.Services.AddLogging(logging =>
 {
     logging.AddSimpleConsole(options =>

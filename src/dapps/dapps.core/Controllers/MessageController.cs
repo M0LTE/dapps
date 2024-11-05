@@ -1,4 +1,4 @@
-using dapps.core.Models;
+using dapps.client;
 using dapps.core.Services;
 using Microsoft.AspNetCore.Mvc;
 using System.Text;
