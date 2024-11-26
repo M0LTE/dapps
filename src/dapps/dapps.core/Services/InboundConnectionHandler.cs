@@ -1,4 +1,5 @@
-﻿using System.IO.Compression;
+﻿using dapps.client;
+using System.IO.Compression;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
@@ -8,7 +9,7 @@ namespace dapps.core.Services;
 public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory loggerFactory, Database database)
 {
     private readonly ILogger logger = loggerFactory.CreateLogger<InboundConnectionHandler>();
-
+    
     internal async Task Handle(CancellationToken stoppingToken)
     {
         try
@@ -33,18 +34,31 @@ public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory logger
                     return;
                 }
 
-                if (command == "q") // quit
+                var cmd = Interpret(command);
+
+                if (cmd == null)
                 {
-                    logger.LogInformation("Client has asked to quit");
+                    logger.LogInformation("Unrecognised command {0}", command);
+                    await stream.WriteUtf8AndFlush("eh?\n");
                     return;
                 }
-                else if (command!.StartsWith("ihave "))
+                else if (cmd == Command.Quit)
+                {
+                    logger.LogInformation("Client has asked to quit");
+                    await stream.WriteUtf8AndFlush("bye\n");
+                    return;
+                }
+                else if (cmd == Command.Help)
+                {
+                    await stream.WriteUtf8AndFlush("This is DAPPS. See https://github.com/M0LTE/dapps/blob/master/README.md for details.\n");
+                }
+                else if (cmd == Command.IHave)
                 {
                     var parts = command.Split(' ');
                     logger.LogInformation("Client is offering us message {0}", parts[1]);
                     await HandleMessageOffer(stream, command, stoppingToken);
                 }
-                else if (command!.StartsWith("data "))
+                else if (cmd == Command.Data)
                 {
                     var parts = command.Split(' ');
                     logger.LogInformation("Client is sending us data for message {0}", parts[1]);
@@ -56,6 +70,49 @@ public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory logger
         {
             tcpClient.Dispose();
         }
+    }
+
+    private enum Command
+    {
+        Quit, 
+        IHave,
+        Data,
+        Help
+    }
+
+    private static readonly string[] exitCommands = ["q", "bye", "quit", "exit"];
+    private static readonly string[] helpCommands = ["info", "help"];
+
+    private static Command? Interpret(string? input)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            return null;
+        }
+
+        var command = input.Trim().ToLower();
+
+        if (exitCommands.Contains(command))
+        {
+            return Command.Quit;
+        }
+
+        if (helpCommands.Contains(command))
+        {
+            return Command.Help;
+        }
+
+        if (command.StartsWith("ihave "))
+        {
+            return Command.IHave;
+        }
+
+        if (command.StartsWith("data "))
+        {
+            return Command.Data;
+        }
+
+        return null;
     }
 
     private async Task HandleMessageOffer(NetworkStream stream, string command, CancellationToken stoppingToken)
