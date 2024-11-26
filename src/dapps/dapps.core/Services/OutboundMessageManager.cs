@@ -63,7 +63,7 @@ public class OutboundMessageManager(Database database, ILoggerFactory loggerFact
 
             if (!await dappsClient.ConnectToDappsInstance(neighbour.ConnectScript.Split(new char[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)))
             {
-                logger.LogError("Could not connect to neighbour {0}", neighbour.Callsign);
+                logger.LogError("Could not connect to neighbour DAPPS instance {0}", neighbour.Callsign);
                 return;
             }
 

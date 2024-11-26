@@ -13,9 +13,17 @@ public static class Extensions
         }
     }
 
-    public static void AssertTruth(this bool value, string message)
+    public static void AssertTruthy(this bool value, string message)
     {
         if (!value)
+        {
+            throw new InvalidOperationException(message);
+        }
+    }
+
+    public static void AssertFalsey(this bool value, string message)
+    {
+        if (value)
         {
             throw new InvalidOperationException(message);
         }

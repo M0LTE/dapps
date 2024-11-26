@@ -10,8 +10,12 @@ public class DappsFbbClient(string host, int port, ILoggerFactory loggerFactory)
     private bool connectedToDapps;
     private readonly ILogger logger = loggerFactory.CreateLogger<DappsFbbClient>();
 
-    public Task<bool> ConnectToDappsInstance(string[] connectScript)
-        => ExecuteScript(connectScript, "DAPPSv1>\n");
+    public async Task<bool> ConnectToDappsInstance(string[] connectScript)
+    {
+        connectedToDapps.AssertFalsey("Already connected to DAPPS");
+        connectedToDapps = await ExecuteScript(connectScript, "DAPPSv1>\n");
+        return connectedToDapps;
+    }
 
     /// <summary>
     /// Send ihave, expect send
@@ -23,7 +27,7 @@ public class DappsFbbClient(string host, int port, ILoggerFactory loggerFactory)
     /// <exception cref="NotImplementedException"></exception>
     public async Task<bool> OfferMessage(string id, long? timestamp, MessageFormat messageFormat, string destination, int len)
     {
-        connectedToDapps.AssertTruth("Not connected to DAPPS");
+        connectedToDapps.AssertTruthy("Not connected to DAPPS");
         logger.LogInformation("Offering message with ID {id} to remote DAPPS...", id);
         var commandBuilder = new StringBuilder($"ihave {id} len={len} fmt={messageFormat.ToString().ToLower()[0]} dst={destination}");
         if (timestamp.HasValue)
@@ -55,7 +59,7 @@ public class DappsFbbClient(string host, int port, ILoggerFactory loggerFactory)
     /// <exception cref="NotImplementedException"></exception>
     public async Task<bool> SendMessage(string id, byte[] payload)
     {
-        connectedToDapps.AssertTruth("Not connected to DAPPS");
+        connectedToDapps.AssertTruthy("Not connected to DAPPS");
         logger.LogInformation("Sending message with ID {0}...", id);
         await networkStream!.WriteUtf8AndFlush("data " + id + "\n");
         await networkStream!.WriteAndFlush(payload);
