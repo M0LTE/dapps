@@ -118,12 +118,14 @@ public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory logger
             return Command.Help;
         }
 
-        if (command.StartsWith("ihave "))
+        var parts = command.Split(' ');
+
+        if (parts[0] == "ihave")
         {
             return Command.IHave;
         }
 
-        if (command.StartsWith("data "))
+        if (parts[0] == "data")
         {
             return Command.Data;
         }
