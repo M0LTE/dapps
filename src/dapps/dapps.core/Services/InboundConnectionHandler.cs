@@ -14,7 +14,7 @@ public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory logger
     {
         try
         {
-            logger.LogInformation("Got connection from {0}", tcpClient.Client.RemoteEndPoint!.ToString());
+            logger.LogInformation("Got connection from {0}, waiting for node to send callsign..", tcpClient.Client.RemoteEndPoint!.ToString());
             var stream = tcpClient.GetStream();
 
             var callsign = await stream.ReadLine(stoppingToken);
@@ -55,14 +55,30 @@ public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory logger
                 else if (cmd == Command.IHave)
                 {
                     var parts = command.Split(' ');
-                    logger.LogInformation("Client is offering us message {0}", parts[1]);
-                    await HandleMessageOffer(stream, command, stoppingToken);
+                    if (parts.Length < 2)
+                    {
+                        logger.LogError("ihave command has wrong number of parts");
+                        await stream.WriteUtf8AndFlush("error\n");
+                    }
+                    else
+                    {
+                        logger.LogInformation("Client is offering us message {0}", parts[1]);
+                        await HandleMessageOffer(stream, command, stoppingToken);
+                    }
                 }
                 else if (cmd == Command.Data)
                 {
                     var parts = command.Split(' ');
-                    logger.LogInformation("Client is sending us data for message {0}", parts[1]);
-                    await HandleData(stream, parts[1], stoppingToken);
+                    if (parts.Length != 2)
+                    {
+                        logger.LogError("data command has wrong number of parts");
+                        await stream.WriteUtf8AndFlush("error\n");
+                    }
+                    else
+                    {
+                        logger.LogInformation("Client is sending us data for message {0}", parts[1]);
+                        await HandleData(stream, parts[1], stoppingToken);
+                    }
                 }
             }
         }
