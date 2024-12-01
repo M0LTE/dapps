@@ -232,8 +232,7 @@ then:
 ```
 mkdir dapps
 cd dapps
-echo "
-services:
+echo "services:
   dapps-core:
     image: m0lte/dapps-core
     restart: unless-stopped
@@ -241,7 +240,16 @@ services:
       - 11000:11000
       - 8099:8080
     volumes:
-      - ./dapps-data:/app/data" | tee docker-compose.yml
+      - ./dapps-data:/app/data
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    environment:
+      - BPQ_HOST=host.docker.internal
+      - MQTT_HOST=mqtt
+      - MQTT_PORT=1833
+      - MQTT_USERNAME=
+      - MQTT_PASSWORD=
+" | tee docker-compose.yml
 docker compose up -d
 ```
 
