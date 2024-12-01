@@ -38,15 +38,11 @@ builder.Services.AddLogging(logging =>
 });
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-    app.MapScalarApiReference(options => {
-        options.OpenApiRoutePattern = "../swagger/v1/swagger.json";
-    });
-}
+app.UseSwagger();
+app.UseSwaggerUI();
+app.MapScalarApiReference(options => {
+    options.OpenApiRoutePattern = "../swagger/v1/swagger.json";
+});
 app.UseAuthorization();
 app.MapControllers();
 
