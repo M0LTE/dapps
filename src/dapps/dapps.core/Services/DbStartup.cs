@@ -1,23 +1,23 @@
 ﻿using dapps.core.Models;
-using Microsoft.Extensions.Options;
 using SQLite;
-using System.Diagnostics;
 
 namespace dapps.core.Services;
 
 public static class DbInfo
 {
-    public static SQLiteConnection GetConnection()
+    private static string GetPath()
     {
-        var databasePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "dapps.db");
-        return new SQLiteConnection(databasePath);
+        if (Directory.Exists("data"))
+        {
+            return "data/dapps.db";
+        }
+
+        return "dapps.db";
     }
 
-    public static SQLiteAsyncConnection GetAsyncConnection()
-    {
-        var databasePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "dapps.db");
-        return new SQLiteAsyncConnection(databasePath);
-    }
+    public static SQLiteConnection GetConnection() => new(GetPath());
+
+    public static SQLiteAsyncConnection GetAsyncConnection() => new(GetPath());
 }
 
 public class DbStartup(ILogger<DbStartup> logger) : IHostedService
