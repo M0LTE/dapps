@@ -197,3 +197,31 @@ BPQ binary transparency tests: https://github.com/M0LTE/bpq-fbb-test-apps
 Caution, may not align with current thinking.
 
 https://gist.github.com/M0LTE/be1fd071ca1867703d1f2d4c17fabca2
+
+
+## Installation
+
+Plan is to go docker-first.
+
+Rough steps:
+
+```
+# install docker engine on debian:
+curl -fsSL https://get.docker.com -o get-docker.sh
+sudo sh ./get-docker.sh
+
+# run containers without root:
+sudo usermod -aG docker $USER
+newgrp docker
+docker run hello-world
+
+# fix up logging
+echo "{
+  \"log-driver\": \"local\",
+  \"log-opts\": {
+    \"max-size\": \"10m\"
+  }
+}" | sudo tee /etc/docker/daemon.json
+sudo systemctl restart docker.service
+```
+
