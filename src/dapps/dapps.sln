@@ -11,6 +11,12 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "dapps.client", "dapps.clien
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "dapps.client.harness", "dapps.client.harness\dapps.client.harness.csproj", "{90B61E95-0D0F-4833-B076-DC83B53EE92C}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution items", "Solution items", "{77C32C01-8702-4564-A658-56F94EF35282}"
+	ProjectSection(SolutionItems) = preProject
+		build-image.cmd = build-image.cmd
+		Dockerfile = Dockerfile
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
