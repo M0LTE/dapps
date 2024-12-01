@@ -205,8 +205,10 @@ Plan is to go docker-first.
 
 Rough steps:
 
+### Install docker engine on Debian / Raspberry Pi OS 64 bit (bookworm)
+
 ```
-# install docker engine on debian:
+# install docker engine, use --dry-run to inspect
 curl -fsSL https://get.docker.com -o get-docker.sh
 sudo sh ./get-docker.sh
 
@@ -225,3 +227,24 @@ echo "{
 sudo systemctl restart docker.service
 ```
 
+then:
+
+```
+mkdir dapps
+cd dapps
+echo "
+services:
+  dapps-core:
+    image: m0lte/dapps-core
+    restart: unless-stopped
+    ports:
+      - 11000:11000
+      - 8099:8080
+    volumes:
+      - ./dapps-data:/app/data" | tee docker-compose.yml
+docker compose up -d
+```
+
+then browse to http://your-node:8099/swagger and you should see an API. Dapps is up...
+
+maybe one day it will have a UI
