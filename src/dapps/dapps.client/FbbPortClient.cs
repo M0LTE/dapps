@@ -63,26 +63,57 @@ public class FbbPortClient(string host, int port, ILoggerFactory loggerFactory)
 
         foreach (var scriptLine in connectScript)
         {
-            if (scriptLine.StartsWith("PAUSE ", StringComparison.OrdinalIgnoreCase))
+            if (!await Interpret(scriptLine))
             {
-                var parts = scriptLine.Split(" ");
-                if (parts.Length == 2 && int.TryParse(parts[1], out var pause))
-                {
-                    await Task.Delay(pause);
-                }
-                else
-                {
-                    logger.LogWarning("Could not parse PAUSE command: '{0}'", scriptLine);
-                    return false;
-                }
+                return false;
             }
-
-            await networkStream!.WriteUtf8AndFlush(scriptLine + "\r"); // yes, \r
         }
 
         var (gotPrompt, _) = networkStream!.Expect(expectedPrompt);
 
         return gotPrompt;
+    }
+
+    private async Task<bool> Interpret(string scriptLine)
+    {
+        scriptLine = scriptLine.ToUpper();
+
+        if (scriptLine.StartsWith("PAUSE ", StringComparison.OrdinalIgnoreCase))
+        {
+            var parts = scriptLine.Split(" ");
+            if (parts.Length == 2 && int.TryParse(parts[1], out var pause))
+            {
+                logger.LogInformation("Pausing for {ms}ms", pause);
+                await Task.Delay(pause);
+            }
+            else
+            {
+                logger.LogWarning("Could not parse PAUSE command: '{0}'", scriptLine);
+                return false;
+            }
+        }
+        else if (scriptLine.StartsWith("C ") || scriptLine.StartsWith("NC ") || scriptLine.StartsWith("CONNECT "))
+        {
+            logger.LogInformation("Sending connect command {command}", scriptLine);
+            await networkStream!.WriteUtf8AndFlush(scriptLine + "\r"); // yes, \r
+            logger.LogInformation("Waiting for connection result...");
+            var (success, matchingValue) = networkStream!.Expect(s => s.Contains("connected to"));
+            if (success)
+            {
+                logger.LogInformation("Connection succeeded");
+            }
+            else
+            {
+                logger.LogInformation("Connection failed");
+                return false;
+            }
+        }
+        else
+        {
+            await networkStream!.WriteUtf8AndFlush(scriptLine + "\r"); // yes, \r
+        }
+
+        return true;
     }
 }
 
