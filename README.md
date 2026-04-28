@@ -37,61 +37,66 @@ DAPPSv1>\n
 To offer a message to a remote DAPPS instance, send the following as bytes:
 
 ```
-ihave abcdeff len=11 fmt=p ts=12345678 dst=topicname@gb7aaa-4 ttl=1730070725 dst=queuename@gb7aaa-4 key=value chk=0f\n
+ihave abcdeff len=11 fmt=p ts=12345678 dst=appname@gb7aaa-4 ttl=1730070725 key=value chk=11\n
 ```
 
 where:
-- `abcdeff` is the SHA1 hash of the four bytes of the 64 bit integer timestamp, if any, concatenated with all of the payload bytes (i.e. `sha1(pppppppp..pppp)[..7]` or `sha1(ttttpppppppp..pppp)[..7]`), serving as a unique message id (inspired by git hashes)
-- `len=11` is the number of bytes in the payload, after decompression if applicable
-- `fmt=p` is `p` for when the payload is to be interpreted byte-for-byte, or `d` for Deflate algorithm compression
-- `ts=12345678` is an optional de-duplication salt, suggestion is the number of milliseconds after some epoch of your choice
-- `dst=topicname@gb7aaa-4` is routing information- in this case the ultimate destination for this message is pub/sub topic `topicname` hosted at remote DAPPS instance `gb7aaa-4`
-- `ttl=1730070725` is an optional TTL for the message, in seconds since epoch. DAPPS will make no attempt to deliver a message past its TTL.
-- `dst=queuename@gb7aaa-4` is the ultimate destination of this message. In this example, `gb7aaa-4` is the call + ssid of the node and DAPPS instance which the DAPPS system will attempt to deliver this message to, and `queuename` relates to the remote DAPPS-using application.
-- `key=value` is zero or more key/value pairs, akin to arbitrary headers. These should be used sparingly and not in place of a message payload.
-- `chk=0f` is an optional checksum, calculated as below, validated at the receiving side. For ease, this should be the last key-value pair.
-- `\n` is a newline character, not the string literal `\n`
+- `abcdeff` is the SHA1 hash of the (decompressed) payload bytes, optionally prefixed by the 8-byte little-endian representation of `ts` when supplied: `sha1(payload)[:7]` or `sha1(ts_bytes_le ++ payload)[:7]`. Truncated to the first 7 hex characters this serves as a unique message id (inspired by git hashes).
+- `len=11` is the size of the **decompressed** payload in bytes. Always required.
+- `fmt=p` declares the payload bytes on the wire are the literal payload (**p**lain). `fmt=d` declares them Deflate-compressed, in which case `clen=N` MUST also be supplied, giving the number of **c**ompressed bytes the receiver reads from the wire before decompressing. `clen` MUST NOT be supplied when `fmt=p`.
+- `ts=12345678` is an optional 64-bit signed integer salt (decimal on the wire) folded into the message ID hash, used to disambiguate or de-duplicate identical-payload messages. Sender's choice of meaning — typically milliseconds since some epoch.
+- `dst=appname@gb7aaa-4` is the routing destination: `gb7aaa-4` is the call+SSID of the DAPPS instance the message is bound for, and `appname` is the application / topic / queue name on that instance. Always required.
+- `ttl=1730070725` is an optional TTL, expressed as Unix epoch seconds. DAPPS will not attempt delivery past this time.
+- `key=value` is zero or more arbitrary headers. Use sparingly and not in place of payload. Keys and values MUST NOT contain space, `=`, or newline.
+- `chk=11` is an optional 2-character hex checksum guarding against bit-flips on the line (see below). When supplied it MUST be the last key-value pair.
+- `\n` is a newline byte (0x0A), not the literal string `\n`.
 
 #### "ihave" command checksum
 
-Since packet doesn't guarantee corruption-free transmission, and it's pretty important that the `ihave` command is received
-free of errors, it makes sense to be able to provide a checksum. This one is calculated as follows:
+The underlying packet transport does not guarantee corruption-free
+transmission, and the `ihave` command is the only place where length,
+format and destination get negotiated — a single bit-flip in the
+length field is enough to leave a session in an unrecoverable state.
+The optional `chk=NN` field guards against that.
 
-`sha1([the ihave command, with chk=nn removed, and trimmed of whitespace])`
+Compute and validate `chk` as follows:
 
-The first two characters of the hex representation of the resulting SHA1 checksum should match the value of `chk`.
+1. `chk=NN` MUST be the last key-value pair on the line, immediately
+   followed by `\n`. Receivers MUST reject any `ihave` line where
+   `chk=` appears in any other position.
+2. Take the line bytes from the first byte of `ihave ` up to *but not
+   including* the leading space before `chk=NN` — i.e. drop the
+   trailing ` chk=NN\n` (one space, the `chk=NN` token, and the
+   newline). Compute SHA1 over those bytes. The lowercase hex of the
+   first byte of the resulting digest is `NN`.
+
+Pinning `chk=` to the last position lets both sides do this with a
+single `lastIndexOf(" chk=")` and a substring — no field
+re-normalisation, no awareness of how the rest of the KVs were
+spaced.
 
 ##### Example
 
-To validate the checksum `a1` for this `ihave` command sent over the air:
+For the offer line:
 
 ```
-ihave abcdeff len=11 fmt=p ts=12345678 dst=topicname@gb7aaa-4 ttl=1730070725 dst=queuename@gb7aaa-4 key=value chk=a1\n
+ihave abcdeff len=11 fmt=p ts=12345678 dst=appname@gb7aaa-4 ttl=1730070725 key=value chk=11\n
 ```
 
-we remove `chk=a1`:
+The bytes hashed (everything before ` chk=11\n`) are:
 
 ```
-ihave abcdeff len=11 fmt=p ts=12345678 dst=topicname@gb7aaa-4 ttl=1730070725 dst=queuename@gb7aaa-4 key=value\n
+ihave abcdeff len=11 fmt=p ts=12345678 dst=appname@gb7aaa-4 ttl=1730070725 key=value
 ```
 
-we trim off the line ending:
+Their SHA1 digest is:
 
 ```
-ihave abcdeff len=11 fmt=p ts=12345678 dst=topicname@gb7aaa-4 ttl=1730070725 dst=queuename@gb7aaa-4 key=value
+11044e80103866dd396304f5fdc9e99169708ed7
 ```
 
-and we calculate its SHA1 hash:
-
-```
-a1732af9a48b161f30299cbff93a41fdb3037e18
-```
-
-and the sum is the first two characters of the hash:
-
-`a1` - which matches that sent over the air, i.e. the command is valid.
-
-If `chk=nn` appears somewhere other than at the end of the line, the checksum should be calculated on a string which takes that into account, i.e. when `chk=nn` is removed from the string, all of the other key-value pairs in the string should be left separated by just a single space each (in other words, doing just a `string.replace("chk=nn", "")` is not good enough).
+The first two hex characters are `11` — matching the value sent over
+the air, so the line is intact.
 
 ### Sending a message
 
@@ -123,7 +128,7 @@ If the payload bytes received by the remote end did not match the id hash, it wi
 bad abcdeff\n
 ```
 
-The remote DAPPS instance will not respond at all until it has received the specified number of payload bytes, at which point it will respond immediately with `ack` or `bad`- i.e. there is no message terminator, and the `len` parameter is compulsory.
+The remote DAPPS instance will not respond at all until it has received the specified number of payload bytes (`len` bytes when `fmt=p`, `clen` bytes when `fmt=d`), at which point it will respond immediately with `ack` or `bad` — there is no message terminator. The hash check that decides between `ack` and `bad` is performed against the **decompressed** bytes.
 
 If the remote instance does not want a message, it will reply to `send` with a message like `no abcdeff\n`. 
 
