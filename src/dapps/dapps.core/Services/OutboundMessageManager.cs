@@ -1,15 +1,21 @@
-using dapps.client;
-using dapps.client.Transport;
+using dapps.client.Backhaul;
 using dapps.core.Models;
 using Microsoft.Extensions.Options;
 
 namespace dapps.core.Services;
 
+/// <summary>
+/// Pulls pending outbound messages from the queue, computes residual
+/// TTL, resolves a neighbour for each, and hands them to the configured
+/// <see cref="IDappsBackhaul"/> for delivery. Owns queue/router concerns
+/// — it does not know about streams, AGW, or the DAPPSv1 session
+/// protocol; those live behind the backhaul seam (Plan A0).
+/// </summary>
 public class OutboundMessageManager(
     Database database,
     ILoggerFactory loggerFactory,
     IOptionsMonitor<SystemOptions> options,
-    IDappsOutboundTransport transport)
+    IDappsBackhaul backhaul)
 {
     private readonly ILogger logger = loggerFactory.CreateLogger<OutboundMessageManager>();
 
@@ -41,44 +47,27 @@ public class OutboundMessageManager(
                 continue;
             }
 
-            var bpqPort = neighbour.BpqPort ?? optionsValue.DefaultBpqPort;
+            var bm = new BackhaulMessage(
+                Id: message.Id,
+                Destination: message.Destination,
+                Salt: message.Salt,
+                Ttl: residualTtl,
+                Payload: message.Payload);
 
-            try
+            var route = new BackhaulRoute(
+                Callsign: neighbour.Callsign,
+                BpqPort: neighbour.BpqPort ?? optionsValue.DefaultBpqPort);
+
+            var result = await backhaul.SendAsync(bm, route, optionsValue.Callsign, stoppingToken);
+            if (result.Accepted)
             {
-                await using var connection = await transport.ConnectAsync(
-                    localCallsign: optionsValue.Callsign,
-                    remoteCallsign: neighbour.Callsign,
-                    bpqPortNumber: bpqPort,
-                    stoppingToken: stoppingToken);
-
-                var protocol = new DappsProtocolClient(connection.Stream, loggerFactory);
-
-                if (!await protocol.ReadInitialPromptAsync(stoppingToken))
-                {
-                    logger.LogError("Did not see DAPPSv1> prompt from {0}, skipping {1}", neighbour.Callsign, message.Id);
-                    continue;
-                }
-
-                if (!await protocol.OfferMessageAsync(
-                        message.Id, message.Salt, DappsMessage.MessageFormat.Plain,
-                        message.Destination, message.Payload.Length, stoppingToken, ttl: residualTtl))
-                {
-                    logger.LogError("Message offer was not accepted for {0}", message.Id);
-                    continue;
-                }
-
-                if (!await protocol.SendMessageAsync(message.Id, message.Payload, stoppingToken))
-                {
-                    logger.LogError("Message payload was not accepted for {0}", message.Id);
-                    continue;
-                }
-
                 logger.LogInformation("Remote end accepted message {0}", message.Id);
                 await database.MarkMessageAsForwarded(message.Id);
             }
-            catch (Exception ex)
+            else
             {
-                logger.LogError(ex, "Failed to forward message {0} to {1}", message.Id, neighbour.Callsign);
+                logger.LogError("Failed to forward message {0} to {1}: {2}",
+                    message.Id, neighbour.Callsign, result.Error);
             }
         }
     }
