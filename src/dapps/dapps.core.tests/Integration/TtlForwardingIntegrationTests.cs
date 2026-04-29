@@ -1,6 +1,7 @@
 using System.Net.Sockets;
 using System.Text;
 using AwesomeAssertions;
+using dapps.client.Backhaul;
 using dapps.client.Transport.Agw;
 using dapps.core.Models;
 using dapps.core.Services;
@@ -121,6 +122,7 @@ public class TtlForwardingIntegrationTests(TwoInstanceLinbpqFixture fixture) : I
 
         // ── 3. Run the forwarder ───────────────────────────────────────────
         var transport = new AgwOutboundTransport(fixture.Host, fixture.AgwPortA, NullLoggerFactory.Instance);
+        var backhaul = new Dappsv1SessionBackhaul(transport, NullLoggerFactory.Instance);
         var manager = new OutboundMessageManager(
             database,
             NullLoggerFactory.Instance,
@@ -129,7 +131,7 @@ public class TtlForwardingIntegrationTests(TwoInstanceLinbpqFixture fixture) : I
                 Callsign = fixture.ApplCallA,
                 DefaultBpqPort = fixture.AxipPortIndex,
             }),
-            transport);
+            backhaul);
 
         await manager.DoRun(ct);
 

@@ -1,3 +1,4 @@
+using dapps.client.Backhaul;
 using dapps.client.Transport;
 using dapps.client.Transport.Agw;
 using dapps.core.Models;
@@ -40,6 +41,7 @@ builder.Services.AddSingleton<IDappsOutboundTransport>(sp =>
     var lf = sp.GetRequiredService<ILoggerFactory>();
     return new AgwOutboundTransport(opts.NodeHost, opts.AgwPort, lf);
 });
+builder.Services.AddSingleton<IDappsBackhaul, Dappsv1SessionBackhaul>();
 builder.Services.AddLogging(logging =>
 {
     logging.AddSimpleConsole(options =>
