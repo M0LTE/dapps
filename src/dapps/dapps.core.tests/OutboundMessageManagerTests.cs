@@ -47,7 +47,7 @@ public sealed class OutboundMessageManagerTests : IAsyncLifetime
         });
         database = new Database(NullLogger<Database>.Instance, optionsMonitor);
         backhaul = new FakeBackhaul();
-        manager = new OutboundMessageManager(database, NullLoggerFactory.Instance, optionsMonitor, backhaul);
+        manager = new OutboundMessageManager(database, NullLoggerFactory.Instance, optionsMonitor, [backhaul]);
 
         return ValueTask.CompletedTask;
     }
@@ -227,6 +227,8 @@ public sealed class OutboundMessageManagerTests : IAsyncLifetime
     {
         public List<(BackhaulMessage Message, BackhaulRoute Route, string LocalCallsign)> Sent { get; } = [];
         public BackhaulSendResult NextResult { get; set; } = BackhaulSendResult.Ok();
+
+        public bool CanHandle(BackhaulRoute route) => true;
 
         public Task<BackhaulSendResult> SendAsync(
             BackhaulMessage message, BackhaulRoute route, string localCallsign, CancellationToken ct)

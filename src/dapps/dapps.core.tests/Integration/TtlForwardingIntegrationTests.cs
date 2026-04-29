@@ -131,7 +131,7 @@ public class TtlForwardingIntegrationTests(TwoInstanceLinbpqFixture fixture) : I
                 Callsign = fixture.ApplCallA,
                 DefaultBpqPort = fixture.AxipPortIndex,
             }),
-            backhaul);
+            [backhaul]);
 
         await manager.DoRun(ct);
 

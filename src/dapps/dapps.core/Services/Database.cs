@@ -186,22 +186,28 @@ public class Database(ILogger<Database> logger, IOptionsMonitor<SystemOptions> o
     }
 
     /// <summary>
-    /// Insert a neighbour, or update its <c>BpqPort</c> if one already
-    /// exists for the same callsign. Idempotent: callers can re-POST the
-    /// same neighbour without checking for prior existence.
+    /// Insert a neighbour or update its bearer hints if one already
+    /// exists for the same callsign. Idempotent: callers can re-POST
+    /// the same neighbour without checking for prior existence.
     /// </summary>
-    internal async Task UpsertNeighbour(string callsign, int? bpqPort)
+    internal async Task UpsertNeighbour(string callsign, int? bpqPort, string? udpEndpoint = null)
     {
         var connection = DbInfo.GetAsyncConnection();
         var existing = await connection.FindWithQueryAsync<DbNeighbour>(
             "select * from neighbours where callsign=?", callsign);
         if (existing is null)
         {
-            await connection.InsertAsync(new DbNeighbour { Callsign = callsign, BpqPort = bpqPort });
+            await connection.InsertAsync(new DbNeighbour
+            {
+                Callsign = callsign,
+                BpqPort = bpqPort,
+                UdpEndpoint = udpEndpoint,
+            });
         }
         else
         {
             existing.BpqPort = bpqPort;
+            existing.UdpEndpoint = udpEndpoint;
             await connection.UpdateAsync(existing);
         }
     }

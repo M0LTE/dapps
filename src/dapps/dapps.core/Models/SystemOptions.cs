@@ -30,4 +30,12 @@ public class SystemOptions
 
     /// <summary>TCP port the embedded MQTT broker listens on for app-interface clients.</summary>
     public int MqttPort { get; set; }
+
+    /// <summary>
+    /// UDP port the datagram-backhaul listener binds on. Default 0 =
+    /// disabled. Plan A0.4: a stand-in datagram bearer, validating the
+    /// backhaul seam against fragmentation / reassembly before MeshCore
+    /// lands.
+    /// </summary>
+    public int UdpListenPort { get; set; }
 }

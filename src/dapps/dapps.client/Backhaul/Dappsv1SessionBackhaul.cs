@@ -27,6 +27,13 @@ public sealed class Dappsv1SessionBackhaul : IDappsBackhaul
         logger = loggerFactory.CreateLogger<Dappsv1SessionBackhaul>();
     }
 
+    /// <summary>
+    /// AGW handles any route that does not specify a higher-priority
+    /// bearer like UDP. Effectively: this is the fallback bearer when
+    /// only callsign + BPQ port are known.
+    /// </summary>
+    public bool CanHandle(BackhaulRoute route) => route.UdpEndpoint is null;
+
     public async Task<BackhaulSendResult> SendAsync(
         BackhaulMessage message,
         BackhaulRoute route,

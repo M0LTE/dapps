@@ -1,4 +1,5 @@
 using dapps.client.Backhaul;
+using dapps.client.Backhaul.Datagram;
 using dapps.client.Transport;
 using dapps.client.Transport.Agw;
 using dapps.core.Models;
@@ -21,10 +22,13 @@ builder.Services.AddOptions<SystemOptions>().Configure<OptionsRepo, ILogger<Syst
     o.DefaultBpqPort = int.Parse(options.Single(o => o.Option == "DefaultBpqPort").Value);
     o.Callsign = options.Single(o => o.Option == "Callsign").Value;
     o.MqttPort = int.Parse(options.Single(o => o.Option == "MqttPort").Value);
+    o.UdpListenPort = int.TryParse(
+        options.SingleOrDefault(opt => opt.Option == "UdpListenPort")?.Value, out var udpPort) ? udpPort : 0;
 
     logger.LogInformation($"Callsign: {o.Callsign}");
     logger.LogInformation($"BPQ AGW: {o.NodeHost}:{o.AgwPort} (default port byte {o.DefaultBpqPort})");
     logger.LogInformation($"MQTT broker: localhost:{o.MqttPort}");
+    logger.LogInformation($"UDP datagram listener: {(o.UdpListenPort > 0 ? $":{o.UdpListenPort}" : "disabled")}");
 });
 
 builder.Services.AddSingleton<InboundConnectionHandlerFactory>();
@@ -41,8 +45,15 @@ builder.Services.AddSingleton<IDappsOutboundTransport>(sp =>
     var lf = sp.GetRequiredService<ILoggerFactory>();
     return new AgwOutboundTransport(opts.NodeHost, opts.AgwPort, lf);
 });
+// Order of registration matters: OutboundMessageManager picks the first
+// IDappsBackhaul whose CanHandle returns true for the route. UDP wins
+// when the neighbour has a UdpEndpoint set; AGW handles everything else.
+builder.Services.AddSingleton<UdpDatagramBackhaul>(sp =>
+    new UdpDatagramBackhaul(sp.GetRequiredService<ILoggerFactory>()));
+builder.Services.AddSingleton<IDappsBackhaul>(sp => sp.GetRequiredService<UdpDatagramBackhaul>());
 builder.Services.AddSingleton<IDappsBackhaul, Dappsv1SessionBackhaul>();
 builder.Services.AddSingleton<IBackhaulInbox, DatabaseAndMqttInbox>();
+builder.Services.AddHostedService<UdpDatagramListener>();
 builder.Services.AddLogging(logging =>
 {
     logging.AddSimpleConsole(options =>
