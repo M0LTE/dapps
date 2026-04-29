@@ -22,12 +22,6 @@ namespace dapps.core.tests.Integration;
 /// the upstream linbpq test runs on natively. Bridge networking with
 /// distinct container IPs has not been verified to work for AGW
 /// dispatch and is avoided.
-///
-/// Critical configuration: linbpq is launched WITHOUT the
-/// <c>mail chat</c> default args (we override the entrypoint). With
-/// those args, the mail subsystem claims the AGW application slot and
-/// the inbound 'C' frame never reaches the registered listener — that
-/// was the symptom from issue #6.
 /// </summary>
 public sealed class TwoInstanceLinbpqFixture : IAsyncLifetime
 {
@@ -91,13 +85,13 @@ public sealed class TwoInstanceLinbpqFixture : IAsyncLifetime
 
         // A publishes both AGW ports (B shares A's netns, so its AGW port
         // also reaches the host through A's port mapping).
-        var argsA = $"run -d --name {nameA} --entrypoint linbpq --workdir /data " +
+        var argsA = $"run -d --name {nameA} " +
                     $"-v {_tempDirA}:/data " +
                     $"-p {AgwPortA}:{InsideAgwPortA} -p {AgwPortB}:{InsideAgwPortB} " +
                     $"{Image}";
         _containerIdA = await DockerRun(argsA);
 
-        var argsB = $"run -d --name {nameB} --entrypoint linbpq --workdir /data " +
+        var argsB = $"run -d --name {nameB} " +
                     $"--network=container:{nameA} " +
                     $"-v {_tempDirB}:/data " +
                     $"{Image}";
