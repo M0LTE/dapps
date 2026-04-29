@@ -170,13 +170,29 @@ public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory logger
 
         if (!kvps.TryGetValue("fmt", out var fmt))
         {
-            logger.LogWarning("No format specified in message offer, assuming plain");
-            fmt = "p";
+            fmt = "p"; // absent fmt defaults to plain per spec
         }
 
         if (fmt != "d" && fmt != "p")
         {
             await ReplyWithError("Fatal: unknown format specified in message offer");
+            return;
+        }
+
+        var hasClen = kvps.TryGetValue("clen", out var clenStr);
+        if (fmt == "d" && !hasClen)
+        {
+            await ReplyWithError("Fatal: clen= is required when fmt=d");
+            return;
+        }
+        if (fmt == "p" && hasClen)
+        {
+            await ReplyWithError("Fatal: clen= MUST NOT be supplied when fmt=p");
+            return;
+        }
+        if (hasClen && (!int.TryParse(clenStr, out var clen) || clen < 0))
+        {
+            await ReplyWithError("Fatal: clen= must be a non-negative integer");
             return;
         }
 
@@ -246,21 +262,44 @@ public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory logger
     }
 
     private async Task HandleData(NetworkStream stream, string id, CancellationToken stoppingToken)
-    { 
+    {
         var offer = await database.LoadOfferMetadata(id);
 
         var buffer = new byte[offer.Length];
 
         if (offer.Format == "d") // deflate
         {
-            logger.LogInformation("Waiting for deflated data");
-            using var decompressor = new DeflateStream(stream, CompressionMode.Decompress, leaveOpen: true);
-            await decompressor.ReadExactlyAsync(buffer, stoppingToken);
-            logger.LogInformation("Received deflated data");
+            if (offer.CompressedLength is null)
+            {
+                // Shouldn't happen — we validate at offer time — but defend
+                // against a corrupted DB row.
+                logger.LogError("Offer {0} marked fmt=d but has no clen stored", id);
+                await stream.WriteUtf8AndFlush("bad " + id + "\n");
+                return;
+            }
+
+            logger.LogInformation("Waiting for {0} compressed bytes", offer.CompressedLength.Value);
+            var compressed = new byte[offer.CompressedLength.Value];
+            await stream.ReadExactlyAsync(compressed, stoppingToken);
+            logger.LogInformation("Received compressed bytes, decompressing");
+
+            using var inputMs = new MemoryStream(compressed);
+            using var decompressor = new DeflateStream(inputMs, CompressionMode.Decompress);
+            using var outputMs = new MemoryStream(buffer.Length);
+            await decompressor.CopyToAsync(outputMs, stoppingToken);
+
+            if (outputMs.Length != buffer.Length)
+            {
+                logger.LogWarning("Decompressed length {0} does not match declared len={1}", outputMs.Length, buffer.Length);
+                await stream.WriteUtf8AndFlush("bad " + id + "\n");
+                return;
+            }
+
+            buffer = outputMs.ToArray();
         }
-        else if (offer.Format == "p") // plain
+        else // fmt=p (or absent — default plain)
         {
-            logger.LogInformation("Waiting for uncompressed data");
+            logger.LogInformation("Waiting for {0} uncompressed bytes", buffer.Length);
             await stream.ReadExactlyAsync(buffer, stoppingToken);
             logger.LogInformation("Received uncompressed data");
         }

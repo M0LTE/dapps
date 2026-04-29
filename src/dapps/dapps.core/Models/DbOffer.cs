@@ -11,6 +11,7 @@ internal sealed class DbOffer
     [NotNull]
     public string Format { get; init; } = "";
     public long? Timestamp { get; init; }
+    public int? CompressedLength { get; init; }
     public string Destination { get; init; } = "";
     public string AdditionalProperties { get; set; } = "{}";
 }
