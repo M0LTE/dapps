@@ -188,9 +188,10 @@ public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory logger
 
         if (kvps.TryGetValue("chk", out var chk))
         {
-            if (chk != ComputeChecksum(command, chk))
+            var chkError = ValidateChecksum(command, chk);
+            if (chkError != null)
             {
-                await ReplyWithError("Fatal: corrupt command");
+                await ReplyWithError($"Fatal: {chkError}");
                 return;
             }
         }
@@ -202,16 +203,46 @@ public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory logger
         await database.SaveOfferMetadata(id, kvps);
     }
 
-    private static string ComputeChecksum(string ihaveCommand, string chk)
+    private const string ChkSuffixPrefix = " chk=";
+    private const int ChkValueLength = 4;
+
+    /// <summary>
+    /// Validate the trailing `chk=NNNN` on an ihave line. Returns null on
+    /// success, or a short error string. Per spec, chk MUST be the last KV
+    /// on the line, immediately followed by `\n` (which the line reader has
+    /// already stripped). Receivers MUST reject any line where `chk=` appears
+    /// elsewhere.
+    /// </summary>
+    private static string? ValidateChecksum(string ihaveCommand, string providedChk)
     {
-        // remove the checksum part
-        ///TODO: Do this properly- the chk command could be in the middle of the string and double-spaces could be present
-        ihaveCommand = ihaveCommand.Replace("chk=" + chk, "").Trim();
+        var prefixIndex = ihaveCommand.LastIndexOf(ChkSuffixPrefix, StringComparison.Ordinal);
+        if (prefixIndex < 0)
+        {
+            return "chk parsed from KVs but not present in line as ' chk=' suffix";
+        }
 
-        var hash = SHA1.HashData(Encoding.UTF8.GetBytes(ihaveCommand));
-        var sum = BitConverter.ToString(hash).Replace("-", "").ToLower()[..2];
+        if (prefixIndex + ChkSuffixPrefix.Length + ChkValueLength != ihaveCommand.Length)
+        {
+            return "chk MUST be the last KV on the line";
+        }
 
-        return sum;
+        // Reject any earlier "chk=" occurrence (would also be interpreted by
+        // a naïve KV split as the chk value).
+        var firstChkIndex = ihaveCommand.IndexOf("chk=", StringComparison.Ordinal);
+        if (firstChkIndex != prefixIndex + 1)
+        {
+            return "chk= must appear only as the last KV";
+        }
+
+        if (!ushort.TryParse(providedChk, System.Globalization.NumberStyles.HexNumber, null, out var providedValue))
+        {
+            return "chk value is not 4 hex characters";
+        }
+
+        var coveredBytes = Encoding.UTF8.GetBytes(ihaveCommand[..prefixIndex]);
+        var expected = Crc16CcittFalse.Compute(coveredBytes);
+
+        return expected == providedValue ? null : "chk mismatch (line corruption?)";
     }
 
     private async Task HandleData(NetworkStream stream, string id, CancellationToken stoppingToken)

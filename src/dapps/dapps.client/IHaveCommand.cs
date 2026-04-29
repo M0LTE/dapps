@@ -1,5 +1,4 @@
-﻿using System.Security.Cryptography;
-using System.Text;
+﻿using System.Text;
 
 namespace dapps.client;
 
@@ -7,11 +6,8 @@ public class IHaveCommand
 {
     public DappsMessage Message { get; init; } = new();
 
-    public static string Checksum(string ihave)
-    {
-        var hash = SHA1.HashData(Encoding.UTF8.GetBytes(ihave));
-        return BitConverter.ToString(hash).Replace("-", "").ToLower()[..2];
-    }
+    public static string Checksum(string ihave) =>
+        Crc16CcittFalse.ComputeHex(Encoding.UTF8.GetBytes(ihave));
 
     public override string ToString()
     {
