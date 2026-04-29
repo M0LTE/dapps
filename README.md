@@ -142,6 +142,14 @@ rev\n
 
 `ihave` and `send` may be sent multiple times in a session. `send` may be followed by multiple message ids, space separated, to signify that the remote server wants to accept multiple messages which have been offered.
 
+### Timeouts
+
+Both sides SHOULD apply an inactivity timeout while waiting for an expected reply — payload bytes after `data <id>\n` (receiver side), or `send` / `no` / `ack` / `bad` (sender side) — and close the session if exceeded. No specific value is mandated; AX.25's T3 (~3 minutes) is a reasonable starting point on a packet-radio link.
+
+On timeout, just close the session. No error frame is needed: a stalled peer can't be relied upon to receive one, and the content-addressed message id makes retry idempotent — when the sender reconnects later the receiver dedups by id, so a timed-out exchange can be safely re-attempted from scratch.
+
+For DAPPS-over-AX.25 the link layer's own T3 inactivity timer largely handles this case for free, but a DAPPS-level timeout is still useful for non-AX.25 transports and for software-side stalls where the underlying link is healthy.
+
 ### Discovering neighbours and exchanging routes
 
 Very much tbc. 
