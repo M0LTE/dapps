@@ -1,18 +1,27 @@
-﻿using dapps.client;
-using dapps.core.Models;
-using Microsoft.Extensions.Options;
-using System.IO.Compression;
+﻿using System.IO.Compression;
 using System.Net.Sockets;
 using System.Text;
+using System.Text.Json;
+using dapps.client;
+using dapps.client.Backhaul;
 
 namespace dapps.core.Services;
 
+/// <summary>
+/// Receiver-side DAPPSv1 session reader. Bearer-specific (today the only
+/// receive bearer is "TCP socket where the first line is the connecting
+/// callsign", as set up by BPQ's app-pipe). Owns the
+/// `prompt` / `ihave` / `data` correlation and the on-the-wire ack
+/// contract. Once a payload is received and hash-validated, the
+/// completed message is handed off to <see cref="IBackhaulInbox"/> —
+/// where DAPPS-level concerns (queue persistence, MQTT injection,
+/// future forwarding decisions) live, decoupled from the bearer.
+/// </summary>
 public class InboundConnectionHandler(
     TcpClient tcpClient,
     ILoggerFactory loggerFactory,
     Database database,
-    MqttBrokerService mqtt,
-    IOptionsMonitor<SystemOptions> options)
+    IBackhaulInbox inbox)
 {
     private readonly ILogger logger = loggerFactory.CreateLogger<InboundConnectionHandler>();
 
@@ -252,29 +261,36 @@ public class InboundConnectionHandler(
 
         if (computedId == id)
         {
-            logger.LogInformation("Hash matches, saving and acknowledging message {0}", id);
-            await database.SaveMessage(id, buffer, offer.Salt, offer.Destination, sourceCallsign, offer.AdditionalProperties, offer.Ttl);
+            logger.LogInformation("Hash matches, handing message {0} to the inbox", id);
+
+            // Rehydrate the offer's stored AdditionalProperties JSON back into
+            // a header dict for the bearer-neutral inbox. Empty/missing →
+            // null, which the inbox treats as no headers.
+            IReadOnlyDictionary<string, string>? headers = null;
+            if (!string.IsNullOrWhiteSpace(offer.AdditionalProperties)
+                && offer.AdditionalProperties != "{}")
+            {
+                try
+                {
+                    headers = JsonSerializer.Deserialize<Dictionary<string, string>>(offer.AdditionalProperties);
+                }
+                catch (JsonException ex)
+                {
+                    logger.LogWarning(ex, "Could not parse stored offer headers for {0}; dropping", id);
+                }
+            }
+
+            var backhaulMessage = new BackhaulMessage(
+                Id: id,
+                Destination: offer.Destination,
+                Salt: offer.Salt,
+                Ttl: offer.Ttl,
+                Payload: buffer,
+                Headers: headers);
+
+            await inbox.DeliverAsync(backhaulMessage, sourceCallsign, stoppingToken);
             await database.DeleteOffer(id);
             await stream.WriteAsync(Encoding.UTF8.GetBytes("ack " + id + "\n"));
-
-            // If the message is destined for an app on this node, push it to
-            // the MQTT broker for any connected subscriber. The DB row stays
-            // until explicit ack from the app, so disconnected subscribers
-            // catch up via replay-on-subscribe.
-            if (DestinationParser.IsLocal(offer.Destination, options.CurrentValue.Callsign))
-            {
-                var dbMessage = new DbMessage
-                {
-                    Id = id,
-                    Payload = buffer,
-                    Salt = offer.Salt,
-                    Destination = offer.Destination,
-                    SourceCallsign = sourceCallsign,
-                    AdditionalProperties = offer.AdditionalProperties,
-                    Ttl = offer.Ttl,
-                };
-                await mqtt.InjectInboundMessage(dbMessage);
-            }
         }
         else
         {

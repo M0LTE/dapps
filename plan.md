@@ -37,41 +37,17 @@ What's missing to call this complete is the parts that turn a single-node demo i
 
 The current factoring around `IDappsOutboundTransport` + `Stream` was the right move to get AGW under an interface, but it is still too transport-shaped if DAPPS is going to support a datagram bearer such as MeshCore without contorting the rest of the system. This is high priority while the code is still in progress.
 
-### A0.1. Introduce a DAPPS-owned backhaul interface
+### A0.1. Introduce a DAPPS-owned backhaul interface *(done — PR #12)*
 
-Add a seam above bearer mechanics and below queue/router logic. The abstraction should be semantic, not socket-like: "send/receive DAPPS backhaul units" rather than "open/read/write stream."
+Outbound seam: `IDappsBackhaul.SendAsync(BackhaulMessage, BackhaulRoute, localCallsign)`. `OutboundMessageManager` no longer opens streams or speaks DAPPSv1 itself; it constructs a backhaul message and hands it off. Inbound seam: `IBackhaulInbox.DeliverAsync(BackhaulMessage, sourceCallsign)`. Bearer-specific receive code (today the `DAPPSv1>` session reader, future MeshCore receivers) calls into the inbox once a message is fully received and validated; the inbox owns DB persistence and conditional MQTT delivery. Types live in `dapps.client/Backhaul/` so other-bearer projects can take a dependency without dragging in the AGW stack.
 
-Own at this layer:
+### A0.2. Refactor the current BPQ/AGW path behind the seam *(done — PR #12)*
 
-- message id / correlation semantics
-- residual TTL handling
-- dedup / replay semantics
-- ack contract
-- fragmentation / reassembly policy
-- transport capability hints where actually needed (for example MTU)
+Outbound: `Dappsv1SessionBackhaul` wraps `IDappsOutboundTransport` + `DappsProtocolClient`. Inbound: `InboundConnectionHandler` retains DAPPSv1 session/parsing (offer↔data correlation, hash check, on-the-wire ack), but now hands the validated message to `IBackhaulInbox` instead of writing DB rows + MQTT-injecting directly.
 
-Keep out of this layer:
+### A0.3. Define stable DAPPS backhaul units *(done — PR #12)*
 
-- AGW/TCP stream concerns
-- MeshCore companion command names
-- MeshCore KISS packet layout
-- bearer-specific retry quirks
-
-### A0.2. Refactor the current BPQ/AGW path behind the seam
-
-Treat today's `DAPPSv1>` session exchange (`prompt` / `ihave` / `send` / `data` / `ack`) as one backend implementation, not as the architectural center of DAPPS.
-
-The existing AGW path should become the first concrete backhaul adapter so current behaviour stays intact while the layering improves.
-
-### A0.3. Define stable DAPPS backhaul units
-
-Before alternate bearers arrive, pin the logical unit carried between neighbours. This does **not** need to be the same as the current streamed `ihave`/`data` exchange and should be designed so that:
-
-- BPQ/AGW can carry it through a session adapter
-- MeshCore Companion can carry it through companion datagrams/channels
-- MeshCore KISS can later carry the same logical unit over raw MeshCore group packets
-
-The important design point is that fragmentation and reassembly semantics remain DAPPS-owned. Backends can adapt to bearer MTUs, but they should not each invent different message semantics.
+`BackhaulMessage(Id, Destination, Salt, Ttl, Payload, Headers?)` is the bearer-neutral unit. Carries everything DAPPS callers need to forward or deliver; nothing bearer-specific. Fragmentation/reassembly (Phase F2) will sit between this unit and the bearer adapter, not at this layer.
 
 ### A0.4. MeshCore as the forcing function
 
@@ -350,8 +326,7 @@ Resolved during the toolchain refresh: tests use **AwesomeAssertions** (MIT-lice
 
 Roughly:
 
-1. **A0.1–A0.3** (backhaul seam + stable DAPPS backhaul units) — next, before transport choices harden.
-2. **A1** (TTL forwarding) — *done*. **A2** (neighbour-table cleanup) follows behind the seam work.
+1. **A0.1–A0.3** (backhaul seam) — *done*. **A1** (TTL forwarding) — *done*. **A2** (neighbour-table cleanup) — *done*.
 3. **C1 + C2 + C4** (docker image, config tooling, install docs) — gets the thing into one sysop's hands.
 4. **A4** (per-app auth) — needed before anyone with a publicly-reachable node can run it.
 5. **D1 + D2** (web UI inspection + exercise) — turns "running" into "comfortable to run".

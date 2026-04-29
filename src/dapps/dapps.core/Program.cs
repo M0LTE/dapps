@@ -42,6 +42,7 @@ builder.Services.AddSingleton<IDappsOutboundTransport>(sp =>
     return new AgwOutboundTransport(opts.NodeHost, opts.AgwPort, lf);
 });
 builder.Services.AddSingleton<IDappsBackhaul, Dappsv1SessionBackhaul>();
+builder.Services.AddSingleton<IBackhaulInbox, DatabaseAndMqttInbox>();
 builder.Services.AddLogging(logging =>
 {
     logging.AddSimpleConsole(options =>
