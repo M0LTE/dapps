@@ -1,11 +1,18 @@
 ﻿using dapps.client;
+using dapps.core.Models;
+using Microsoft.Extensions.Options;
 using System.IO.Compression;
 using System.Net.Sockets;
 using System.Text;
 
 namespace dapps.core.Services;
 
-public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory loggerFactory, Database database)
+public class InboundConnectionHandler(
+    TcpClient tcpClient,
+    ILoggerFactory loggerFactory,
+    Database database,
+    MqttBrokerService mqtt,
+    IOptionsMonitor<SystemOptions> options)
 {
     private readonly ILogger logger = loggerFactory.CreateLogger<InboundConnectionHandler>();
 
@@ -244,6 +251,23 @@ public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory logger
             await database.SaveMessage(id, buffer, offer.Salt, offer.Destination, offer.AdditionalProperties);
             await database.DeleteOffer(id);
             await stream.WriteAsync(Encoding.UTF8.GetBytes("ack " + id + "\n"));
+
+            // If the message is destined for an app on this node, push it to
+            // the MQTT broker for any connected subscriber. The DB row stays
+            // until explicit ack from the app, so disconnected subscribers
+            // catch up via replay-on-subscribe.
+            if (DestinationParser.IsLocal(offer.Destination, options.CurrentValue.Callsign))
+            {
+                var dbMessage = new DbMessage
+                {
+                    Id = id,
+                    Payload = buffer,
+                    Salt = offer.Salt,
+                    Destination = offer.Destination,
+                    AdditionalProperties = offer.AdditionalProperties,
+                };
+                await mqtt.InjectInboundMessage(dbMessage);
+            }
         }
         else
         {
