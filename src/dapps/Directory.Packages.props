@@ -1,0 +1,28 @@
+<Project>
+
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Microsoft.Extensions -->
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.7" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.7" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Console" Version="10.0.7" />
+
+    <!-- ASP.NET Core / OpenAPI -->
+    <PackageVersion Include="Scalar.AspNetCore" Version="2.14.7" />
+    <PackageVersion Include="Swashbuckle.AspNetCore" Version="10.1.7" />
+
+    <!-- Storage / messaging -->
+    <PackageVersion Include="sqlite-net-pcl" Version="1.9.172" />
+    <PackageVersion Include="MQTTnet" Version="4.3.7.1207" />
+
+    <!-- Testing — xunit.v3 + Microsoft Testing Platform native runner.
+         Replaces xunit + xunit.runner.visualstudio + Microsoft.NET.Test.Sdk. -->
+    <PackageVersion Include="xunit.v3" Version="3.2.2" />
+    <PackageVersion Include="FluentAssertions" Version="8.9.0" />
+  </ItemGroup>
+
+</Project>

@@ -24,7 +24,7 @@ public sealed class MqttBrokerRoundTripTests : IAsyncLifetime
     private Database database = null!;
     private MqttBrokerService broker = null!;
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
         brokerPort = PickFreeTcpPort();
         dbPath = Path.Combine(Path.GetTempPath(),
@@ -53,7 +53,7 @@ public sealed class MqttBrokerRoundTripTests : IAsyncLifetime
         await broker.StartAsync(CancellationToken.None);
     }
 
-    public async Task DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
         await broker.StopAsync(CancellationToken.None);
         DbInfo.OverridePath = null;
