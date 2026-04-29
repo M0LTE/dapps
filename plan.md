@@ -18,7 +18,7 @@ Seven PRs have landed since the restart:
 
 The protocol is fully specified (`README.md`'s "On-air protocol" section). The implementation matches the spec for the parts it implements. The on-air format is byte-validated against real BPQ in CI via `m0lte/linbpq`. Local apps can talk to a DAPPS instance via MQTT (durable, idempotent on `dapps-id`) or REST (POST + poll). TTL forwarding works end-to-end across two BPQs.
 
-What's missing to call this complete is the parts that turn a single-node demo into a network: a sysop-friendly neighbour table, peer discovery, route exchange, a deployable container, sysop and developer documentation, and a couple of specific spec follow-ups (multi-part messages, end-to-end source tracking).
+What's missing to call this complete is the parts that turn a single-node demo into a network: a transport-neutral backhaul seam, a sysop-friendly neighbour table, peer discovery, route exchange, a deployable container, sysop and developer documentation, and a couple of specific spec follow-ups (multi-part messages, end-to-end source tracking).
 
 ## Tom's scratchpad of ideas
 
@@ -30,6 +30,57 @@ What's missing to call this complete is the parts that turn a single-node demo i
 ## Open tasks (issues filed)
 
 - **#5** — Switch integration tests from raw `Process` to Testcontainers. Today the `LinbpqIntegrationFixture` shells `docker run` directly; should be on Testcontainers.NET like the rest of the .NET integration-test world. Cleanup, no feature impact.
+
+## Phase A0 — insert the backhaul seam before transport choices harden
+
+**Goal:** DAPPS core talks in terms of forwarding durable DAPPS units to neighbours, not in terms of opening a stream and speaking one specific session protocol.
+
+The current factoring around `IDappsOutboundTransport` + `Stream` was the right move to get AGW under an interface, but it is still too transport-shaped if DAPPS is going to support a datagram bearer such as MeshCore without contorting the rest of the system. This is high priority while the code is still in progress.
+
+### A0.1. Introduce a DAPPS-owned backhaul interface
+
+Add a seam above bearer mechanics and below queue/router logic. The abstraction should be semantic, not socket-like: "send/receive DAPPS backhaul units" rather than "open/read/write stream."
+
+Own at this layer:
+
+- message id / correlation semantics
+- residual TTL handling
+- dedup / replay semantics
+- ack contract
+- fragmentation / reassembly policy
+- transport capability hints where actually needed (for example MTU)
+
+Keep out of this layer:
+
+- AGW/TCP stream concerns
+- MeshCore companion command names
+- MeshCore KISS packet layout
+- bearer-specific retry quirks
+
+### A0.2. Refactor the current BPQ/AGW path behind the seam
+
+Treat today's `DAPPSv1>` session exchange (`prompt` / `ihave` / `send` / `data` / `ack`) as one backend implementation, not as the architectural center of DAPPS.
+
+The existing AGW path should become the first concrete backhaul adapter so current behaviour stays intact while the layering improves.
+
+### A0.3. Define stable DAPPS backhaul units
+
+Before alternate bearers arrive, pin the logical unit carried between neighbours. This does **not** need to be the same as the current streamed `ihave`/`data` exchange and should be designed so that:
+
+- BPQ/AGW can carry it through a session adapter
+- MeshCore Companion can carry it through companion datagrams/channels
+- MeshCore KISS can later carry the same logical unit over raw MeshCore group packets
+
+The important design point is that fragmentation and reassembly semantics remain DAPPS-owned. Backends can adapt to bearer MTUs, but they should not each invent different message semantics.
+
+### A0.4. MeshCore as the forcing function
+
+Use MeshCore as the test for whether the seam is real:
+
+- **Companion-over-USB** should be the first alternate bearer because it offers the quickest route to a working prototype.
+- **KISS-over-USB** should be planned as a later backend swap carrying the same DAPPS backhaul units.
+
+If a future MeshCore backend can be added without changing DAPPS callers, the seam is in the right place.
 
 ## Phase A — make forwarding actually forward
 
@@ -64,11 +115,18 @@ Minimum:
 
 Doesn't need to be PKI-grade — operators can issue tokens out-of-band. This isn't an internet protocol.
 
-## Phase B — peer discovery via UI frame beacons
+## Phase B — peer discovery and routing evolution
 
-**Goal:** DAPPS nodes find each other on a shared frequency without the sysop hand-coding neighbour tables.
+**Goal:** DAPPS nodes find each other on a shared frequency without the sysop hand-coding neighbour tables, and route learning evolves toward a transport-agnostic automatic-routing model.
 
 The on-air protocol already has a hand-wavey "discovery" section in the README. AGW exposes the primitives (`'M'` / `'V'` for UI send, `'m'` for monitor). The transport interface in PR #4 is shaped for it but doesn't expose UI yet.
+
+MeshCore is relevant here in two separate ways:
+
+1. as a possible bearer under the new backhaul seam (Phase A0)
+2. as a source of ideas for DAPPS's own route/discovery model
+
+The second one matters even if DAPPS never ships a MeshCore backend.
 
 ### B1. Extend the transport interface
 
@@ -110,6 +168,26 @@ When `OutboundMessageManager` needs to forward a message:
 - Direct neighbour with that callsign → use it.
 - Neighbour with hops < some-budget that knows the destination via beacon hop-counts → use that path's first hop.
 - Otherwise → drop with "no route" + log + leave in DB until TTL expires.
+
+### B5. Explore MeshCore-style route learning inside DAPPS
+
+MeshCore's model is worth studying explicitly while this work is still fluid:
+
+- first delivery by bounded flood
+- learn a useful path from the successful exchange
+- reuse that path for later deliveries
+- reset / decay stale paths when delivery fails
+- keep flooding bounded by policy
+
+DAPPS should not cargo-cult MeshCore packet formats, but it should decide deliberately which of those ideas belong in a transport-agnostic DAPPS routing layer:
+
+- learned whole paths vs. next-hop hints
+- route freshness and expiry
+- direct-vs-flood promotion
+- neighbour advertisements vs. route exchange
+- what belongs in DAPPS core vs. what stays bearer-specific
+
+If the answer ends up being "DAPPS learns next-hop reachability and leaves path details to the bearer," that is still a useful outcome — but it should be reached consciously.
 
 ## Phase C — deployable, runnable for sysops
 
@@ -272,14 +350,16 @@ Resolved during the toolchain refresh: tests use **AwesomeAssertions** (MIT-lice
 
 Roughly:
 
-1. **A1** (TTL forwarding) — *done*. **A2** (neighbour-table cleanup) — next.
-2. **C1 + C2 + C4** (docker image, config tooling, install docs) — gets the thing into one sysop's hands.
-3. **A4** (per-app auth) — needed before anyone with a publicly-reachable node can run it.
-4. **D1 + D2** (web UI inspection + exercise) — turns "running" into "comfortable to run".
-5. **B1–B4** (UI beacon discovery + auto-routing) — graduates from manual neighbour config to a real network.
-6. **E1–E5** (developer guide + sample apps + Python ref impl) — unlocks third-party app development.
-7. **A3, C3, D3, D4, F1–F4** in parallel as polish.
-8. **G** when there's a community to govern.
+1. **A0.1–A0.3** (backhaul seam + stable DAPPS backhaul units) — next, before transport choices harden.
+2. **A1** (TTL forwarding) — *done*. **A2** (neighbour-table cleanup) follows behind the seam work.
+3. **C1 + C2 + C4** (docker image, config tooling, install docs) — gets the thing into one sysop's hands.
+4. **A4** (per-app auth) — needed before anyone with a publicly-reachable node can run it.
+5. **D1 + D2** (web UI inspection + exercise) — turns "running" into "comfortable to run".
+6. **B1–B5** (beacon discovery + routing evolution, including MeshCore-inspired exploration) — graduates from manual neighbour config to a real network.
+7. **A0.4** (first alternate bearer planning/implementation, likely MeshCore Companion) when the seam is ready.
+8. **E1–E5** (developer guide + sample apps + Python ref impl) — unlocks third-party app development.
+9. **A3, C3, D3, D4, F1–F4** in parallel as polish.
+10. **G** when there's a community to govern.
 
 Phases A and C can ship as a single "v0.1.0 — runnable" release. Phase D as "v0.2.0 — operable". Phase E + B as "v1.0.0 — networked + developable".
 
@@ -292,6 +372,7 @@ If picking this up cold:
 - `src/dapps/dapps.client/` — sender-side library (`AgwOutboundTransport`, `DappsProtocolClient`, `DappsMessage`).
 - `src/dapps/dapps.core/Services/` — `MqttBrokerService`, `OutboundMessageManager`, `InboundConnectionHandler`, `IHaveValidator`, `Database`, etc.
 - `src/dapps/dapps.core.tests/` — unit (xunit.v3, MTP runner) + integration (Docker `m0lte/linbpq`).
+- `docs/meshcore-backhaul-routing.md` — design note on the backhaul seam, MeshCore Companion/KISS implications, and MeshCore-inspired routing/discovery questions.
 - `src/dapps/Directory.Packages.props` — central package versions; update there, not in csproj.
 - `~/src/linbpq/docs/protocols/` — apps-interface.md, rhp.md, bpqtoagw.md — the BPQ protocol surfaces we built against.
 - `~/src/linbpq/tests/integration/` — the linbpq test suite, especially `test_two_instance_agw_tunnel.py` for the topology pattern that feeds issue #6.
