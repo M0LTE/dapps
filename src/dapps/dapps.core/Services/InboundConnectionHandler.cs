@@ -157,15 +157,14 @@ public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory logger
             return;
         }
 
-        if (!kvps.TryGetValue("ts", out var tsStr))
+        if (!kvps.TryGetValue("s", out var saltStr))
         {
-            logger.LogWarning("No timestamp specified in message offer, no dupe check");
-            tsStr = "0";
+            saltStr = "0";
         }
 
-        if (!long.TryParse(tsStr, out var ts))
+        if (!long.TryParse(saltStr, out var salt))
         {
-            await ReplyWithError("Fatal: invalid timestamp specified in message offer");
+            await ReplyWithError("Fatal: invalid salt specified in message offer");
             return;
         }
 
@@ -242,7 +241,6 @@ public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory logger
 
         if (offer.Timestamp == null)
         {
-            logger.LogWarning("No timestamp specified in message offer, no dupe check");
             hash = ComputeHash(buffer, null);
         }
         else

@@ -76,9 +76,9 @@ public class Database(ILogger<Database> logger, IOptionsMonitor<SystemOptions> o
             Id = id,
             Length = int.Parse(kvps["len"]),
             Format = kvps["fmt"],
-            Timestamp = kvps.TryGetValue("ts", out string? value) ? long.Parse(value) : null,
+            Timestamp = kvps.TryGetValue("s", out string? value) ? long.Parse(value) : null,
             Destination = kvps["dst"],
-            AdditionalProperties = JsonSerializer.Serialize(kvps.Keys.Except(["ts", "chk", "dst", "fmt", "len"]).ToDictionary(k => k, k => kvps[k]))
+            AdditionalProperties = JsonSerializer.Serialize(kvps.Keys.Except(["s", "chk", "dst", "fmt", "len"]).ToDictionary(k => k, k => kvps[k]))
         });
 
         logger.LogInformation("Saved metadata for offer {0}", id);
