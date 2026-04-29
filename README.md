@@ -59,12 +59,19 @@ Where:
 - `dst=appname@gb7aaa-4` (**required**) is the routing destination: `gb7aaa-4` is the call+SSID of the DAPPS instance the message is bound for, and `appname` is the application / topic / queue name on that instance.
 - `ttl=86400` (optional) is the residual lifetime in seconds. The sender sets it to "how many more seconds should this still be valid for" at the moment of sending; each forwarding DAPPS instance decrements `ttl` by the time the message spent in its queue before re-sending. Any node MUST drop a message whose `ttl` reaches zero or below. IP-TTL semantics, but in seconds rather than hops.
 - `key=value` (optional) is zero or more arbitrary headers. Use sparingly and not in place of payload. Keys and values MUST NOT contain space, `=`, or newline.
-- `chk=6907` (optional) is a 4-character hex CRC-16/CCITT-FALSE checksum guarding against bit-flips on the line (see below). When supplied it MUST be the last key-value pair; it is not a terminator.
+- `chk=6907` (optional, rarely needed on AX.25) is a 4-character hex CRC-16/CCITT-FALSE checksum guarding against bit-flips on the line. See below for the rationale and when it's worth using. When supplied it MUST be the last key-value pair; it is not a terminator.
 - `\n` is a newline byte (0x0A), not the literal string `\n`.
 
 #### "ihave" command checksum
 
-`chk` is **optional**. Manual / interactive / debugging use omits it entirely — the underlying packet transport's own corruption detection (AX.25 FCS, etc.) is usually sufficient, and CRC-16 isn't computable by hand. **If you're not using `chk`, skip the rest of this section** — the line still ends with `\n` either way.
+`chk` is **optional and, on packet radio, rarely worth bothering with** — every AX.25 frame already carries a 16-bit FCS at the link layer, so corruption that would show up at the DAPPS layer has already been caught and retransmitted underneath. Most senders should omit it.
+
+The field exists at all for two reasons:
+
+1. DAPPS isn't strictly tied to AX.25 — it can run over transports without strong line integrity, and `chk` is the only protection on those.
+2. The message id (`sha1(payload)`) covers the payload but does **not** cover `dst`, `ttl`, or `key=value` headers — those bytes never enter the hash. On a transport without its own line CRC, a bit-flip in `dst=` would silently mis-route a message whose id check still passes. `chk` is what closes that gap.
+
+So: keep `chk` in your back pocket for non-AX.25 transports or belt-and-braces deployments; default to omitting it on a packet-radio link. Manual / interactive / debugging use omits it entirely — CRC-16 isn't computable by hand. **If you're not using `chk`, skip the rest of this section** — the line still ends with `\n` either way.
 
 When `chk` *is* supplied, compute and validate it as follows:
 
