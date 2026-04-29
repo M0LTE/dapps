@@ -5,13 +5,14 @@ namespace dapps.core.Services;
 
 public static class DbInfo
 {
+    /// <summary>Test override for the SQLite path. Production uses the
+    /// default `data/dapps.db` (or `dapps.db` if no `data/` dir).</summary>
+    public static string? OverridePath { get; set; }
+
     private static string GetPath()
     {
-        if (Directory.Exists("data"))
-        {
-            return "data/dapps.db";
-        }
-
+        if (!string.IsNullOrEmpty(OverridePath)) return OverridePath;
+        if (Directory.Exists("data")) return "data/dapps.db";
         return "dapps.db";
     }
 
@@ -40,6 +41,7 @@ public class DbStartup(ILogger<DbStartup> logger) : IHostedService
         InsertIfNotPresent(options, "AgwPort", "8000");
         InsertIfNotPresent(options, "DefaultBpqPort", "0");
         InsertIfNotPresent(options, "Callsign", "N0CALL");
+        InsertIfNotPresent(options, "MqttPort", "1883");
         
         logger.LogInformation("DB schema refreshed");
         return Task.CompletedTask;

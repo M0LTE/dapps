@@ -19,12 +19,16 @@ builder.Services.AddOptions<SystemOptions>().Configure<OptionsRepo, ILogger<Syst
     o.AgwPort = int.Parse(options.Single(o => o.Option == "AgwPort").Value);
     o.DefaultBpqPort = int.Parse(options.Single(o => o.Option == "DefaultBpqPort").Value);
     o.Callsign = options.Single(o => o.Option == "Callsign").Value;
+    o.MqttPort = int.Parse(options.Single(o => o.Option == "MqttPort").Value);
 
     logger.LogInformation($"Callsign: {o.Callsign}");
     logger.LogInformation($"BPQ AGW: {o.NodeHost}:{o.AgwPort} (default port byte {o.DefaultBpqPort})");
+    logger.LogInformation($"MQTT broker: localhost:{o.MqttPort}");
 });
 
 builder.Services.AddSingleton<InboundConnectionHandlerFactory>();
+builder.Services.AddSingleton<MqttBrokerService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<MqttBrokerService>());
 builder.Services.AddHostedService<BpqConnectionListener>();
 builder.Services.AddSingleton<Database>();
 builder.Services.AddSingleton<OptionsRepo>();
