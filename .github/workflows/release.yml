@@ -23,6 +23,13 @@ concurrency:
 permissions:
   contents: write  # needed to create the GitHub Release on tag push
 
+# upload-artifact / download-artifact v4 still ship as Node 20 actions
+# (no v5 cut yet). GitHub's runner-side flag forces them to run on the
+# Node 24 the runner already has; clears the deprecation warning that
+# would otherwise spam every job.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
 jobs:
   build:
     strategy:
