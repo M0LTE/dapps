@@ -167,15 +167,16 @@ If the answer ends up being "DAPPS learns next-hop reachability and leaves path 
 
 ## Phase C — deployable, runnable for sysops
 
-**Goal:** a sysop can `docker run m0lte/dapps-core:latest` (or `apt install dapps`) and it Just Works with a config file.
+**Goal:** a sysop downloads a single binary for their platform from a GitHub Release, drops it next to a `dapps.db`, and it Just Works.
 
-### C1. Docker image publishing
+### C1. Native single-file binary releases
 
-The repo's README points at `m0lte/dapps-core` already (Installation section). The image isn't currently published. Tasks:
-- Multi-stage Dockerfile — already present at `src/dapps/Dockerfile`; needs auditing for net10.0.
-- GitHub Actions workflow that builds + pushes on `master` (mirrors how `m0lte/linbpq` is published).
-- Tag strategy: `latest`, `master-<sha>`, semantic version on release.
-- ARM64 + amd64 builds (Raspberry Pi is the obvious target).
+Direction: native single-file binaries published as GitHub Release assets, not a Docker image. Operators run a binary; no .NET runtime install, no Docker install, no container plumbing. The Dockerfile in the repo stays as a secondary option for those who want it but isn't the primary distribution.
+
+- GitHub Actions matrix build on tag push (`v*.*.*`) — `linux-x64`, `linux-arm64`, `win-x64`, `osx-arm64`. ARM Linux is the Raspberry Pi case.
+- `dotnet publish ... --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true` so the SQLite native lib bundles into the executable.
+- Trimming left off — ASP.NET Core + DI + JSON have enough reflection that trimming tends to break startup in subtle ways. Binary is ~100MB; acceptable for the ergonomics win.
+- Release workflow auto-creates the GitHub Release with the four binaries attached, named `dapps-<rid>` / `dapps-<rid>.exe`.
 
 ### C2. Config tooling
 
