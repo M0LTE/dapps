@@ -1,0 +1,157 @@
+using System.Text;
+using dapps.client;
+using FluentAssertions;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+
+namespace dapps.core.tests;
+
+public class DappsProtocolClientTests
+{
+    [Fact]
+    public async Task ReadInitialPromptAsync_ReturnsTrueWhenPromptArrives()
+    {
+        var canned = Encoding.UTF8.GetBytes("DAPPSv1>\n");
+        var stream = new FakeDuplexStream(canned);
+        var client = new DappsProtocolClient(stream, NullLoggerFactory.Instance);
+
+        (await client.ReadInitialPromptAsync(CancellationToken.None)).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ReadInitialPromptAsync_TolersaesLeadingNoise()
+    {
+        // Some nodes emit banner text before the DAPPS prompt
+        var canned = Encoding.UTF8.GetBytes("*** Connected to DAPPS\rDAPPSv1>\n");
+        var stream = new FakeDuplexStream(canned);
+        var client = new DappsProtocolClient(stream, NullLoggerFactory.Instance);
+
+        (await client.ReadInitialPromptAsync(CancellationToken.None)).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task ReadInitialPromptAsync_ReturnsFalseOnEofBeforePrompt()
+    {
+        var stream = new FakeDuplexStream(Encoding.UTF8.GetBytes("hello"));
+        var client = new DappsProtocolClient(stream, NullLoggerFactory.Instance);
+
+        (await client.ReadInitialPromptAsync(CancellationToken.None)).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task OfferMessageAsync_WritesIhaveLineAndAcceptsSendReply()
+    {
+        var canned = Encoding.UTF8.GetBytes("send abcdeff\n");
+        var stream = new FakeDuplexStream(canned);
+        var client = new DappsProtocolClient(stream, NullLoggerFactory.Instance);
+
+        var ok = await client.OfferMessageAsync(
+            id: "abcdeff",
+            salt: 12345678L,
+            format: DappsMessage.MessageFormat.Plain,
+            destination: "appname@gb7aaa-4",
+            length: 11,
+            ct: CancellationToken.None);
+
+        ok.Should().BeTrue();
+
+        var written = Encoding.UTF8.GetString(stream.WriteCapture.ToArray());
+        written.Should().Be("ihave abcdeff len=11 fmt=p dst=appname@gb7aaa-4 s=12345678\n");
+    }
+
+    [Fact]
+    public async Task OfferMessageAsync_OmitsSaltWhenNotProvided()
+    {
+        var canned = Encoding.UTF8.GetBytes("send abc\n");
+        var stream = new FakeDuplexStream(canned);
+        var client = new DappsProtocolClient(stream, NullLoggerFactory.Instance);
+
+        await client.OfferMessageAsync(
+            id: "abc",
+            salt: null,
+            format: DappsMessage.MessageFormat.Plain,
+            destination: "x@y",
+            length: 5,
+            ct: CancellationToken.None);
+
+        var written = Encoding.UTF8.GetString(stream.WriteCapture.ToArray());
+        written.Should().Be("ihave abc len=5 fmt=p dst=x@y\n");
+    }
+
+    [Fact]
+    public async Task OfferMessageAsync_ReturnsFalseWhenReplyIsntSend()
+    {
+        var canned = Encoding.UTF8.GetBytes("error abc\n");
+        var stream = new FakeDuplexStream(canned);
+        var client = new DappsProtocolClient(stream, NullLoggerFactory.Instance);
+
+        var ok = await client.OfferMessageAsync(
+            id: "abc",
+            salt: null,
+            format: DappsMessage.MessageFormat.Plain,
+            destination: "x@y",
+            length: 5,
+            ct: CancellationToken.None);
+
+        ok.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task OfferMessageAsync_DeflateFormat_NotImplementedYet()
+    {
+        var stream = new FakeDuplexStream([]);
+        var client = new DappsProtocolClient(stream, NullLoggerFactory.Instance);
+
+        var act = async () => await client.OfferMessageAsync(
+            id: "abc",
+            salt: null,
+            format: DappsMessage.MessageFormat.Deflate,
+            destination: "x@y",
+            length: 5,
+            ct: CancellationToken.None);
+
+        await act.Should().ThrowAsync<NotImplementedException>();
+    }
+
+    [Fact]
+    public async Task SendMessageAsync_WritesDataAndPayloadThenAccepts()
+    {
+        var canned = Encoding.UTF8.GetBytes("ack abc\n");
+        var stream = new FakeDuplexStream(canned);
+        var client = new DappsProtocolClient(stream, NullLoggerFactory.Instance);
+
+        var payload = Encoding.UTF8.GetBytes("Hello world");
+        var ok = await client.SendMessageAsync("abc", payload, CancellationToken.None);
+
+        ok.Should().BeTrue();
+
+        var written = stream.WriteCapture.ToArray();
+        var expectedPrefix = Encoding.UTF8.GetBytes("data abc\n");
+        written.AsSpan(0, expectedPrefix.Length).ToArray().Should().Equal(expectedPrefix);
+        written.AsSpan(expectedPrefix.Length).ToArray().Should().Equal(payload);
+    }
+
+    [Fact]
+    public async Task SendMessageAsync_ReturnsFalseOnBad()
+    {
+        var canned = Encoding.UTF8.GetBytes("bad abc\n");
+        var stream = new FakeDuplexStream(canned);
+        var client = new DappsProtocolClient(stream, NullLoggerFactory.Instance);
+
+        var ok = await client.SendMessageAsync("abc", [1, 2, 3], CancellationToken.None);
+
+        ok.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task SendMessageAsync_ReturnsFalseOnUnexpectedReply()
+    {
+        var canned = Encoding.UTF8.GetBytes("garbage\n");
+        var stream = new FakeDuplexStream(canned);
+        var client = new DappsProtocolClient(stream, NullLoggerFactory.Instance);
+
+        var ok = await client.SendMessageAsync("abc", [1, 2, 3], CancellationToken.None);
+
+        ok.Should().BeFalse();
+    }
+}

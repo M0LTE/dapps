@@ -37,9 +37,8 @@ public class DbStartup(ILogger<DbStartup> logger) : IHostedService
         var options = db.Query<DbSystemOption>($"select * from {db.Table<DbSystemOption>().Table.TableName};");
         InsertIfNotPresent(options, "NodeType", "BPQ");
         InsertIfNotPresent(options, "NodeHost", "localhost");
-        InsertIfNotPresent(options, "FbbPort", "8011");
-        InsertIfNotPresent(options, "FbbUser", "telnetportuser");
-        InsertIfNotPresent(options, "FbbPassword", "telnetportpassword");
+        InsertIfNotPresent(options, "AgwPort", "8000");
+        InsertIfNotPresent(options, "DefaultBpqPort", "0");
         InsertIfNotPresent(options, "Callsign", "N0CALL");
         
         logger.LogInformation("DB schema refreshed");
