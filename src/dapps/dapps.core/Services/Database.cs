@@ -36,11 +36,9 @@ public class Database(ILogger<Database> logger, IOptionsMonitor<SystemOptions> o
         return data;
     }
 
-    internal async Task SaveMessage(string id, byte[] buffer, long? timestamp, string destination, string additionalProperties)
+    internal async Task SaveMessage(string id, byte[] buffer, long? salt, string destination, string additionalProperties)
     {
         var connection = DbInfo.GetAsyncConnection();
-
-        var offer = connection.GetAsync<DbOffer>(id);
 
         var message = await connection.FindAsync<DbMessage>(id);
 
@@ -53,7 +51,7 @@ public class Database(ILogger<Database> logger, IOptionsMonitor<SystemOptions> o
         await DbInfo.GetAsyncConnection().InsertAsync(new DbMessage
         {
             Id = id,
-            Timestamp = timestamp,
+            Salt = salt,
             Payload = buffer,
             Destination = destination,
             AdditionalProperties = additionalProperties
@@ -76,7 +74,7 @@ public class Database(ILogger<Database> logger, IOptionsMonitor<SystemOptions> o
             Id = id,
             Length = int.Parse(kvps["len"]),
             Format = kvps.TryGetValue("fmt", out var fmt) ? fmt : "p",
-            Timestamp = kvps.TryGetValue("s", out var sValue) ? long.Parse(sValue) : null,
+            Salt = kvps.TryGetValue("s", out var sValue) ? long.Parse(sValue) : null,
             CompressedLength = kvps.TryGetValue("clen", out var clenValue) ? int.Parse(clenValue) : null,
             Destination = kvps["dst"],
             AdditionalProperties = JsonSerializer.Serialize(kvps.Keys.Except(["s", "chk", "clen", "dst", "fmt", "len"]).ToDictionary(k => k, k => kvps[k]))

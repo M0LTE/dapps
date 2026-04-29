@@ -16,13 +16,13 @@ public class MessageController(Database database, ILogger<MessageController> log
         {
             Payload = Encoding.UTF8.GetBytes(dappsMessageModel.TextPayload),
             Destination = dappsMessageModel.Destination,
-            Timestamp = (long)(DateTime.UtcNow - DateTime.UnixEpoch).TotalMilliseconds
+            Salt = (long)(DateTime.UtcNow - DateTime.UnixEpoch).TotalMilliseconds
         };
 
         await database.SaveMessage(
             dappsMessage.Id,
             dappsMessage.Payload,
-            dappsMessage.Timestamp,
+            dappsMessage.Salt,
             dappsMessage.Destination,
             "{}");
         return Ok();

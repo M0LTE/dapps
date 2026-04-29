@@ -349,19 +349,19 @@ public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory logger
         
         string hash;
 
-        if (offer.Timestamp == null)
+        if (offer.Salt == null)
         {
             hash = ComputeHash(buffer, null);
         }
         else
         {
-            hash = ComputeHash(buffer, offer.Timestamp);
+            hash = ComputeHash(buffer, offer.Salt);
         }
 
         if (hash[..7] == id)
         {
             logger.LogInformation("Hash matches, saving and acknowledging message {0}", id);
-            await database.SaveMessage(id, buffer, offer.Timestamp, offer.Destination, offer.AdditionalProperties);
+            await database.SaveMessage(id, buffer, offer.Salt, offer.Destination, offer.AdditionalProperties);
             await database.DeleteOffer(id);
             await stream.WriteAsync(Encoding.UTF8.GetBytes("ack " + id + "\n"));
         }
@@ -372,22 +372,21 @@ public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory logger
         }
     }
 
-    private static string ComputeHash(byte[] data, long? timestamp)
+    private static string ComputeHash(byte[] data, long? salt)
     {
         byte[] toHash;
-        if (timestamp != null)
+        if (salt != null)
         {
-            var tsBytes = BitConverter.GetBytes(timestamp.Value);
-            toHash = [.. tsBytes, .. data];
+            var saltBytes = new byte[8];
+            System.Buffers.Binary.BinaryPrimitives.WriteInt64LittleEndian(saltBytes, salt.Value);
+            toHash = [.. saltBytes, .. data];
         }
         else
         {
             toHash = data;
         }
 
-        var sha = SHA1.Create();
-        byte[] hashBytes = sha.ComputeHash(toHash);
-        var str = BitConverter.ToString(hashBytes).Replace("-", "").ToLower();
-        return str;
+        byte[] hashBytes = SHA1.HashData(toHash);
+        return Convert.ToHexString(hashBytes).ToLowerInvariant();
     }
 }
