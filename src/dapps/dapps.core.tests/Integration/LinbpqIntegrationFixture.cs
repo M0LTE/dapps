@@ -35,7 +35,7 @@ public sealed class LinbpqIntegrationFixture : IAsyncLifetime
     private string? _containerId;
     private string? _tempDir;
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
         AgwPort = PickFreeHostPort();
 
@@ -54,7 +54,7 @@ public sealed class LinbpqIntegrationFixture : IAsyncLifetime
         await Task.Delay(2000);
     }
 
-    public async Task DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
         if (_containerId is not null)
         {

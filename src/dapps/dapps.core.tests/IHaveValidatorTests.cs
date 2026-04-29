@@ -1,7 +1,7 @@
 using System.Text;
 using dapps.client;
 using dapps.core.Services;
-using FluentAssertions;
+using AwesomeAssertions;
 
 namespace dapps.core.tests;
 
