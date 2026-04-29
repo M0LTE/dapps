@@ -1,14 +1,15 @@
-﻿using System.Security.Cryptography;
+using System.Buffers.Binary;
+using System.Security.Cryptography;
 
 namespace dapps.client;
 
 public class DappsMessage
 {
-    public string Id => ComputeHash(Payload, Timestamp)[..7];
+    public string Id => ComputeHash(Payload, Salt)[..7];
 
     public Dictionary<string, string> Kvps = [];
     public string Destination { get; init; } = "";
-    public long? Timestamp { get; init; }
+    public long? Salt { get; init; }
     public byte[] Payload { get; init; } = [];
 
     public MessageFormat Format { get; init; } = MessageFormat.Plain;
@@ -19,20 +20,25 @@ public class DappsMessage
         Plain
     }
 
-    public static string ComputeHash(byte[] data, long? timestamp)
+    /// <summary>
+    /// Compute the SHA1 of (8-byte LE salt prefix when supplied) followed by
+    /// payload bytes, rendered as lowercase hex. Callers slice the first 7
+    /// chars for the wire message id.
+    /// </summary>
+    public static string ComputeHash(byte[] data, long? salt)
     {
         byte[] toHash;
-        if (timestamp != null)
+        if (salt != null)
         {
-            var tsBytes = BitConverter.GetBytes(timestamp.Value);
-            toHash = [.. tsBytes, .. data];
+            var saltBytes = new byte[8];
+            BinaryPrimitives.WriteInt64LittleEndian(saltBytes, salt.Value);
+            toHash = [.. saltBytes, .. data];
         }
         else
         {
             toHash = data;
         }
         byte[] hashBytes = SHA1.HashData(toHash);
-        var str = BitConverter.ToString(hashBytes).Replace("-", "").ToLower();
-        return str[..7];
+        return Convert.ToHexString(hashBytes).ToLowerInvariant();
     }
 }

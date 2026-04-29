@@ -12,7 +12,7 @@ public class IHaveCommand
     public override string ToString()
     {
         var sb = new StringBuilder();
-        sb.Append($"ihave {Message.Id} len={Message.Payload.Length} fmt={(Message.Format == DappsMessage.MessageFormat.Deflate ? 'd' : 'p')} s={Message.Timestamp}");
+        sb.Append($"ihave {Message.Id} len={Message.Payload.Length} fmt={(Message.Format == DappsMessage.MessageFormat.Deflate ? 'd' : 'p')} s={Message.Salt}");
         if (Message.Kvps.Count > 0)
         {
             sb.Append($" {string.Join(" ", Message.Kvps.Select(kvp => $"{kvp.Key}={kvp.Value}"))}");

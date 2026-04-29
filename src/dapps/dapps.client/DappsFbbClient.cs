@@ -20,19 +20,14 @@ public class DappsFbbClient(string host, int port, ILoggerFactory loggerFactory)
     /// <summary>
     /// Send ihave, expect send
     /// </summary>
-    /// <param name="id"></param>
-    /// <param name="timestamp"></param>
-    /// <param name="destination"></param>
-    /// <returns></returns>
-    /// <exception cref="NotImplementedException"></exception>
-    public async Task<bool> OfferMessage(string id, long? timestamp, MessageFormat messageFormat, string destination, int len)
+    public async Task<bool> OfferMessage(string id, long? salt, MessageFormat messageFormat, string destination, int len)
     {
         connectedToDapps.AssertTruthy("Not connected to DAPPS");
         logger.LogInformation("Offering message with ID {id} to remote DAPPS...", id);
         var commandBuilder = new StringBuilder($"ihave {id} len={len} fmt={messageFormat.ToString().ToLower()[0]} dst={destination}");
-        if (timestamp.HasValue)
+        if (salt.HasValue)
         {
-            commandBuilder.Append($" s={timestamp}");
+            commandBuilder.Append($" s={salt}");
         }
 
         var command = commandBuilder.ToString();

@@ -1,7 +1,6 @@
 ﻿using dapps.client;
 using System.IO.Compression;
 using System.Net.Sockets;
-using System.Security.Cryptography;
 using System.Text;
 
 namespace dapps.core.Services;
@@ -159,130 +158,20 @@ public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory logger
 
     private async Task HandleMessageOffer(NetworkStream stream, string command, CancellationToken stoppingToken)
     {
-        var parts = command.Split(' ');
-        var id = parts[1];
-        var kvps = parts[2..].Select(p => p.Split('=')).ToDictionary(item => item[0], item => item[1]);
-
-        async Task ReplyWithError(string message)
+        var result = IHaveValidator.Validate(command);
+        if (!result.IsValid)
         {
-            logger.LogError(message);
-            await stream.WriteAsync(Encoding.UTF8.GetBytes("error " + id + "\n"), stoppingToken);
-        }
-
-        if (!kvps.TryGetValue("len", out var lenStr))
-        {
-            await ReplyWithError("Fatal: no length specified in message offer");
+            logger.LogError("Rejecting offer: {0}", result.Error);
+            var idForReply = result.Id ?? "??";
+            await stream.WriteAsync(Encoding.UTF8.GetBytes($"error {idForReply}\n"), stoppingToken);
             return;
         }
 
-        if (!int.TryParse(lenStr, out var len))
-        {
-            await ReplyWithError("Fatal: invalid length specified in message offer");
-            return;
-        }
+        var offer = result.Offer!;
+        logger.LogInformation("Accepting message {0} (len={1}, fmt={2}, dst={3})", offer.Id, offer.Length, offer.Format, offer.Destination);
 
-        if (!kvps.TryGetValue("s", out var saltStr))
-        {
-            saltStr = "0";
-        }
-
-        if (!long.TryParse(saltStr, out var salt))
-        {
-            await ReplyWithError("Fatal: invalid salt specified in message offer");
-            return;
-        }
-
-        if (!kvps.TryGetValue("fmt", out var fmt))
-        {
-            fmt = "p"; // absent fmt defaults to plain per spec
-        }
-
-        if (fmt != "d" && fmt != "p")
-        {
-            await ReplyWithError("Fatal: unknown format specified in message offer");
-            return;
-        }
-
-        var hasClen = kvps.TryGetValue("clen", out var clenStr);
-        if (fmt == "d" && !hasClen)
-        {
-            await ReplyWithError("Fatal: clen= is required when fmt=d");
-            return;
-        }
-        if (fmt == "p" && hasClen)
-        {
-            await ReplyWithError("Fatal: clen= MUST NOT be supplied when fmt=p");
-            return;
-        }
-        if (hasClen && (!int.TryParse(clenStr, out var clen) || clen < 0))
-        {
-            await ReplyWithError("Fatal: clen= must be a non-negative integer");
-            return;
-        }
-
-        if (!kvps.TryGetValue("dst", out var dst))
-        {
-            await ReplyWithError("Fatal: no destination specified in message offer");
-            return;
-        }
-
-        if (kvps.TryGetValue("chk", out var chk))
-        {
-            var chkError = ValidateChecksum(command, chk);
-            if (chkError != null)
-            {
-                await ReplyWithError($"Fatal: {chkError}");
-                return;
-            }
-        }
-
-        logger.LogInformation("Accepting message {0} with params {1}", id, string.Join(", ", kvps.Select(item => $"{item.Key}={item.Value}")));
-
-        await stream.WriteAsync(Encoding.UTF8.GetBytes("send " + id + "\n")); // this can send multiple space-separated IDs if we want
-
-        await database.SaveOfferMetadata(id, kvps);
-    }
-
-    private const string ChkSuffixPrefix = " chk=";
-    private const int ChkValueLength = 4;
-
-    /// <summary>
-    /// Validate the trailing `chk=NNNN` on an ihave line. Returns null on
-    /// success, or a short error string. Per spec, chk MUST be the last KV
-    /// on the line, immediately followed by `\n` (which the line reader has
-    /// already stripped). Receivers MUST reject any line where `chk=` appears
-    /// elsewhere.
-    /// </summary>
-    private static string? ValidateChecksum(string ihaveCommand, string providedChk)
-    {
-        var prefixIndex = ihaveCommand.LastIndexOf(ChkSuffixPrefix, StringComparison.Ordinal);
-        if (prefixIndex < 0)
-        {
-            return "chk parsed from KVs but not present in line as ' chk=' suffix";
-        }
-
-        if (prefixIndex + ChkSuffixPrefix.Length + ChkValueLength != ihaveCommand.Length)
-        {
-            return "chk MUST be the last KV on the line";
-        }
-
-        // Reject any earlier "chk=" occurrence (would also be interpreted by
-        // a naïve KV split as the chk value).
-        var firstChkIndex = ihaveCommand.IndexOf("chk=", StringComparison.Ordinal);
-        if (firstChkIndex != prefixIndex + 1)
-        {
-            return "chk= must appear only as the last KV";
-        }
-
-        if (!ushort.TryParse(providedChk, System.Globalization.NumberStyles.HexNumber, null, out var providedValue))
-        {
-            return "chk value is not 4 hex characters";
-        }
-
-        var coveredBytes = Encoding.UTF8.GetBytes(ihaveCommand[..prefixIndex]);
-        var expected = Crc16CcittFalse.Compute(coveredBytes);
-
-        return expected == providedValue ? null : "chk mismatch (line corruption?)";
+        await stream.WriteAsync(Encoding.UTF8.GetBytes($"send {offer.Id}\n"));
+        await database.SaveOffer(offer);
     }
 
     private async Task HandleData(NetworkStream stream, string id, CancellationToken stoppingToken)
@@ -347,21 +236,12 @@ public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory logger
         var text = Encoding.UTF8.GetString(buffer);
         logger.LogInformation("Got message {0}", text);
         
-        string hash;
+        var computedId = DappsMessage.ComputeHash(buffer, offer.Salt)[..7];
 
-        if (offer.Timestamp == null)
-        {
-            hash = ComputeHash(buffer, null);
-        }
-        else
-        {
-            hash = ComputeHash(buffer, offer.Timestamp);
-        }
-
-        if (hash[..7] == id)
+        if (computedId == id)
         {
             logger.LogInformation("Hash matches, saving and acknowledging message {0}", id);
-            await database.SaveMessage(id, buffer, offer.Timestamp, offer.Destination, offer.AdditionalProperties);
+            await database.SaveMessage(id, buffer, offer.Salt, offer.Destination, offer.AdditionalProperties);
             await database.DeleteOffer(id);
             await stream.WriteAsync(Encoding.UTF8.GetBytes("ack " + id + "\n"));
         }
@@ -370,24 +250,5 @@ public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory logger
             logger.LogWarning("Hash does not match - payload corrupt");
             await stream.WriteAsync(Encoding.UTF8.GetBytes("bad " + id + "\n"));
         }
-    }
-
-    private static string ComputeHash(byte[] data, long? timestamp)
-    {
-        byte[] toHash;
-        if (timestamp != null)
-        {
-            var tsBytes = BitConverter.GetBytes(timestamp.Value);
-            toHash = [.. tsBytes, .. data];
-        }
-        else
-        {
-            toHash = data;
-        }
-
-        var sha = SHA1.Create();
-        byte[] hashBytes = sha.ComputeHash(toHash);
-        var str = BitConverter.ToString(hashBytes).Replace("-", "").ToLower();
-        return str;
     }
 }

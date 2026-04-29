@@ -10,7 +10,7 @@ internal sealed class DbOffer
     public int Length { get; init; }
     [NotNull]
     public string Format { get; init; } = "";
-    public long? Timestamp { get; init; }
+    public long? Salt { get; init; }
     public int? CompressedLength { get; init; }
     public string Destination { get; init; } = "";
     public string AdditionalProperties { get; set; } = "{}";

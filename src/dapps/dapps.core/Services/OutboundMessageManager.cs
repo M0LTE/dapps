@@ -67,7 +67,7 @@ public class OutboundMessageManager(Database database, ILoggerFactory loggerFact
                 return;
             }
 
-            if (!await dappsClient.OfferMessage(message.Id, message.Timestamp, DappsMessage.MessageFormat.Plain, message.Destination, message.Payload.Length))
+            if (!await dappsClient.OfferMessage(message.Id, message.Salt, DappsMessage.MessageFormat.Plain, message.Destination, message.Payload.Length))
             {
                 logger.LogError("Message offer was not accepted for {id}", message.Id);
                 return;

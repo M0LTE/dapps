@@ -36,11 +36,9 @@ public class Database(ILogger<Database> logger, IOptionsMonitor<SystemOptions> o
         return data;
     }
 
-    internal async Task SaveMessage(string id, byte[] buffer, long? timestamp, string destination, string additionalProperties)
+    internal async Task SaveMessage(string id, byte[] buffer, long? salt, string destination, string additionalProperties)
     {
         var connection = DbInfo.GetAsyncConnection();
-
-        var offer = connection.GetAsync<DbOffer>(id);
 
         var message = await connection.FindAsync<DbMessage>(id);
 
@@ -53,36 +51,36 @@ public class Database(ILogger<Database> logger, IOptionsMonitor<SystemOptions> o
         await DbInfo.GetAsyncConnection().InsertAsync(new DbMessage
         {
             Id = id,
-            Timestamp = timestamp,
+            Salt = salt,
             Payload = buffer,
             Destination = destination,
             AdditionalProperties = additionalProperties
         });
     }
 
-    internal async Task SaveOfferMetadata(string id, Dictionary<string, string> kvps)
+    internal async Task SaveOffer(IHaveOffer offer)
     {
         var connection = DbInfo.GetAsyncConnection();
 
-        var offer = await connection.FindAsync<DbOffer>(id);
-        if (offer != null)
+        var existing = await connection.FindAsync<DbOffer>(offer.Id);
+        if (existing != null)
         {
-            logger.LogWarning("We already have metadata for offer {0}, overwriting", id);
-            await connection.DeleteAsync<DbOffer>(id);
+            logger.LogWarning("We already have metadata for offer {0}, overwriting", offer.Id);
+            await connection.DeleteAsync<DbOffer>(offer.Id);
         }
 
         await connection.InsertAsync(new DbOffer
         {
-            Id = id,
-            Length = int.Parse(kvps["len"]),
-            Format = kvps.TryGetValue("fmt", out var fmt) ? fmt : "p",
-            Timestamp = kvps.TryGetValue("s", out var sValue) ? long.Parse(sValue) : null,
-            CompressedLength = kvps.TryGetValue("clen", out var clenValue) ? int.Parse(clenValue) : null,
-            Destination = kvps["dst"],
-            AdditionalProperties = JsonSerializer.Serialize(kvps.Keys.Except(["s", "chk", "clen", "dst", "fmt", "len"]).ToDictionary(k => k, k => kvps[k]))
+            Id = offer.Id,
+            Length = offer.Length,
+            Format = offer.Format,
+            Salt = offer.Salt,
+            CompressedLength = offer.CompressedLength,
+            Destination = offer.Destination,
+            AdditionalProperties = JsonSerializer.Serialize(offer.AdditionalHeaders),
         });
 
-        logger.LogInformation("Saved metadata for offer {0}", id);
+        logger.LogInformation("Saved metadata for offer {0}", offer.Id);
     }
 
     internal async Task<DbRouteHint?> GetRouteHint(string destination)

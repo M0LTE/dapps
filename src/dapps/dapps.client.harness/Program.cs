@@ -29,11 +29,11 @@ try
 
     var payload = "hello world";
     var payloadBytes = Encoding.UTF8.GetBytes(payload);
-    var timestamp = (long)(DateTime.UtcNow - DateTime.UnixEpoch).TotalMilliseconds;
-    var id = DappsMessage.ComputeHash(payloadBytes, timestamp);
+    var salt = (long)(DateTime.UtcNow - DateTime.UnixEpoch).TotalMilliseconds;
+    var id = DappsMessage.ComputeHash(payloadBytes, salt);
     var dest = "testqueue@gb7rdg";
 
-    if (!await client.OfferMessage(id: id, timestamp: timestamp, messageFormat: DappsMessage.MessageFormat.Plain, destination: dest, len: payload.Length))
+    if (!await client.OfferMessage(id: id, salt: salt, messageFormat: DappsMessage.MessageFormat.Plain, destination: dest, len: payload.Length))
     {
         logger.LogError("Failed to offer message with ID {id}", id);
         return;
