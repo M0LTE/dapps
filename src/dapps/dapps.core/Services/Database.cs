@@ -108,11 +108,10 @@ public class Database(ILogger<Database> logger, IOptionsMonitor<SystemOptions> o
         var connection = DbInfo.GetAsyncConnection();
 
         var options = await connection.QueryAsync<DbSystemOption>("select * from systemoptions;");
-        
-        await Upsert(connection, options, systemOptions.FbbPort.ToString(), nameof(systemOptions.FbbPort));
-        await Upsert(connection, options, systemOptions.FbbPassword, nameof(systemOptions.FbbPassword));
-        await Upsert(connection, options, systemOptions.FbbUser, nameof(systemOptions.FbbUser));
+
         await Upsert(connection, options, systemOptions.NodeHost, nameof(systemOptions.NodeHost));
+        await Upsert(connection, options, systemOptions.AgwPort.ToString(), nameof(systemOptions.AgwPort));
+        await Upsert(connection, options, systemOptions.DefaultBpqPort.ToString(), nameof(systemOptions.DefaultBpqPort));
         await Upsert(connection, options, systemOptions.Callsign, nameof(systemOptions.Callsign));
     }
 
@@ -134,11 +133,10 @@ public class Database(ILogger<Database> logger, IOptionsMonitor<SystemOptions> o
         var options = (await connection.QueryAsync<DbSystemOption>("select * from systemoptions;")).ToDictionary(item => item.Option, item => item.Value);
         return new SystemOptions
         {
-            FbbPort = int.Parse(options[nameof(SystemOptions.FbbPort)]),
-            FbbPassword = options[nameof(SystemOptions.FbbPassword)],
-            FbbUser = options[nameof(SystemOptions.FbbUser)],
             NodeHost = options[nameof(SystemOptions.NodeHost)],
-            Callsign = options[nameof(SystemOptions.Callsign)]
+            AgwPort = int.Parse(options[nameof(SystemOptions.AgwPort)]),
+            DefaultBpqPort = int.Parse(options[nameof(SystemOptions.DefaultBpqPort)]),
+            Callsign = options[nameof(SystemOptions.Callsign)],
         };
     }
 }

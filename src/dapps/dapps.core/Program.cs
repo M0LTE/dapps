@@ -1,5 +1,8 @@
+using dapps.client.Transport;
+using dapps.client.Transport.Agw;
 using dapps.core.Models;
 using dapps.core.Services;
+using Microsoft.Extensions.Options;
 using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -13,13 +16,12 @@ builder.Services.AddOptions<SystemOptions>().Configure<OptionsRepo, ILogger<Syst
 {
     var options = await db.GetOptions();
     o.NodeHost = options.Single(o => o.Option == "NodeHost").Value;
-    o.FbbPort = int.Parse(options.Single(o => o.Option == "FbbPort").Value);
-    o.FbbUser = options.Single(o => o.Option == "FbbUser").Value;
-    o.FbbPassword = options.Single(o => o.Option == "FbbPassword").Value;
+    o.AgwPort = int.Parse(options.Single(o => o.Option == "AgwPort").Value);
+    o.DefaultBpqPort = int.Parse(options.Single(o => o.Option == "DefaultBpqPort").Value);
     o.Callsign = options.Single(o => o.Option == "Callsign").Value;
 
     logger.LogInformation($"Callsign: {o.Callsign}");
-    logger.LogInformation($"BPQ node: {o.FbbUser}@{o.NodeHost}:{o.FbbPort}");
+    logger.LogInformation($"BPQ AGW: {o.NodeHost}:{o.AgwPort} (default port byte {o.DefaultBpqPort})");
 });
 
 builder.Services.AddSingleton<InboundConnectionHandlerFactory>();
@@ -27,6 +29,12 @@ builder.Services.AddHostedService<BpqConnectionListener>();
 builder.Services.AddSingleton<Database>();
 builder.Services.AddSingleton<OptionsRepo>();
 builder.Services.AddSingleton<OutboundMessageManager>();
+builder.Services.AddSingleton<IDappsOutboundTransport>(sp =>
+{
+    var opts = sp.GetRequiredService<IOptionsMonitor<SystemOptions>>().CurrentValue;
+    var lf = sp.GetRequiredService<ILoggerFactory>();
+    return new AgwOutboundTransport(opts.NodeHost, opts.AgwPort, lf);
+});
 builder.Services.AddLogging(logging =>
 {
     logging.AddSimpleConsole(options =>

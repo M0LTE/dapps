@@ -8,13 +8,13 @@ public class ConfigStartup(ILogger<ConfigStartup> logger, IOptionsMonitor<System
     public async Task StartAsync(CancellationToken cancellationToken)
     {
         var optionsValue = options.CurrentValue;
-        while (optionsValue.FbbPort == 0)
+        while (optionsValue.AgwPort == 0)
         {
             await Task.Delay(1000, cancellationToken);
         }
 
         logger.LogInformation($"Callsign: {optionsValue.Callsign}");
-        logger.LogInformation($"BPQ node: {optionsValue.FbbUser}@{optionsValue.NodeHost}:{optionsValue.FbbPort}");
+        logger.LogInformation($"BPQ AGW: {optionsValue.NodeHost}:{optionsValue.AgwPort} (default port byte {optionsValue.DefaultBpqPort})");
     }
 
     public Task StopAsync(CancellationToken cancellationToken)

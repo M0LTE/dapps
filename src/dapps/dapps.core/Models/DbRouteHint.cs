@@ -1,4 +1,4 @@
-﻿using SQLite;
+using SQLite;
 
 namespace dapps.core.Models;
 
@@ -18,6 +18,11 @@ public class DbNeighbour
 
     [Indexed(Unique = true)]
     public string Callsign { get; set; } = "";
-    
-    public string ConnectScript { get; set; } = "";
+
+    /// <summary>
+    /// Optional override for which BPQ port byte (0-indexed) to use when
+    /// connecting to this neighbour. Null falls back to
+    /// SystemOptions.DefaultBpqPort.
+    /// </summary>
+    public int? BpqPort { get; set; }
 }
