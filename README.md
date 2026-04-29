@@ -173,9 +173,33 @@ I see a hand-wavey model along the lines of:
 
 ## Application interface
 
-The application interface is likely to be something like MQTT, with DAPPS holding on to messages until it knows it has delivered them to integrated applications. Collaboration very welcome.
+DAPPS exposes two parallel interfaces for local applications: an embedded MQTT broker (real-time pub/sub) and a REST API (POST + poll). Both share the same SQLite-backed queue and the same ack contract; pick whichever fits your application better.
 
-Details tbc.
+DAPPS owns the queue. Messages stay in the database until the app explicitly acks. If the app isn't connected (no MQTT subscriber, or hasn't polled the REST endpoint yet), nothing is lost — the message is replayed on the next subscribe / available on the next poll.
+
+### MQTT
+
+Embedded MQTTnet broker, listening on `MqttPort` (default 1883). Connect with any MQTT 5 client; clean session is fine.
+
+| Topic | Direction | Purpose |
+|---|---|---|
+| `dapps/in/<app>` | DAPPS → app | Apps subscribe; DAPPS publishes incoming messages destined for `<app>` on this node. |
+| `dapps/out/<app>/<dest-callsign>` | app → DAPPS | Apps publish here to send a message to `<app>` running at `<dest-callsign>`. The payload is the message body. |
+| `dapps/ack/<app>` | app → DAPPS | Apps publish a message id (as the payload) to acknowledge receipt; until ack'd, the message stays in the DB and replays on subscribe. |
+
+When DAPPS publishes to `dapps/in/<app>`, the message id arrives as an MQTT 5 user property `dapps-id`. Use that value in the `dapps/ack/<app>` payload to acknowledge.
+
+### REST
+
+Same semantics, pull-based. All endpoints under `/AppApi`:
+
+| Method + path | Body | Purpose |
+|---|---|---|
+| `POST /AppApi/outbound` | `{ "app": "...", "destCallsign": "...", "payload": <bytes> }` | Submit an outbound message. Returns `{ "id": "..." }`. |
+| `GET /AppApi/inbound/{app}` | — | Returns `[ { "id": "...", "payload": <bytes> }, … ]` of unacked inbound messages for `{app}`. |
+| `POST /AppApi/inbound/{app}/{id}/ack` | — | Mark message `{id}` as delivered. Idempotent. |
+
+REST and MQTT can be used by different apps simultaneously — they're just two views of the same queue.
 
 ## Progress
 
