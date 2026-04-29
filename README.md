@@ -34,31 +34,42 @@ DAPPSv1>\n
 
 ### Offering a message
 
-To offer a message to a remote DAPPS instance, send the following as bytes:
+The fully-decorated form of an offer line is:
 
 ```
-ihave abcdeff len=11 fmt=p s=12345678 dst=appname@gb7aaa-4 ttl=86400 key=value chk=2c\n
+ihave abcdeff len=11 fmt=p s=12345678 dst=appname@gb7aaa-4 ttl=86400 key=value chk=6907\n
 ```
 
-where:
-- `abcdeff` is the SHA1 hash of the (decompressed) payload bytes, optionally prefixed by the 8-byte little-endian representation of `s` when supplied: `sha1(payload)[:7]` or `sha1(s_bytes_le ++ payload)[:7]`. Truncated to the first 7 hex characters this serves as a unique message id (inspired by git hashes).
-- `len=11` is the size of the **decompressed** payload in bytes. Always required.
-- `fmt=p` declares the payload bytes on the wire are the literal payload (**p**lain). `fmt=d` declares them Deflate-compressed, in which case `clen=N` MUST also be supplied, giving the number of **c**ompressed bytes the receiver reads from the wire before decompressing. `clen` MUST NOT be supplied when `fmt=p`.
-- `s=12345678` is an optional 64-bit signed integer salt (decimal on the wire) folded into the message ID hash. Its job is to disambiguate identical-payload messages so they get distinct IDs (otherwise two senders shouting "hello" generate the same message ID and dedup as one). Sender's choice of meaning — a unix-epoch timestamp, a counter, anything sufficiently distinct.
-- `dst=appname@gb7aaa-4` is the routing destination: `gb7aaa-4` is the call+SSID of the DAPPS instance the message is bound for, and `appname` is the application / topic / queue name on that instance. Always required.
-- `ttl=86400` is an optional residual lifetime in seconds. The sender sets it to "how many more seconds should this still be valid for" at the moment of sending; each forwarding DAPPS instance decrements `ttl` by the time the message spent in its queue before re-sending. Any node MUST drop a message whose `ttl` reaches zero or below. IP-TTL semantics, but in seconds rather than hops — and the wire cost stays small regardless of year.
-- `key=value` is zero or more arbitrary headers. Use sparingly and not in place of payload. Keys and values MUST NOT contain space, `=`, or newline.
-- `chk=2c` is an optional 2-character hex checksum guarding against bit-flips on the line (see below). When supplied it MUST be the last key-value pair; it is not a terminator.
+The minimum hand-craftable form is:
+
+```
+ihave abcdeff len=11 dst=appname@gb7aaa-4\n
+```
+
+— message id, payload length, destination, and nothing else. (You still have to compute `sha1(payload)[:7]` for the message id, so it isn't *purely* hand-craftable, but every other field has a default and can be dropped.) The cost of dropping fields is operational peril rather than a protocol error: no salt means identical-content messages dedup; no `ttl` lets a forwarder pick its own default; no `chk` leaves you trusting the link layer's own corruption detection; no `fmt`/`clen` means plain payload only.
+
+**Required:** the message id (`abcdeff` here), `len`, and `dst`. Plus `clen` when `fmt=d`. Everything else is optional.
+
+Where:
+
+- `abcdeff` (**required**) is the SHA1 hash of the (decompressed) payload bytes, optionally prefixed by the 8-byte little-endian representation of `s` when supplied: `sha1(payload)[:7]` or `sha1(s_bytes_le ++ payload)[:7]`. Truncated to the first 7 hex characters this serves as a unique message id (inspired by git hashes).
+- `len=11` (**required**) is the size of the **decompressed** payload in bytes.
+- `fmt=p` (optional, default `p` if absent) declares the payload bytes on the wire are the literal payload (**p**lain). `fmt=d` declares them Deflate-compressed, in which case `clen=N` MUST also be supplied, giving the number of **c**ompressed bytes the receiver reads from the wire before decompressing. `clen` MUST NOT appear when `fmt` is `p` or absent.
+- `s=12345678` (optional) is a 64-bit signed integer salt (decimal on the wire) folded into the message ID hash. Its job is to disambiguate identical-payload messages so they get distinct IDs (otherwise two senders shouting "hello" generate the same message ID and dedup as one). Sender's choice of meaning — a unix-epoch timestamp, a counter, anything sufficiently distinct.
+- `dst=appname@gb7aaa-4` (**required**) is the routing destination: `gb7aaa-4` is the call+SSID of the DAPPS instance the message is bound for, and `appname` is the application / topic / queue name on that instance.
+- `ttl=86400` (optional) is the residual lifetime in seconds. The sender sets it to "how many more seconds should this still be valid for" at the moment of sending; each forwarding DAPPS instance decrements `ttl` by the time the message spent in its queue before re-sending. Any node MUST drop a message whose `ttl` reaches zero or below. IP-TTL semantics, but in seconds rather than hops.
+- `key=value` (optional) is zero or more arbitrary headers. Use sparingly and not in place of payload. Keys and values MUST NOT contain space, `=`, or newline.
+- `chk=6907` (optional) is a 4-character hex CRC-16/CCITT-FALSE checksum guarding against bit-flips on the line (see below). When supplied it MUST be the last key-value pair; it is not a terminator.
 - `\n` is a newline byte (0x0A), not the literal string `\n`.
 
 #### "ihave" command checksum
 
-`chk=NN` is **optional**. Manual / interactive / debugging use omits it entirely — the underlying packet transport's own corruption detection (AX.25 FCS, etc.) is usually sufficient, and computing a SHA1 prefix by hand is impractical. **If you're not using `chk`, skip the rest of this section** — the line still ends with `\n` either way.
+`chk` is **optional**. Manual / interactive / debugging use omits it entirely — the underlying packet transport's own corruption detection (AX.25 FCS, etc.) is usually sufficient, and CRC-16 isn't computable by hand. **If you're not using `chk`, skip the rest of this section** — the line still ends with `\n` either way.
 
 When `chk` *is* supplied, compute and validate it as follows:
 
-1. `chk=NN` MUST be the last key-value pair on the line, immediately followed by `\n`. Receivers MUST reject any `ihave` line where `chk=` appears in any non-final position.
-2. Take the line bytes from the first byte of `ihave ` up to *but not including* the leading space before `chk=NN` — i.e. drop the trailing ` chk=NN\n` (one space, the `chk=NN` token, and the newline). Compute SHA1 over those bytes. The lowercase hex of the first byte of the resulting digest is `NN`.
+1. `chk=NNNN` MUST be the last key-value pair on the line, immediately followed by `\n`. Receivers MUST reject any `ihave` line where `chk=` appears in any non-final position.
+2. Take the line bytes from the first byte of `ihave ` up to *but not including* the leading space before `chk=NNNN` — i.e. drop the trailing ` chk=NNNN\n` (one space, the `chk=NNNN` token, and the newline). Compute CRC-16/CCITT-FALSE (polynomial `0x1021`, initial value `0xFFFF`, no reflection, final XOR `0x0000`) over those bytes. The lowercase 4-character hex rendering of the resulting 16-bit value is `NNNN`.
 
 Pinning `chk` to the last position when present lets both sides do this with a single `lastIndexOf(" chk=")` and a substring — no field re-normalisation, no awareness of how the rest of the KVs were spaced.
 
@@ -67,22 +78,16 @@ Pinning `chk` to the last position when present lets both sides do this with a s
 For the offer line:
 
 ```
-ihave abcdeff len=11 fmt=p s=12345678 dst=appname@gb7aaa-4 ttl=86400 key=value chk=2c\n
+ihave abcdeff len=11 fmt=p s=12345678 dst=appname@gb7aaa-4 ttl=86400 key=value chk=6907\n
 ```
 
-The bytes hashed (everything before ` chk=2c\n`) are:
+The bytes covered (everything before ` chk=6907\n`) are:
 
 ```
 ihave abcdeff len=11 fmt=p s=12345678 dst=appname@gb7aaa-4 ttl=86400 key=value
 ```
 
-Their SHA1 digest is:
-
-```
-2c4e6caf8303b76aff162ca7ba44a4b9a72c69ee
-```
-
-The first two hex characters are `2c` — matching the value sent over the air, so the line is intact.
+Their CRC-16/CCITT-FALSE value is `0x6907`. Rendered as 4 lowercase hex characters that's `6907` — matching the value sent over the air, so the line is intact.
 
 ### Sending a message
 
