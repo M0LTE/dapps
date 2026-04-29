@@ -43,10 +43,19 @@ ihave abcdeff len=11 fmt=p s=12345678 dst=appname@gb7aaa-4 ttl=86400 key=value c
 The minimum hand-craftable form is:
 
 ```
-ihave abcdeff len=11 dst=appname@gb7aaa-4\n
+ihave 7b502c3 len=11 dst=appname@gb7aaa-4\n
 ```
 
-— message id, payload length, destination, and nothing else. (You still have to compute `sha1(payload)[:7]` for the message id, so it isn't *purely* hand-craftable, but every other field has a default and can be dropped.) The cost of dropping fields is operational peril rather than a protocol error: no salt means identical-content messages dedup; no `ttl` lets a forwarder pick its own default; no `chk` leaves you trusting the link layer's own corruption detection; no `fmt`/`clen` means plain payload only.
+— message id, payload length, destination, and nothing else. The id is the first 7 hex chars of the SHA1 of the payload bytes (no `s=` salt means no prefix). For the literal payload `Hello world` (11 bytes, no trailing newline):
+
+```
+$ printf 'Hello world' | sha1sum
+7b502c3a1f48c8609ae212cdfb639dee39673f5e  -
+```
+
+The first 7 hex characters → id `7b502c3`. With `s=N` set, you'd instead hash the 8-byte little-endian representation of `s` followed by the payload, e.g. `printf '<8 raw bytes><payload>' | sha1sum` — a one-liner in any language with a binary-pack helper but not pleasant by hand. Computing the id is the only step a hand-typer can't avoid; every other field has a default and can be dropped.
+
+The cost of dropping fields is operational peril rather than a protocol error: no salt means identical-content messages dedup; no `ttl` lets a forwarder pick its own default; no `chk` leaves you trusting the link layer's own corruption detection; no `fmt`/`clen` means plain payload only.
 
 **Required:** the message id (`abcdeff` here), `len`, and `dst`. Plus `clen` when `fmt=d`. Everything else is optional.
 
@@ -59,7 +68,7 @@ Where:
 - `dst=appname@gb7aaa-4` (**required**) is the routing destination: `gb7aaa-4` is the call+SSID of the DAPPS instance the message is bound for, and `appname` is the application / topic / queue name on that instance.
 - `ttl=86400` (optional) is the residual lifetime in seconds. The sender sets it to "how many more seconds should this still be valid for" at the moment of sending; each forwarding DAPPS instance decrements `ttl` by the time the message spent in its queue before re-sending. Any node MUST drop a message whose `ttl` reaches zero or below. IP-TTL semantics, but in seconds rather than hops.
 - `key=value` (optional) is zero or more arbitrary headers. Use sparingly and not in place of payload. Keys and values MUST NOT contain space, `=`, or newline.
-- `chk=6907` (optional, rarely needed on AX.25) is a 4-character hex CRC-16/CCITT-FALSE checksum guarding against bit-flips on the line. See below for the rationale and when it's worth using. When supplied it MUST be the last key-value pair; it is not a terminator.
+- `chk=6907` (optional, rarely needed on AX.25) is a 4-character hex CRC-16/CCITT-FALSE checksum covering the `ihave` line bytes only — it does not protect the payload that follows after `data` (the message id does that). See below for the rationale and when it's worth using. When supplied it MUST be the last key-value pair; it is not a terminator.
 - `\n` is a newline byte (0x0A), not the literal string `\n`.
 
 #### "ihave" command checksum
