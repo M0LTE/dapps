@@ -11,22 +11,16 @@ concurrency:
   group: tests-${{ github.ref }}
   cancel-in-progress: true
 
-# Opt every JS-based action into Node.js 24. GitHub will force-default this
-# in June 2026; opting in now clears the deprecation warnings and verifies
-# our actions are Node 24 compatible.
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-
 jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.x
 
