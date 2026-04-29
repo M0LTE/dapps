@@ -29,4 +29,15 @@ public class DbMessage
     /// <summary>True once a local app has acked receipt via the MQTT or REST
     /// app interface (only relevant when Destination is local).</summary>
     public bool LocallyDelivered { get; init; }
+
+    /// <summary>Residual lifetime in seconds at the moment we received this
+    /// message (or null if no ttl= was supplied). The wire-side `ttl=` value
+    /// frozen at receive time; remaining lifetime is computed against
+    /// <see cref="CreatedAt"/>.</summary>
+    public int? Ttl { get; init; }
+
+    /// <summary>UTC instant the row was created — when the message arrived
+    /// or was submitted locally. Used with <see cref="Ttl"/> to compute
+    /// residual lifetime on forward and to age out expired rows.</summary>
+    public DateTime CreatedAt { get; init; } = DateTime.UtcNow;
 }

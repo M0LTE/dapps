@@ -17,6 +17,7 @@ public sealed record IHaveOffer(
     long? Salt,
     int? CompressedLength,
     string Destination,
+    int? Ttl,                               // residual lifetime in seconds, null = unset
     Dictionary<string, string> AdditionalHeaders);
 
 public sealed record OfferValidationResult
@@ -45,7 +46,7 @@ public static class IHaveValidator
     private const int ChkValueLength = 4;
 
     private static readonly HashSet<string> ReservedKeys = new(StringComparer.Ordinal)
-        { "len", "fmt", "s", "clen", "dst", "chk" };
+        { "len", "fmt", "s", "clen", "dst", "chk", "ttl" };
 
     public static OfferValidationResult Validate(string ihaveCommand)
     {
@@ -116,11 +117,19 @@ public static class IHaveValidator
             salt = s;
         }
 
+        int? ttl = null;
+        if (kvps.TryGetValue("ttl", out var ttlStr))
+        {
+            if (!int.TryParse(ttlStr, NumberStyles.None, CultureInfo.InvariantCulture, out var ttlValue) || ttlValue <= 0)
+                return OfferValidationResult.Fail(id, "ttl= must be a positive integer (seconds)");
+            ttl = ttlValue;
+        }
+
         var headers = kvps
             .Where(kv => !ReservedKeys.Contains(kv.Key))
             .ToDictionary(kv => kv.Key, kv => kv.Value);
 
-        return OfferValidationResult.Success(new IHaveOffer(id, len, fmt, salt, clen, dst, headers));
+        return OfferValidationResult.Success(new IHaveOffer(id, len, fmt, salt, clen, dst, ttl, headers));
     }
 
     /// <summary>

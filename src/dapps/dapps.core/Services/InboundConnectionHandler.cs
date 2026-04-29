@@ -253,7 +253,7 @@ public class InboundConnectionHandler(
         if (computedId == id)
         {
             logger.LogInformation("Hash matches, saving and acknowledging message {0}", id);
-            await database.SaveMessage(id, buffer, offer.Salt, offer.Destination, sourceCallsign, offer.AdditionalProperties);
+            await database.SaveMessage(id, buffer, offer.Salt, offer.Destination, sourceCallsign, offer.AdditionalProperties, offer.Ttl);
             await database.DeleteOffer(id);
             await stream.WriteAsync(Encoding.UTF8.GetBytes("ack " + id + "\n"));
 
@@ -271,6 +271,7 @@ public class InboundConnectionHandler(
                     Destination = offer.Destination,
                     SourceCallsign = sourceCallsign,
                     AdditionalProperties = offer.AdditionalProperties,
+                    Ttl = offer.Ttl,
                 };
                 await mqtt.InjectInboundMessage(dbMessage);
             }

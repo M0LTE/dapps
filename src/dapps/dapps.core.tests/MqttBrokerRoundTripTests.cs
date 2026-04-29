@@ -17,6 +17,7 @@ namespace dapps.core.tests;
 /// real MQTTnet client. Each test gets its own SQLite file + broker on a
 /// free port.
 /// </summary>
+[Collection(SqliteOverridePathCollection.Name)]
 public sealed class MqttBrokerRoundTripTests : IAsyncLifetime
 {
     private string dbPath = null!;
@@ -98,7 +99,7 @@ public sealed class MqttBrokerRoundTripTests : IAsyncLifetime
         // callsign of the node that delivered it.
         var payload = Encoding.UTF8.GetBytes("hi from another node");
         await database.SaveMessage("abc1234", payload, salt: 1L,
-            destination: "myapp@N0CALL", sourceCallsign: "G7XYZ-3", additionalProperties: "{}");
+            destination: "myapp@N0CALL", sourceCallsign: "G7XYZ-3", additionalProperties: "{}", ttl: null);
 
         var client = await ConnectClient();
         var received = new TaskCompletionSource<MqttApplicationMessage>(
@@ -126,7 +127,7 @@ public sealed class MqttBrokerRoundTripTests : IAsyncLifetime
         var ct = TestContext.Current.CancellationToken;
 
         await database.SaveMessage("xyz9999", "data"u8.ToArray(), salt: null,
-            destination: "myapp@N0CALL", sourceCallsign: "G7XYZ-3", additionalProperties: "{}");
+            destination: "myapp@N0CALL", sourceCallsign: "G7XYZ-3", additionalProperties: "{}", ttl: null);
 
         var client = await ConnectClient();
 

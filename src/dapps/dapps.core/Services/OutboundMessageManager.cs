@@ -24,6 +24,16 @@ public class OutboundMessageManager(
 
         foreach (var message in messages)
         {
+            var residualTtl = TtlMath.Residual(message.Ttl, message.CreatedAt, DateTime.UtcNow);
+            if (residualTtl is <= 0)
+            {
+                logger.LogWarning("Dropping message {0} for {1}: ttl expired ({2}s queued, original ttl={3}s)",
+                    message.Id, message.Destination,
+                    (int)(DateTime.UtcNow - message.CreatedAt).TotalSeconds, message.Ttl);
+                await database.DeleteMessage(message.Id);
+                continue;
+            }
+
             var neighbour = await ResolveNeighbour(message, neighbours);
             if (neighbour == null)
             {
@@ -51,7 +61,7 @@ public class OutboundMessageManager(
 
                 if (!await protocol.OfferMessageAsync(
                         message.Id, message.Salt, DappsMessage.MessageFormat.Plain,
-                        message.Destination, message.Payload.Length, stoppingToken))
+                        message.Destination, message.Payload.Length, stoppingToken, ttl: residualTtl))
                 {
                     logger.LogError("Message offer was not accepted for {0}", message.Id);
                     continue;
