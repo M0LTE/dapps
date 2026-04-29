@@ -253,60 +253,147 @@ Caution, may not align with current thinking.
 https://gist.github.com/M0LTE/be1fd071ca1867703d1f2d4c17fabca2
 
 
-## Installation
+## Getting started
 
-Plan is to go docker-first.
+You'll need:
 
-Rough steps:
+- A working linbpq instance you control (or another packet node speaking AGW + the linbpq Apps Interface).
+- A licensed callsign with an unused SSID for DAPPS to live under (e.g. `M0LTE-9`).
+- A Linux, macOS, or Windows host that can talk to BPQ — same machine is the simplest case.
 
-### Install docker engine on Debian / Raspberry Pi OS 64 bit (bookworm)
+DAPPS ships as a self-contained single-file binary; no .NET runtime install, no Docker required.
 
-```
-# install docker engine, use --dry-run to inspect
-curl -fsSL https://get.docker.com -o get-docker.sh
-sudo sh ./get-docker.sh
+### 1. Configure BPQ for DAPPS
 
-# run containers without root:
-sudo usermod -aG docker $USER
-newgrp docker
-docker run hello-world
+DAPPS sits behind BPQ as an external application:
 
-# fix up logging
-echo "{
-  \"log-driver\": \"local\",
-  \"log-opts\": {
-    \"max-size\": \"10m\"
-  }
-}" | sudo tee /etc/docker/daemon.json
-sudo systemctl restart docker.service
-```
+- BPQ accepts an inbound connect to a DAPPS-owned callsign and pipes the session to DAPPS over a TCP socket (the linbpq "Apps Interface").
+- DAPPS originates outbound connects through BPQ over AGW.
 
-then:
+Both directions need a few `bpq32.cfg` lines. Adjust the slot index and ports if you already have applications wired up.
 
-```
-mkdir dapps
-cd dapps
-echo "services:
-  dapps-core:
-    image: m0lte/dapps-core
-    restart: unless-stopped
-    ports:
-      - 11000:11000
-      - 8099:8080
-    volumes:
-      - ./dapps-data:/app/data
-    extra_hosts:
-      - host.docker.internal:host-gateway
-    environment:
-      - BPQ_HOST=host.docker.internal
-      - MQTT_HOST=mqtt
-      - MQTT_PORT=1833
-      - MQTT_USERNAME=
-      - MQTT_PASSWORD=
-" | tee docker-compose.yml
-docker compose up -d
+```ini
+; --- AGW emulator: needed for DAPPS outbound forwarding ---
+AGWPORT=8000
+AGWSESSIONS=20
+AGWMASK=1
+
+; --- Apps Interface: needed for DAPPS to receive inbound connects ---
+PORT
+ ID=Telnet
+ DRIVER=Telnet
+ CONFIG
+ TCPPORT=8010
+ HTTPPORT=8080
+ ; CMDPORT defines a list of TCP slots the Telnet driver can forward
+ ; sessions into. Slot 0 is reserved (sentinel); slot 1 here is DAPPS.
+ ; Keep the leading 0 even if you have no other apps -- it's the
+ ; "this slot is unconfigured" sentinel.
+ CMDPORT 0 11000
+ USER=test,test,M0LTE,,SYSOP
+ENDPORT
+
+; --- Wire the DAPPS callsign to the Apps Interface slot ---
+APPLICATIONS=DAPPS
+APPL1CALL=M0LTE-9
+APPL1ALIAS=DAPPS
+; "C 2 HOST 1" routes a connect via BPQ port 2 (Telnet) to CMDPORT slot 1.
+; TRANS = binary-transparent -- DAPPS payloads are arbitrary bytes, the
+; default line discipline would mangle them. S = on app disconnect,
+; return the user to the node prompt rather than dropping the session.
+APPLICATION 1,DAPPS,C 2 HOST 1 S TRANS
 ```
 
-then browse to http://your-node:8099/swagger and you should see an API. Dapps is up...
+Replace `M0LTE-9` with your DAPPS callsign and `M0LTE` with your sysop callsign. Restart linbpq for the changes to take effect.
 
-maybe one day it will have a UI
+If you're trying out two BPQs over AXIP-UDP for testing, see [`src/dapps/dapps.core.tests/Integration/TwoInstanceLinbpqFixture.cs`](src/dapps/dapps.core.tests/Integration/TwoInstanceLinbpqFixture.cs) for a worked example.
+
+### 2. Download the DAPPS binary
+
+Grab the latest release for your platform from <https://github.com/M0LTE/dapps/releases>:
+
+- `dapps-linux-x64` — typical desktop / VPS Linux
+- `dapps-linux-arm64` — Raspberry Pi 4 / 5 (64-bit Pi OS)
+- `dapps-osx-arm64` — Apple silicon macOS
+- `dapps-win-x64.exe` — Windows
+
+```sh
+# Example for an x86_64 Linux box:
+mkdir -p ~/dapps && cd ~/dapps
+curl -L -o dapps https://github.com/M0LTE/dapps/releases/latest/download/dapps-linux-x64
+chmod +x dapps
+```
+
+The binary writes its database (`dapps.db`) into the current working directory.
+
+### 3. Run it
+
+DAPPS reads its first-time configuration from environment variables; on subsequent starts the values come from `dapps.db` and env vars are ignored.
+
+```sh
+export DAPPS_CALLSIGN=M0LTE-9
+export DAPPS_NODE_HOST=127.0.0.1     # where BPQ is listening
+export DAPPS_AGW_PORT=8000           # BPQ AGWPORT
+export DAPPS_DEFAULT_BPQ_PORT=0      # 0-indexed BPQ port byte to use for outbound by default
+export DAPPS_MQTT_PORT=1883          # embedded MQTT broker port (for app subscribers)
+
+./dapps
+```
+
+DAPPS refuses to start with the placeholder `N0CALL` value — set `DAPPS_CALLSIGN` to a real callsign before the first run, or POST to `/Config` after it.
+
+You should see startup logs ending with something like:
+
+```
+Waiting for connection on port 0.0.0.0:11000
+MQTT broker listening on :1883
+Now listening on: http://localhost:5000
+```
+
+Browse to <http://localhost:5000/scalar> for the API explorer (Scalar) or <http://localhost:5000/swagger> for the OpenAPI page. Both surface the same REST endpoints (`/Config`, `/Neighbours`, `/AppApi/...`, `/Message/dorun`).
+
+To bind the HTTP API on a different host/port, set `ASPNETCORE_URLS` before launch — e.g. `ASPNETCORE_URLS=http://0.0.0.0:8080`. There is no auth on the REST surface yet (Phase A4), so don't expose it beyond loopback or trusted LAN until that lands.
+
+### 4. Add a neighbour
+
+Tell DAPPS where to forward messages destined for another node:
+
+```sh
+curl -X POST http://localhost:5000/Neighbours \
+     -H 'content-type: application/json' \
+     -d '{"callsign":"G7XYZ-9","bpqPort":0}'
+```
+
+`bpqPort` is the BPQ port byte (0-indexed) DAPPS should originate connects through. List with `GET /Neighbours`, remove with `DELETE /Neighbours/G7XYZ-9`.
+
+### 5. Verify the link
+
+From any BPQ node prompt that can route to your callsign:
+
+```
+C M0LTE-9
+```
+
+You should see `*** Connected to DAPPS` followed by the DAPPSv1 prompt:
+
+```
+DAPPSv1>
+```
+
+Type `info` for help, `q` to quit.
+
+## Troubleshooting
+
+- **`Callsign is not configured`** at startup → set `DAPPS_CALLSIGN` env var or POST `/Config` and restart.
+- **`Did not see DAPPSv1> prompt`** when forwarding → the remote DAPPS isn't reachable through BPQ. Check the neighbour's BPQ-side `APPLICATION` line and that it's running.
+- **Inbound `*** Connected to DAPPS` but nothing more** → likely BPQ is sending text-mode bytes; double-check the `TRANS` flag on the `APPLICATION` line.
+- **`AGW register ... failed`** in the logs → BPQ isn't accepting the registration. Check `AGWMASK=1` and that the AGW port is reachable from where DAPPS is running.
+- **Port byte indexing surprises** → AGW port indices are 0-based; BPQ port numbers in `bpq32.cfg` are 1-based. AGW port 0 = BPQ port 1.
+
+## Backups
+
+Back up `dapps.db` (the SQLite file in the working directory). It carries every queued message, neighbour entry, and config value.
+
+## Upgrades
+
+Replace the binary; restart. The schema auto-migrates: new columns are added to existing tables on next start, no manual steps required. Existing rows are preserved.
