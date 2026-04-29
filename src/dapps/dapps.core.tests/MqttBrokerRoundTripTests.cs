@@ -63,13 +63,14 @@ public sealed class MqttBrokerRoundTripTests : IAsyncLifetime
     [Fact]
     public async Task ClientPublishToOutTopic_PersistsMessageInDb()
     {
+        var ct = TestContext.Current.CancellationToken;
         var client = await ConnectClient();
 
         await client.PublishAsync(new MqttApplicationMessageBuilder()
             .WithTopic("dapps/out/myapp/N0DEST-1")
             .WithPayload("Hello world"u8.ToArray())
             .WithQualityOfServiceLevel(MQTTnet.Protocol.MqttQualityOfServiceLevel.AtLeastOnce)
-            .Build());
+            .Build(), ct);
 
         // Settle: broker dispatches publish on a worker thread.
         await Eventually(async () =>
@@ -85,12 +86,14 @@ public sealed class MqttBrokerRoundTripTests : IAsyncLifetime
         Encoding.UTF8.GetString(msg.Payload).Should().Be("Hello world");
         msg.Forwarded.Should().BeFalse();
 
-        await client.DisconnectAsync();
+        await client.DisconnectAsync(cancellationToken: ct);
     }
 
     [Fact]
     public async Task SubscribeToInTopic_ReplaysUnacknowledgedMessages()
     {
+        var ct = TestContext.Current.CancellationToken;
+
         // Pre-load a local-destined message into the DB, stamped with the
         // callsign of the node that delivered it.
         var payload = Encoding.UTF8.GetBytes("hi from another node");
@@ -106,20 +109,22 @@ public sealed class MqttBrokerRoundTripTests : IAsyncLifetime
             await Task.CompletedTask;
         };
 
-        await client.SubscribeAsync("dapps/in/myapp", MQTTnet.Protocol.MqttQualityOfServiceLevel.AtLeastOnce);
+        await client.SubscribeAsync("dapps/in/myapp", MQTTnet.Protocol.MqttQualityOfServiceLevel.AtLeastOnce, ct);
 
-        var msg = await received.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var msg = await received.Task.WaitAsync(TimeSpan.FromSeconds(5), ct);
         msg.Topic.Should().Be("dapps/in/myapp");
         msg.PayloadSegment.ToArray().Should().Equal(payload);
         msg.UserProperties.Single(p => p.Name == "dapps-id").Value.Should().Be("abc1234");
         msg.UserProperties.Single(p => p.Name == "dapps-source").Value.Should().Be("G7XYZ-3");
 
-        await client.DisconnectAsync();
+        await client.DisconnectAsync(cancellationToken: ct);
     }
 
     [Fact]
     public async Task ClientPublishToAckTopic_MarksMessageDelivered()
     {
+        var ct = TestContext.Current.CancellationToken;
+
         await database.SaveMessage("xyz9999", "data"u8.ToArray(), salt: null,
             destination: "myapp@N0CALL", sourceCallsign: "G7XYZ-3", additionalProperties: "{}");
 
@@ -129,7 +134,7 @@ public sealed class MqttBrokerRoundTripTests : IAsyncLifetime
             .WithTopic("dapps/ack/myapp")
             .WithPayload("xyz9999"u8.ToArray())
             .WithQualityOfServiceLevel(MQTTnet.Protocol.MqttQualityOfServiceLevel.AtLeastOnce)
-            .Build());
+            .Build(), ct);
 
         await Eventually(async () =>
         {
@@ -140,7 +145,7 @@ public sealed class MqttBrokerRoundTripTests : IAsyncLifetime
         var pending = await database.GetUnacknowledgedLocalMessagesForApp("myapp");
         pending.Should().BeEmpty();
 
-        await client.DisconnectAsync();
+        await client.DisconnectAsync(cancellationToken: ct);
     }
 
     private async Task<IMqttClient> ConnectClient()

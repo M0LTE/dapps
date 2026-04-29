@@ -11,6 +11,12 @@ concurrency:
   group: tests-${{ github.ref }}
   cancel-in-progress: true
 
+# Opt every JS-based action into Node.js 24. GitHub will force-default this
+# in June 2026; opting in now clears the deprecation warnings and verifies
+# our actions are Node 24 compatible.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -34,4 +40,6 @@ jobs:
         run: dotnet build src/dapps/dapps.sln --no-restore --configuration Release
 
       - name: Test (unit + integration)
-        run: dotnet test src/dapps/dapps.core.tests/dapps.core.tests.csproj --no-build --configuration Release --logger "console;verbosity=normal"
+        # Microsoft Testing Platform native runner — VSTest's --logger is
+        # ignored under MTP. MTP's default console output is fine.
+        run: dotnet test src/dapps/dapps.core.tests/dapps.core.tests.csproj --no-build --configuration Release

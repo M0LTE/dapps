@@ -25,7 +25,7 @@ public class AgwSessionStreamTests
         var stream = OverStream(ms);
         var buf = new byte[10];
 
-        var n = await stream.ReadAsync(buf);
+        var n = await stream.ReadAsync(buf, TestContext.Current.CancellationToken);
 
         n.Should().Be(3);
         buf.AsSpan(0, n).ToArray().Should().Equal(1, 2, 3);
@@ -42,11 +42,11 @@ public class AgwSessionStreamTests
         var stream = OverStream(ms);
 
         var first = new byte[10];
-        var nFirst = await stream.ReadAsync(first);
+        var nFirst = await stream.ReadAsync(first, TestContext.Current.CancellationToken);
         nFirst.Should().Be(3);
 
         var second = new byte[10];
-        var nSecond = await stream.ReadAsync(second);
+        var nSecond = await stream.ReadAsync(second, TestContext.Current.CancellationToken);
         nSecond.Should().Be(2);
         second.AsSpan(0, nSecond).ToArray().Should().Equal(4, 5);
     }
@@ -61,11 +61,11 @@ public class AgwSessionStreamTests
         var stream = OverStream(ms);
 
         var first = new byte[2];
-        (await stream.ReadAsync(first)).Should().Be(2);
+        (await stream.ReadAsync(first, TestContext.Current.CancellationToken)).Should().Be(2);
         first.Should().Equal(1, 2);
 
         var second = new byte[10];
-        var nSecond = await stream.ReadAsync(second);
+        var nSecond = await stream.ReadAsync(second, TestContext.Current.CancellationToken);
         nSecond.Should().Be(3);
         second.AsSpan(0, nSecond).ToArray().Should().Equal(3, 4, 5);
     }
@@ -80,8 +80,8 @@ public class AgwSessionStreamTests
         var stream = OverStream(ms);
         var buf = new byte[10];
 
-        (await stream.ReadAsync(buf)).Should().Be(0);
-        (await stream.ReadAsync(buf)).Should().Be(0); // sticky
+        (await stream.ReadAsync(buf, TestContext.Current.CancellationToken)).Should().Be(0);
+        (await stream.ReadAsync(buf, TestContext.Current.CancellationToken)).Should().Be(0); // sticky
     }
 
     [Fact]
@@ -96,7 +96,7 @@ public class AgwSessionStreamTests
         var stream = OverStream(ms);
         var buf = new byte[10];
 
-        var n = await stream.ReadAsync(buf);
+        var n = await stream.ReadAsync(buf, TestContext.Current.CancellationToken);
         n.Should().Be(1);
         buf[0].Should().Be(42);
     }
@@ -107,11 +107,11 @@ public class AgwSessionStreamTests
         var ms = new MemoryStream();
         var stream = OverStream(ms);
 
-        await stream.WriteAsync(new byte[] { 1, 2, 3 });
+        await stream.WriteAsync(new byte[] { 1, 2, 3 }, TestContext.Current.CancellationToken);
 
         ms.Position = 0;
         var framing = new AgwFrameTransport(ms);
-        var frame = await framing.ReadFrameAsync(CancellationToken.None);
+        var frame = await framing.ReadFrameAsync(TestContext.Current.CancellationToken);
 
         frame.Kind.Should().Be('D');
         frame.Port.Should().Be(0);
