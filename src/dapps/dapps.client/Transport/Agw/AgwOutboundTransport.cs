@@ -35,6 +35,22 @@ public sealed class AgwOutboundTransport(string host, int port, ILoggerFactory l
             var ns = tcp.GetStream();
             var framing = new AgwFrameTransport(ns);
 
+            // Register our local callsign first. Without this BPQ has no
+            // valid source for the SABM and emits frames with a blank src
+            // field — the remote ignores them and we time out with
+            // RETRYOUT. (linbpq's own AGW two-instance test does this for
+            // the same reason.)
+            logger.LogDebug("AGW: registering {local}", localCallsign);
+            await framing.WriteFrameAsync(
+                new AgwFrame(0, 'X', 0, localCallsign, "", []),
+                stoppingToken);
+            var registerReply = await framing.ReadFrameAsync(stoppingToken);
+            if (registerReply.Kind != 'X' || registerReply.Payload.Length != 1 || registerReply.Payload[0] != 0x01)
+            {
+                throw new IOException(
+                    $"AGW register {localCallsign} failed (kind '{registerReply.Kind}', payload [{string.Join(',', registerReply.Payload)}])");
+            }
+
             logger.LogInformation("AGW: requesting {local}->{remote} on port {p}", localCallsign, remoteCallsign, portByte);
             await framing.WriteFrameAsync(
                 new AgwFrame(portByte, 'C', 0xF0, localCallsign, remoteCallsign, []),
@@ -48,13 +64,26 @@ public sealed class AgwOutboundTransport(string host, int port, ILoggerFactory l
             {
                 var frame = await framing.ReadFrameAsync(stoppingToken);
 
-                if (frame.Kind == 'C'
-                    && string.Equals(frame.CallFrom, localCallsign, StringComparison.OrdinalIgnoreCase)
-                    && string.Equals(frame.CallTo, remoteCallsign, StringComparison.OrdinalIgnoreCase))
+                // BPQ's 'C' confirmation comes back with callfrom/callto
+                // swapped relative to the request — the remote (the one we
+                // dialed) is now the FROM and we're the TO. Accept either
+                // orientation defensively, since the spec is ambiguous and
+                // some clients don't swap.
+                if (frame.Kind == 'C')
                 {
-                    logger.LogInformation("AGW: connect confirmed");
-                    var sessionStream = new AgwSessionStream(framing, portByte, localCallsign, remoteCallsign, logger);
-                    return new AgwConnection(tcp, sessionStream);
+                    var matchesAsConfirm =
+                        string.Equals(frame.CallFrom, remoteCallsign, StringComparison.OrdinalIgnoreCase)
+                        && string.Equals(frame.CallTo, localCallsign, StringComparison.OrdinalIgnoreCase);
+                    var matchesAsEcho =
+                        string.Equals(frame.CallFrom, localCallsign, StringComparison.OrdinalIgnoreCase)
+                        && string.Equals(frame.CallTo, remoteCallsign, StringComparison.OrdinalIgnoreCase);
+
+                    if (matchesAsConfirm || matchesAsEcho)
+                    {
+                        logger.LogInformation("AGW: connect confirmed");
+                        var sessionStream = new AgwSessionStream(framing, portByte, localCallsign, remoteCallsign, logger);
+                        return new AgwConnection(tcp, sessionStream);
+                    }
                 }
 
                 if (frame.Kind == 'd')
