@@ -34,64 +34,76 @@ DAPPSv1>\n
 
 ### Offering a message
 
-To offer a message to a remote DAPPS instance, send the following as bytes:
+The fully-decorated form of an offer line is:
 
 ```
-ihave abcdeff len=11 fmt=p ts=12345678 dst=topicname@gb7aaa-4 ttl=1730070725 dst=queuename@gb7aaa-4 key=value chk=0f\n
+ihave abcdeff len=11 fmt=p s=12345678 dst=appname@gb7aaa-4 ttl=86400 key=value chk=6907\n
 ```
 
-where:
-- `abcdeff` is the SHA1 hash of the four bytes of the 64 bit integer timestamp, if any, concatenated with all of the payload bytes (i.e. `sha1(pppppppp..pppp)[..7]` or `sha1(ttttpppppppp..pppp)[..7]`), serving as a unique message id (inspired by git hashes)
-- `len=11` is the number of bytes in the payload, after decompression if applicable
-- `fmt=p` is `p` for when the payload is to be interpreted byte-for-byte, or `d` for Deflate algorithm compression
-- `ts=12345678` is an optional de-duplication salt, suggestion is the number of milliseconds after some epoch of your choice
-- `dst=topicname@gb7aaa-4` is routing information- in this case the ultimate destination for this message is pub/sub topic `topicname` hosted at remote DAPPS instance `gb7aaa-4`
-- `ttl=1730070725` is an optional TTL for the message, in seconds since epoch. DAPPS will make no attempt to deliver a message past its TTL.
-- `dst=queuename@gb7aaa-4` is the ultimate destination of this message. In this example, `gb7aaa-4` is the call + ssid of the node and DAPPS instance which the DAPPS system will attempt to deliver this message to, and `queuename` relates to the remote DAPPS-using application.
-- `key=value` is zero or more key/value pairs, akin to arbitrary headers. These should be used sparingly and not in place of a message payload.
-- `chk=0f` is an optional checksum, calculated as below, validated at the receiving side. For ease, this should be the last key-value pair.
-- `\n` is a newline character, not the string literal `\n`
+The minimum hand-craftable form is:
+
+```
+ihave 7b502c3 len=11 dst=appname@gb7aaa-4\n
+```
+
+— message id, payload length, destination, and nothing else. The id is the first 7 hex chars of the SHA1 of the payload bytes (no `s=` salt means no prefix). For the literal payload `Hello world` (11 bytes, no trailing newline):
+
+```
+$ printf 'Hello world' | sha1sum
+7b502c3a1f48c8609ae212cdfb639dee39673f5e  -
+```
+
+The first 7 hex characters → id `7b502c3`. With `s=N` set, you'd instead hash the 8-byte little-endian representation of `s` followed by the payload, e.g. `printf '<8 raw bytes><payload>' | sha1sum` — a one-liner in any language with a binary-pack helper but not pleasant by hand. Computing the id is the only step a hand-typer can't avoid; every other field has a default and can be dropped.
+
+The cost of dropping fields is operational peril rather than a protocol error: no salt means identical-content messages dedup; no `ttl` lets a forwarder pick its own default; no `chk` leaves you trusting the link layer's own corruption detection; no `fmt`/`clen` means plain payload only.
+
+**Required:** the message id (`abcdeff` here), `len`, and `dst`. Plus `clen` when `fmt=d`. Everything else is optional.
+
+Where:
+
+- `abcdeff` (**required**) is the SHA1 hash of the (decompressed) payload bytes, optionally prefixed by the 8-byte little-endian representation of `s` when supplied: `sha1(payload)[:7]` or `sha1(s_bytes_le ++ payload)[:7]`. Truncated to the first 7 hex characters this serves as a unique message id (inspired by git hashes).
+- `len=11` (**required**) is the size of the **decompressed** payload in bytes.
+- `fmt=p` (optional, default `p` if absent) declares the payload bytes on the wire are the literal payload (**p**lain). `fmt=d` declares them Deflate-compressed, in which case `clen=N` MUST also be supplied, giving the number of **c**ompressed bytes the receiver reads from the wire before decompressing. `clen` MUST NOT appear when `fmt` is `p` or absent.
+- `s=12345678` (optional) is a 64-bit signed integer salt (decimal on the wire) folded into the message ID hash. Its job is to disambiguate identical-payload messages so they get distinct IDs (otherwise two senders shouting "hello" generate the same message ID and dedup as one). Sender's choice of meaning — a unix-epoch timestamp, a counter, anything sufficiently distinct.
+- `dst=appname@gb7aaa-4` (**required**) is the routing destination: `gb7aaa-4` is the call+SSID of the DAPPS instance the message is bound for, and `appname` is the application / topic / queue name on that instance.
+- `ttl=86400` (optional) is the residual lifetime in seconds. The sender sets it to "how many more seconds should this still be valid for" at the moment of sending; each forwarding DAPPS instance decrements `ttl` by the time the message spent in its queue before re-sending. Any node MUST drop a message whose `ttl` reaches zero or below. IP-TTL semantics, but in seconds rather than hops.
+- `key=value` (optional) is zero or more arbitrary headers. Use sparingly and not in place of payload. Keys and values MUST NOT contain space, `=`, or newline.
+- `chk=6907` (optional, rarely needed on AX.25) is a 4-character hex CRC-16/CCITT-FALSE checksum covering the `ihave` line bytes only — it does not protect the payload that follows after `data` (the message id does that). See below for the rationale and when it's worth using. When supplied it MUST be the last key-value pair; it is not a terminator.
+- `\n` is a newline byte (0x0A), not the literal string `\n`.
 
 #### "ihave" command checksum
 
-Since packet doesn't guarantee corruption-free transmission, and it's pretty important that the `ihave` command is received
-free of errors, it makes sense to be able to provide a checksum. This one is calculated as follows:
+`chk` is **optional and, on packet radio, rarely worth bothering with** — every AX.25 frame already carries a 16-bit FCS at the link layer, so corruption that would show up at the DAPPS layer has already been caught and retransmitted underneath. Most senders should omit it.
 
-`sha1([the ihave command, with chk=nn removed, and trimmed of whitespace])`
+The field exists at all for two reasons:
 
-The first two characters of the hex representation of the resulting SHA1 checksum should match the value of `chk`.
+1. DAPPS isn't strictly tied to AX.25 — it can run over transports without strong line integrity, and `chk` is the only protection on those.
+2. The message id (`sha1(payload)`) covers the payload but does **not** cover `dst`, `ttl`, or `key=value` headers — those bytes never enter the hash. On a transport without its own line CRC, a bit-flip in `dst=` would silently mis-route a message whose id check still passes. `chk` is what closes that gap.
+
+So: keep `chk` in your back pocket for non-AX.25 transports or belt-and-braces deployments; default to omitting it on a packet-radio link. Manual / interactive / debugging use omits it entirely — CRC-16 isn't computable by hand. **If you're not using `chk`, skip the rest of this section** — the line still ends with `\n` either way.
+
+When `chk` *is* supplied, compute and validate it as follows:
+
+1. `chk=NNNN` MUST be the last key-value pair on the line, immediately followed by `\n`. Receivers MUST reject any `ihave` line where `chk=` appears in any non-final position.
+2. Take the line bytes from the first byte of `ihave ` up to *but not including* the leading space before `chk=NNNN` — i.e. drop the trailing ` chk=NNNN\n` (one space, the `chk=NNNN` token, and the newline). Compute CRC-16/CCITT-FALSE (polynomial `0x1021`, initial value `0xFFFF`, no reflection, final XOR `0x0000`) over those bytes. The lowercase 4-character hex rendering of the resulting 16-bit value is `NNNN`.
+
+Pinning `chk` to the last position when present lets both sides do this with a single `lastIndexOf(" chk=")` and a substring — no field re-normalisation, no awareness of how the rest of the KVs were spaced.
 
 ##### Example
 
-To validate the checksum `a1` for this `ihave` command sent over the air:
+For the offer line:
 
 ```
-ihave abcdeff len=11 fmt=p ts=12345678 dst=topicname@gb7aaa-4 ttl=1730070725 dst=queuename@gb7aaa-4 key=value chk=a1\n
+ihave abcdeff len=11 fmt=p s=12345678 dst=appname@gb7aaa-4 ttl=86400 key=value chk=6907\n
 ```
 
-we remove `chk=a1`:
+The bytes covered (everything before ` chk=6907\n`) are:
 
 ```
-ihave abcdeff len=11 fmt=p ts=12345678 dst=topicname@gb7aaa-4 ttl=1730070725 dst=queuename@gb7aaa-4 key=value\n
+ihave abcdeff len=11 fmt=p s=12345678 dst=appname@gb7aaa-4 ttl=86400 key=value
 ```
 
-we trim off the line ending:
-
-```
-ihave abcdeff len=11 fmt=p ts=12345678 dst=topicname@gb7aaa-4 ttl=1730070725 dst=queuename@gb7aaa-4 key=value
-```
-
-and we calculate its SHA1 hash:
-
-```
-a1732af9a48b161f30299cbff93a41fdb3037e18
-```
-
-and the sum is the first two characters of the hash:
-
-`a1` - which matches that sent over the air, i.e. the command is valid.
-
-If `chk=nn` appears somewhere other than at the end of the line, the checksum should be calculated on a string which takes that into account, i.e. when `chk=nn` is removed from the string, all of the other key-value pairs in the string should be left separated by just a single space each (in other words, doing just a `string.replace("chk=nn", "")` is not good enough).
+Their CRC-16/CCITT-FALSE value is `0x6907`. Rendered as 4 lowercase hex characters that's `6907` — matching the value sent over the air, so the line is intact.
 
 ### Sending a message
 
@@ -123,7 +135,7 @@ If the payload bytes received by the remote end did not match the id hash, it wi
 bad abcdeff\n
 ```
 
-The remote DAPPS instance will not respond at all until it has received the specified number of payload bytes, at which point it will respond immediately with `ack` or `bad`- i.e. there is no message terminator, and the `len` parameter is compulsory.
+The remote DAPPS instance will not respond at all until it has received the specified number of payload bytes (`len` bytes when `fmt=p`, `clen` bytes when `fmt=d`), at which point it will respond immediately with `ack` or `bad` — there is no message terminator. The hash check that decides between `ack` and `bad` is performed against the **decompressed** bytes.
 
 If the remote instance does not want a message, it will reply to `send` with a message like `no abcdeff\n`. 
 
@@ -138,6 +150,14 @@ rev\n
 ### Multiple messages
 
 `ihave` and `send` may be sent multiple times in a session. `send` may be followed by multiple message ids, space separated, to signify that the remote server wants to accept multiple messages which have been offered.
+
+### Timeouts
+
+Both sides SHOULD apply an inactivity timeout while waiting for an expected reply — payload bytes after `data <id>\n` (receiver side), or `send` / `no` / `ack` / `bad` (sender side) — and close the session if exceeded. No specific value is mandated; AX.25's T3 (~3 minutes) is a reasonable starting point on a packet-radio link.
+
+On timeout, just close the session. No error frame is needed: a stalled peer can't be relied upon to receive one, and the content-addressed message id makes retry idempotent — when the sender reconnects later the receiver dedups by id, so a timed-out exchange can be safely re-attempted from scratch.
+
+For DAPPS-over-AX.25 the link layer's own T3 inactivity timer largely handles this case for free, but a DAPPS-level timeout is still useful for non-AX.25 transports and for software-side stalls where the underlying link is healthy.
 
 ### Discovering neighbours and exchanging routes
 
