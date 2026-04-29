@@ -49,14 +49,13 @@ Outbound: `Dappsv1SessionBackhaul` wraps `IDappsOutboundTransport` + `DappsProto
 
 `BackhaulMessage(Id, Destination, Salt, Ttl, Payload, Headers?)` is the bearer-neutral unit. Carries everything DAPPS callers need to forward or deliver; nothing bearer-specific. Fragmentation/reassembly (Phase F2) will sit between this unit and the bearer adapter, not at this layer.
 
-### A0.4. MeshCore as the forcing function
+### A0.4. Datagram bearer as the forcing function *(UDP stand-in done; MeshCore deferred)*
 
-Use MeshCore as the test for whether the seam is real:
+The seam needed a non-stream bearer to validate the architecture before MeshCore lands. Implemented a UDP datagram backhaul (`UdpDatagramBackhaul` + `UdpDatagramListener`) plus a bearer-agnostic `Packetiser` and `BackhaulMessageCodec` in `dapps.client/Backhaul/Datagram/`. End-to-end tests on loopback exercise both single-fragment and multi-fragment messages with an artificially low MTU (64 bytes), proving the seam supports a fire-and-forget datagram bearer with DAPPS-owned fragmentation.
 
-- **Companion-over-USB** should be the first alternate bearer because it offers the quickest route to a working prototype.
-- **KISS-over-USB** should be planned as a later backend swap carrying the same DAPPS backhaul units.
+`IDappsBackhaul.CanHandle(BackhaulRoute)` and per-route bearer hints (`BackhaulRoute.UdpEndpoint`, `DbNeighbour.UdpEndpoint`) let the OMM dispatch to the right bearer per neighbour without leaking bearer-specific code into queue/router logic.
 
-If a future MeshCore backend can be added without changing DAPPS callers, the seam is in the right place.
+MeshCore-specific work (Companion-over-USB framing, KISS framing, neighbour discovery on a real mesh) is the next milestone here. The packetiser and codec carry over; only the wire-emit + wire-ingest layer is new.
 
 ## Phase A — make forwarding actually forward
 
@@ -326,7 +325,7 @@ Roughly:
 4. **A4** (per-app auth) — needed before anyone with a publicly-reachable node can run it.
 5. **D1 + D2** (web UI inspection + exercise) — turns "running" into "comfortable to run".
 6. **B1–B5** (beacon discovery + routing evolution, including MeshCore-inspired exploration) — graduates from manual neighbour config to a real network.
-7. **A0.4** (first alternate bearer planning/implementation, likely MeshCore Companion) when the seam is ready.
+7. **A0.4** — UDP datagram stand-in *done*; first real alternate bearer (likely MeshCore Companion) when the seam is ready.
 8. **E1–E5** (developer guide + sample apps + Python ref impl) — unlocks third-party app development.
 9. **A3, C3, D3, D4, F1–F4** in parallel as polish.
 10. **G** when there's a community to govern.

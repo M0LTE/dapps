@@ -15,9 +15,10 @@ public class OutboundMessageManager(
     Database database,
     ILoggerFactory loggerFactory,
     IOptionsMonitor<SystemOptions> options,
-    IDappsBackhaul backhaul)
+    IEnumerable<IDappsBackhaul> backhauls)
 {
     private readonly ILogger logger = loggerFactory.CreateLogger<OutboundMessageManager>();
+    private readonly IReadOnlyList<IDappsBackhaul> backhauls = backhauls.ToList();
 
     public async Task DoRun(CancellationToken stoppingToken = default)
     {
@@ -56,18 +57,28 @@ public class OutboundMessageManager(
 
             var route = new BackhaulRoute(
                 Callsign: neighbour.Callsign,
-                BpqPort: neighbour.BpqPort ?? optionsValue.DefaultBpqPort);
+                BpqPort: neighbour.BpqPort ?? optionsValue.DefaultBpqPort,
+                UdpEndpoint: neighbour.UdpEndpoint);
+
+            var backhaul = this.backhauls.FirstOrDefault(b => b.CanHandle(route));
+            if (backhaul is null)
+            {
+                logger.LogError(
+                    "No backhaul accepts route to {0} (BpqPort={1}, UdpEndpoint={2}). Skipping {3}.",
+                    neighbour.Callsign, neighbour.BpqPort, neighbour.UdpEndpoint, message.Id);
+                continue;
+            }
 
             var result = await backhaul.SendAsync(bm, route, optionsValue.Callsign, stoppingToken);
             if (result.Accepted)
             {
-                logger.LogInformation("Remote end accepted message {0}", message.Id);
+                logger.LogInformation("Remote end accepted message {0} (via {1})", message.Id, backhaul.GetType().Name);
                 await database.MarkMessageAsForwarded(message.Id);
             }
             else
             {
-                logger.LogError("Failed to forward message {0} to {1}: {2}",
-                    message.Id, neighbour.Callsign, result.Error);
+                logger.LogError("Failed to forward message {0} to {1} via {2}: {3}",
+                    message.Id, neighbour.Callsign, backhaul.GetType().Name, result.Error);
             }
         }
     }

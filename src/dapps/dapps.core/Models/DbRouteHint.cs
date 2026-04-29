@@ -25,4 +25,12 @@ public class DbNeighbour
     /// SystemOptions.DefaultBpqPort.
     /// </summary>
     public int? BpqPort { get; set; }
+
+    /// <summary>
+    /// Optional UDP endpoint (<c>host:port</c>) for the datagram
+    /// backhaul (Plan A0.4 stand-in for MeshCore-style bearers). When
+    /// set, the UDP backhaul handles forwarding to this neighbour and
+    /// the AGW path is not used. Null = use AGW.
+    /// </summary>
+    public string? UdpEndpoint { get; set; }
 }

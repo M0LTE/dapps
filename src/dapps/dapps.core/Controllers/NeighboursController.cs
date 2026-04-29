@@ -20,7 +20,7 @@ public class NeighboursController(Database database) : ControllerBase
     public async Task<IEnumerable<NeighbourModel>> List()
     {
         var rows = await database.GetNeighbours();
-        return rows.Select(n => new NeighbourModel(n.Callsign, n.BpqPort));
+        return rows.Select(n => new NeighbourModel(n.Callsign, n.BpqPort, n.UdpEndpoint));
     }
 
     [HttpPost]
@@ -30,7 +30,10 @@ public class NeighboursController(Database database) : ControllerBase
         {
             return BadRequest("Callsign is required");
         }
-        await database.UpsertNeighbour(neighbour.Callsign.Trim().ToUpperInvariant(), neighbour.BpqPort);
+        await database.UpsertNeighbour(
+            neighbour.Callsign.Trim().ToUpperInvariant(),
+            neighbour.BpqPort,
+            string.IsNullOrWhiteSpace(neighbour.UdpEndpoint) ? null : neighbour.UdpEndpoint.Trim());
         return NoContent();
     }
 
@@ -42,4 +45,10 @@ public class NeighboursController(Database database) : ControllerBase
     }
 }
 
-public sealed record NeighbourModel(string Callsign, int? BpqPort);
+/// <summary>
+/// Wire shape for /Neighbours. <see cref="UdpEndpoint"/> ("host:port") is
+/// set when this neighbour is reachable over the UDP datagram backhaul;
+/// null routes via BPQ/AGW. <see cref="BpqPort"/> is the AGW port byte
+/// (0-indexed) when AGW-routed; null falls back to DefaultBpqPort.
+/// </summary>
+public sealed record NeighbourModel(string Callsign, int? BpqPort, string? UdpEndpoint = null);
