@@ -1,6 +1,6 @@
 using System.Net.Sockets;
 using dapps.client.Transport.Agw;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 
 namespace dapps.core.tests.Integration;

@@ -1,7 +1,7 @@
 using System.Buffers.Binary;
 using System.Text;
 using dapps.client.Transport.Agw;
-using FluentAssertions;
+using AwesomeAssertions;
 
 namespace dapps.core.tests;
 

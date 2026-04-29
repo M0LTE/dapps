@@ -22,7 +22,10 @@
     <!-- Testing — xunit.v3 + Microsoft Testing Platform native runner.
          Replaces xunit + xunit.runner.visualstudio + Microsoft.NET.Test.Sdk. -->
     <PackageVersion Include="xunit.v3" Version="3.2.2" />
-    <PackageVersion Include="FluentAssertions" Version="8.9.0" />
+    <!-- AwesomeAssertions is a MIT-licensed community fork of FluentAssertions
+         (FA 8.x switched to a paid Xceed licence; AA continues the MIT
+         lineage). API-compatible drop-in for FA. -->
+    <PackageVersion Include="AwesomeAssertions" Version="9.4.0" />
   </ItemGroup>
 
 </Project>

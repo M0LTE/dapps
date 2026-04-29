@@ -266,14 +266,7 @@ Probably also worth a public conversation about whether DAPPS sits under OARC (t
 
 ## Cross-cutting: licensing housekeeping
 
-Just landed: bumped to FluentAssertions 8.x, which switched to Xceed Software's licence (paid for commercial use; community for OSS). For an open-source project this is borderline acceptable. Worth a deliberate decision soon:
-
-- Stay on FluentAssertions 8.x and accept the licence.
-- Downgrade to FluentAssertions 7.x (last MIT release).
-- Switch to AwesomeAssertions (community fork of FA, MIT, drop-in API-compatible).
-- Switch to Shouldly or another assertion library entirely.
-
-No urgent action; flagging so a future contributor doesn't accidentally make the wrong call by inertia.
+Resolved during the toolchain refresh: tests use **AwesomeAssertions** (MIT-licensed community fork of FluentAssertions, drop-in API-compatible). FluentAssertions 8.x's switch to a paid Xceed licence isn't a concern. No further action.
 
 ## Suggested ordering
 

@@ -3,7 +3,7 @@ using System.Net.Sockets;
 using System.Text;
 using dapps.core.Models;
 using dapps.core.Services;
-using FluentAssertions;
+using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using MQTTnet;

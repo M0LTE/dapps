@@ -1,5 +1,5 @@
 using dapps.core.Services;
-using FluentAssertions;
+using AwesomeAssertions;
 
 namespace dapps.core.tests;
 

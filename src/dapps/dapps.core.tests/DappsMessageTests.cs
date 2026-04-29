@@ -1,6 +1,6 @@
 using System.Text;
 using dapps.client;
-using FluentAssertions;
+using AwesomeAssertions;
 
 namespace dapps.core.tests;
 
