@@ -1,0 +1,107 @@
+name: release
+
+# Builds self-contained single-file binaries of dapps.core for the
+# release targets we support, and publishes them as a GitHub Release on
+# tag push. Operators download a single executable for their platform —
+# no .NET runtime install required, no Docker required.
+#
+# Trigger model:
+#   - tag push matching `v*.*.*`  → build + upload to a Release
+#   - workflow_dispatch          → build the matrix, upload as artifacts only
+#                                  (manual smoke test before tagging)
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write  # needed to create the GitHub Release on tag push
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: linux-x64
+            os: ubuntu-latest
+            ext: ''
+          - rid: linux-arm64
+            os: ubuntu-24.04-arm
+            ext: ''
+          - rid: win-x64
+            os: windows-latest
+            ext: '.exe'
+          - rid: osx-arm64
+            os: macos-latest
+            ext: ''
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Publish self-contained single file
+        # PublishSingleFile bundles managed assemblies; the extra
+        # IncludeNativeLibrariesForSelfExtract flag pulls native deps
+        # (e.g. SQLite's libe_sqlite3.so) into the same exe so the
+        # operator drops one file on a server. Trimming is left off:
+        # ASP.NET Core + DI + JSON have enough reflection that trimming
+        # tends to break startup in subtle ways. Binary size is ~100MB
+        # — acceptable cost for "no runtime install needed".
+        shell: bash
+        run: |
+          dotnet publish src/dapps/dapps.core/dapps.core.csproj \
+            --configuration Release \
+            --runtime ${{ matrix.rid }} \
+            --self-contained true \
+            -p:PublishSingleFile=true \
+            -p:IncludeNativeLibrariesForSelfExtract=true \
+            -p:DebugType=embedded \
+            --output publish
+
+      - name: Stage release artifact
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp "publish/dapps.core${{ matrix.ext }}" "dist/dapps-${{ matrix.rid }}${{ matrix.ext }}"
+          # Sanity check: file must exist and be non-empty.
+          test -s "dist/dapps-${{ matrix.rid }}${{ matrix.ext }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dapps-${{ matrix.rid }}
+          path: dist/dapps-${{ matrix.rid }}${{ matrix.ext }}
+          if-no-files-found: error
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes \
+            dist/*
