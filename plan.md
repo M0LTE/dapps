@@ -25,6 +25,7 @@ What's missing to call this complete is the parts that turn a single-node demo i
 - when looking at long distance routing what about looking into the routing implementation in Meshcore?
 - what about using Meshcore as a transport?
 - I think we should look at shipping an actual usable app, ideally an actual phone app, maybe a messenger app. Or maybe a long form mail app so as not to conflict with whatsapp.
+- RHP (v2?) support
 
 ## Open tasks (issues filed)
 
