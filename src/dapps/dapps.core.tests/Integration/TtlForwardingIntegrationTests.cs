@@ -46,10 +46,10 @@ public class TtlForwardingIntegrationTests(TwoInstanceLinbpqFixture fixture) : I
             c.CreateTable<DbMessage>();
             c.CreateTable<DbNeighbour>();
             c.CreateTable<DbRouteHint>();
-            // Route messages destined for N0BBB to the N0BBB-9 neighbour
-            // on the AXIP carrier port.
+            // Adding the neighbour is enough — the resolver matches its
+            // base callsign against the destination's @-suffix, no
+            // separate route hint required (A2).
             c.Insert(new DbNeighbour { Callsign = fixture.ApplCallB, BpqPort = fixture.AxipPortIndex });
-            c.Insert(new DbRouteHint { Destination = fixture.CallsignB, NextHop = fixture.ApplCallB });
         }
 
         var optionsMonitor = new TestOptionsMonitor<SystemOptions>(new SystemOptions

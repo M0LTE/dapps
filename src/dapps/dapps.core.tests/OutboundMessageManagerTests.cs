@@ -41,10 +41,9 @@ public sealed class OutboundMessageManagerTests : IAsyncLifetime
             c.CreateTable<DbMessage>();
             c.CreateTable<DbNeighbour>();
             c.CreateTable<DbRouteHint>();
-            // Pre-seed a neighbour and a route hint so ResolveNeighbour
-            // returns something for messages destined for app@N0DEST.
+            // A neighbour entry alone is enough to route messages to
+            // app@N0DEST (post-A2 resolver matches base callsigns).
             c.Insert(new DbNeighbour { Callsign = "N0DEST", BpqPort = 0 });
-            c.Insert(new DbRouteHint { Destination = "N0DEST", NextHop = "N0DEST" });
         }
 
         var optionsMonitor = new TestOptionsMonitor<SystemOptions>(new SystemOptions
@@ -121,6 +120,53 @@ public sealed class OutboundMessageManagerTests : IAsyncLifetime
         transport.ConnectCalls.Should().Be(0);
         using var c = DbInfo.GetConnection();
         c.Find<DbMessage>("ontime1").Should().BeNull();
+    }
+
+    [Fact]
+    public async Task DoRun_DestinationSsidDiffersFromNeighbourSsid_StillRoutesViaBaseCallsignMatch()
+    {
+        // Default fixture has a neighbour with callsign "N0DEST" (no SSID).
+        // A message addressed to "app@N0DEST-7" should still match it: SSIDs
+        // describe links, the neighbour entry describes a peer DAPPS instance
+        // and is reachable on whichever SSID the row recorded.
+        using (var c = DbInfo.GetConnection())
+        {
+            c.Insert(new DbMessage
+            {
+                Id = "ssid001",
+                Payload = "x"u8.ToArray(),
+                Salt = 1L,
+                Destination = "app@N0DEST-7",
+                SourceCallsign = "N0CALL",
+                AdditionalProperties = "{}",
+            });
+        }
+        transport.ScriptHappyPath(messageId: "ssid001");
+
+        await manager.DoRun(TestContext.Current.CancellationToken);
+
+        transport.ConnectCalls.Should().Be(1);
+        transport.OfferLineWritten.Should().NotBeNull();
+        transport.OfferLineWritten!.Should().Contain("dst=app@N0DEST-7");
+    }
+
+    [Fact]
+    public async Task DoRun_NoMatchingNeighbour_LeavesMessageUnforwarded()
+    {
+        InsertMessage(id: "noroute", ttl: null, createdAt: DateTime.UtcNow);
+        // Override default destination by inserting a row destined elsewhere.
+        using (var c = DbInfo.GetConnection())
+        {
+            c.Execute("update messages set destination=? where id=?", "app@N0OTHER", "noroute");
+        }
+
+        await manager.DoRun(TestContext.Current.CancellationToken);
+
+        transport.ConnectCalls.Should().Be(0);
+        using var conn = DbInfo.GetConnection();
+        var row = conn.Find<DbMessage>("noroute");
+        row.Should().NotBeNull();
+        row!.Forwarded.Should().BeFalse("no neighbour matched, message should sit in queue until ttl expires");
     }
 
     [Fact]

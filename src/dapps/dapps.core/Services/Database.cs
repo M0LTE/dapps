@@ -185,6 +185,38 @@ public class Database(ILogger<Database> logger, IOptionsMonitor<SystemOptions> o
         return await DbInfo.GetAsyncConnection().QueryAsync<DbNeighbour>("select * from neighbours");
     }
 
+    /// <summary>
+    /// Insert a neighbour, or update its <c>BpqPort</c> if one already
+    /// exists for the same callsign. Idempotent: callers can re-POST the
+    /// same neighbour without checking for prior existence.
+    /// </summary>
+    internal async Task UpsertNeighbour(string callsign, int? bpqPort)
+    {
+        var connection = DbInfo.GetAsyncConnection();
+        var existing = await connection.FindWithQueryAsync<DbNeighbour>(
+            "select * from neighbours where callsign=?", callsign);
+        if (existing is null)
+        {
+            await connection.InsertAsync(new DbNeighbour { Callsign = callsign, BpqPort = bpqPort });
+        }
+        else
+        {
+            existing.BpqPort = bpqPort;
+            await connection.UpdateAsync(existing);
+        }
+    }
+
+    /// <summary>
+    /// Remove a neighbour by callsign. Returns true if a row was deleted,
+    /// false if no neighbour existed with that callsign.
+    /// </summary>
+    internal async Task<bool> RemoveNeighbour(string callsign)
+    {
+        var deleted = await DbInfo.GetAsyncConnection().ExecuteAsync(
+            "delete from neighbours where callsign=?", callsign);
+        return deleted > 0;
+    }
+
     internal async Task SaveSystemOptions(SystemOptions systemOptions)
     {
         var connection = DbInfo.GetAsyncConnection();
