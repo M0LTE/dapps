@@ -27,4 +27,7 @@ public class SystemOptions
 
     /// <summary>This DAPPS instance's local callsign + SSID, used as `callfrom` on outbound AGW connects.</summary>
     public string Callsign { get; set; } = "";
+
+    /// <summary>TCP port the embedded MQTT broker listens on for app-interface clients.</summary>
+    public int MqttPort { get; set; }
 }

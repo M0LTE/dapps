@@ -1,11 +1,18 @@
 ﻿using dapps.client;
+using dapps.core.Models;
+using Microsoft.Extensions.Options;
 using System.IO.Compression;
 using System.Net.Sockets;
 using System.Text;
 
 namespace dapps.core.Services;
 
-public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory loggerFactory, Database database)
+public class InboundConnectionHandler(
+    TcpClient tcpClient,
+    ILoggerFactory loggerFactory,
+    Database database,
+    MqttBrokerService mqtt,
+    IOptionsMonitor<SystemOptions> options)
 {
     private readonly ILogger logger = loggerFactory.CreateLogger<InboundConnectionHandler>();
 
@@ -14,6 +21,11 @@ public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory logger
     // underlying link layer would on its own.
     private static readonly TimeSpan InactivityTimeout = TimeSpan.FromMinutes(3);
 
+    /// <summary>The callsign of the connecting station, sent by BPQ as the
+    /// first line of the TCP stream. Captured in <see cref="Handle"/> and
+    /// stamped onto every message saved during this connection.</summary>
+    private string sourceCallsign = "";
+
     internal async Task Handle(CancellationToken stoppingToken)
     {
         try
@@ -21,17 +33,17 @@ public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory logger
             logger.LogInformation("Got connection from {0}, waiting for node to send callsign..", tcpClient.Client.RemoteEndPoint!.ToString());
             var stream = tcpClient.GetStream();
 
-            string callsign;
             try
             {
-                callsign = await Extensions.WithInactivityTimeout(t => stream.ReadLine(t), InactivityTimeout, stoppingToken);
+                sourceCallsign = (await Extensions.WithInactivityTimeout(
+                    t => stream.ReadLine(t), InactivityTimeout, stoppingToken)).Trim();
             }
             catch (OperationCanceledException) when (!stoppingToken.IsCancellationRequested)
             {
                 logger.LogInformation("Inactivity timeout waiting for callsign, closing connection");
                 return;
             }
-            logger.LogInformation("Connection is from callsign {0}", callsign);
+            logger.LogInformation("Connection is from callsign {0}", sourceCallsign);
 
             await stream.WriteAsync(Encoding.UTF8.GetBytes("DAPPSv1>\n"));
             await stream.FlushAsync();
@@ -241,9 +253,27 @@ public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory logger
         if (computedId == id)
         {
             logger.LogInformation("Hash matches, saving and acknowledging message {0}", id);
-            await database.SaveMessage(id, buffer, offer.Salt, offer.Destination, offer.AdditionalProperties);
+            await database.SaveMessage(id, buffer, offer.Salt, offer.Destination, sourceCallsign, offer.AdditionalProperties);
             await database.DeleteOffer(id);
             await stream.WriteAsync(Encoding.UTF8.GetBytes("ack " + id + "\n"));
+
+            // If the message is destined for an app on this node, push it to
+            // the MQTT broker for any connected subscriber. The DB row stays
+            // until explicit ack from the app, so disconnected subscribers
+            // catch up via replay-on-subscribe.
+            if (DestinationParser.IsLocal(offer.Destination, options.CurrentValue.Callsign))
+            {
+                var dbMessage = new DbMessage
+                {
+                    Id = id,
+                    Payload = buffer,
+                    Salt = offer.Salt,
+                    Destination = offer.Destination,
+                    SourceCallsign = sourceCallsign,
+                    AdditionalProperties = offer.AdditionalProperties,
+                };
+                await mqtt.InjectInboundMessage(dbMessage);
+            }
         }
         else
         {

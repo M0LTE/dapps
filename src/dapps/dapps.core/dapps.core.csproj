@@ -8,6 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="MQTTnet" Version="4.3.7.1207" />
     <PackageReference Include="Scalar.AspNetCore" Version="1.2.45" />
     <PackageReference Include="sqlite-net-pcl" Version="1.9.172" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="7.1.0" />
@@ -15,6 +16,10 @@
 
   <ItemGroup>
     <ProjectReference Include="..\dapps.client\dapps.client.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="dapps.core.tests" />
   </ItemGroup>
 
 </Project>

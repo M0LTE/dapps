@@ -24,6 +24,7 @@ public class MessageController(Database database, ILogger<MessageController> log
             dappsMessage.Payload,
             dappsMessage.Salt,
             dappsMessage.Destination,
+            sourceCallsign: "",
             "{}");
         return Ok();
     }

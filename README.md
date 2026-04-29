@@ -173,9 +173,43 @@ I see a hand-wavey model along the lines of:
 
 ## Application interface
 
-The application interface is likely to be something like MQTT, with DAPPS holding on to messages until it knows it has delivered them to integrated applications. Collaboration very welcome.
+DAPPS exposes two parallel surfaces for local applications: an embedded MQTT broker (real-time pub/sub) and a REST API (POST + poll). Both share the same SQLite-backed queue and the same ack contract — pick whichever fits your app.
 
-Details tbc.
+### MQTT
+
+Embedded MQTTnet broker, listening on `MqttPort` (default 1883). Connect with any MQTT 5 client; clean session is fine.
+
+| Topic | Direction | Purpose |
+|---|---|---|
+| `dapps/in/<app>` | DAPPS → app | Apps subscribe; DAPPS publishes incoming messages destined for `<app>` on this node. Each delivery carries `dapps-id` (the 7-char message id) and `dapps-source` (the callsign that handed us this message — the last hop, not necessarily the original sender) as MQTT 5 user properties. |
+| `dapps/out/<app>/<dest-callsign>` | app → DAPPS | Apps publish here to send a message to `<app>` running at `<dest-callsign>`. The payload is the message body. |
+| `dapps/ack/<app>` | app → DAPPS | Apps publish a message id (as the UTF-8 payload) to acknowledge receipt. |
+
+### REST
+
+Same semantics, pull-based. All endpoints under `/AppApi`:
+
+| Method + path | Body | Purpose |
+|---|---|---|
+| `POST /AppApi/outbound` | `{ "app": "...", "destCallsign": "...", "payload": <bytes> }` | Submit an outbound message. Returns `{ "id": "..." }`. |
+| `GET /AppApi/inbound/{app}` | — | Returns `[ { "id": "...", "sourceCallsign": "...", "payload": <bytes> }, … ]` of unacked inbound messages for `{app}`. |
+| `POST /AppApi/inbound/{app}/{id}/ack` | — | Mark message `{id}` as delivered. Idempotent. |
+
+REST and MQTT can be used by different apps simultaneously — they're just two views of the same queue.
+
+### Durability and at-least-once semantics
+
+**DAPPS is the durable layer; the broker is just a real-time delivery channel.** Messages live in SQLite from the moment DAPPS receives them until the app explicitly acks. The broker holds no persistent state of its own — and that's intentional, because designing around broker persistence means designing around its limits (per-clientId persistent sessions, retention bounds, etc.) that don't fit a "queue of pending messages for an app that may not have run yet" model.
+
+What this gets you in practice:
+
+- **App offline when message arrives** — message persists in SQLite. When the app eventually subscribes to `dapps/in/<app>` (or polls `GET /AppApi/inbound/<app>`), it sees the backlog.
+- **DAPPS restarts mid-delivery** — broker is fresh, DB still has the row with `LocallyDelivered=0`. App reconnects, re-subscribes, replay fires.
+- **App processed the message but DAPPS crashed before persisting the ack** — same as above; the message will be redelivered on next subscribe.
+
+The cost: **apps must be idempotent on `dapps-id`**. The message id is content-addressed (`sha1(salt + payload)[:7]`), so a redelivered message arrives with the same id — apps that store "ids I've already processed" handle duplicates correctly without further coordination. This is the natural shape for at-least-once delivery and matches what the spec already implies via content-addressed ids.
+
+Don't use MQTT retained messages — they'd give you "last message wins on this topic", which is the wrong shape for a queue. Replay-on-subscribe is the right pattern for "everything pending."
 
 ## Progress
 
