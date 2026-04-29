@@ -20,6 +20,12 @@ The protocol is fully specified (`README.md`'s "On-air protocol" section). The i
 
 What's missing to call this complete is the parts that turn a single-node demo into a network: a sysop-friendly neighbour table, peer discovery, route exchange, a deployable container, sysop and developer documentation, and a couple of specific spec follow-ups (multi-part messages, end-to-end source tracking).
 
+## Tom's scratchpad of ideas
+
+- when looking at long distance routing what about looking into the routing implementation in Meshcore?
+- what about using Meshcore as a transport?
+- I think we should look at shipping an actual usable app, ideally an actual phone app, maybe a messenger app. Or maybe a long form mail app so as not to conflict with whatsapp.
+
 ## Open tasks (issues filed)
 
 - **#5** — Switch integration tests from raw `Process` to Testcontainers. Today the `LinbpqIntegrationFixture` shells `docker run` directly; should be on Testcontainers.NET like the rest of the .NET integration-test world. Cleanup, no feature impact.
