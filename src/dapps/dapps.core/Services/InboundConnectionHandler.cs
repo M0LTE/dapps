@@ -9,7 +9,12 @@ namespace dapps.core.Services;
 public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory loggerFactory, Database database)
 {
     private readonly ILogger logger = loggerFactory.CreateLogger<InboundConnectionHandler>();
-    
+
+    // Inactivity timeout per spec — AX.25 T3 default is 3 min; matching that
+    // keeps DAPPS sessions tearing down on roughly the same cadence as the
+    // underlying link layer would on its own.
+    private static readonly TimeSpan InactivityTimeout = TimeSpan.FromMinutes(3);
+
     internal async Task Handle(CancellationToken stoppingToken)
     {
         try
@@ -17,7 +22,16 @@ public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory logger
             logger.LogInformation("Got connection from {0}, waiting for node to send callsign..", tcpClient.Client.RemoteEndPoint!.ToString());
             var stream = tcpClient.GetStream();
 
-            var callsign = await stream.ReadLine(stoppingToken);
+            string callsign;
+            try
+            {
+                callsign = await Extensions.WithInactivityTimeout(t => stream.ReadLine(t), InactivityTimeout, stoppingToken);
+            }
+            catch (OperationCanceledException) when (!stoppingToken.IsCancellationRequested)
+            {
+                logger.LogInformation("Inactivity timeout waiting for callsign, closing connection");
+                return;
+            }
             logger.LogInformation("Connection is from callsign {0}", callsign);
 
             await stream.WriteAsync(Encoding.UTF8.GetBytes("DAPPSv1>\n"));
@@ -26,7 +40,17 @@ public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory logger
             while (!stoppingToken.IsCancellationRequested)
             {
                 logger.LogInformation("Waiting for command");
-                var command = await stream.ReadLine(stoppingToken);
+
+                string command;
+                try
+                {
+                    command = await Extensions.WithInactivityTimeout(t => stream.ReadLine(t), InactivityTimeout, stoppingToken);
+                }
+                catch (OperationCanceledException) when (!stoppingToken.IsCancellationRequested)
+                {
+                    logger.LogInformation("Inactivity timeout waiting for command, closing connection");
+                    return;
+                }
 
                 if (string.IsNullOrWhiteSpace(command))
                 {
@@ -157,27 +181,42 @@ public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory logger
             return;
         }
 
-        if (!kvps.TryGetValue("ts", out var tsStr))
+        if (!kvps.TryGetValue("s", out var saltStr))
         {
-            logger.LogWarning("No timestamp specified in message offer, no dupe check");
-            tsStr = "0";
+            saltStr = "0";
         }
 
-        if (!long.TryParse(tsStr, out var ts))
+        if (!long.TryParse(saltStr, out var salt))
         {
-            await ReplyWithError("Fatal: invalid timestamp specified in message offer");
+            await ReplyWithError("Fatal: invalid salt specified in message offer");
             return;
         }
 
         if (!kvps.TryGetValue("fmt", out var fmt))
         {
-            logger.LogWarning("No format specified in message offer, assuming plain");
-            fmt = "p";
+            fmt = "p"; // absent fmt defaults to plain per spec
         }
 
         if (fmt != "d" && fmt != "p")
         {
             await ReplyWithError("Fatal: unknown format specified in message offer");
+            return;
+        }
+
+        var hasClen = kvps.TryGetValue("clen", out var clenStr);
+        if (fmt == "d" && !hasClen)
+        {
+            await ReplyWithError("Fatal: clen= is required when fmt=d");
+            return;
+        }
+        if (fmt == "p" && hasClen)
+        {
+            await ReplyWithError("Fatal: clen= MUST NOT be supplied when fmt=p");
+            return;
+        }
+        if (hasClen && (!int.TryParse(clenStr, out var clen) || clen < 0))
+        {
+            await ReplyWithError("Fatal: clen= must be a non-negative integer");
             return;
         }
 
@@ -189,9 +228,10 @@ public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory logger
 
         if (kvps.TryGetValue("chk", out var chk))
         {
-            if (chk != ComputeChecksum(command, chk))
+            var chkError = ValidateChecksum(command, chk);
+            if (chkError != null)
             {
-                await ReplyWithError("Fatal: corrupt command");
+                await ReplyWithError($"Fatal: {chkError}");
                 return;
             }
         }
@@ -203,35 +243,104 @@ public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory logger
         await database.SaveOfferMetadata(id, kvps);
     }
 
-    private static string ComputeChecksum(string ihaveCommand, string chk)
+    private const string ChkSuffixPrefix = " chk=";
+    private const int ChkValueLength = 4;
+
+    /// <summary>
+    /// Validate the trailing `chk=NNNN` on an ihave line. Returns null on
+    /// success, or a short error string. Per spec, chk MUST be the last KV
+    /// on the line, immediately followed by `\n` (which the line reader has
+    /// already stripped). Receivers MUST reject any line where `chk=` appears
+    /// elsewhere.
+    /// </summary>
+    private static string? ValidateChecksum(string ihaveCommand, string providedChk)
     {
-        // remove the checksum part
-        ///TODO: Do this properly- the chk command could be in the middle of the string and double-spaces could be present
-        ihaveCommand = ihaveCommand.Replace("chk=" + chk, "").Trim();
+        var prefixIndex = ihaveCommand.LastIndexOf(ChkSuffixPrefix, StringComparison.Ordinal);
+        if (prefixIndex < 0)
+        {
+            return "chk parsed from KVs but not present in line as ' chk=' suffix";
+        }
 
-        var hash = SHA1.HashData(Encoding.UTF8.GetBytes(ihaveCommand));
-        var sum = BitConverter.ToString(hash).Replace("-", "").ToLower()[..2];
+        if (prefixIndex + ChkSuffixPrefix.Length + ChkValueLength != ihaveCommand.Length)
+        {
+            return "chk MUST be the last KV on the line";
+        }
 
-        return sum;
+        // Reject any earlier "chk=" occurrence (would also be interpreted by
+        // a naïve KV split as the chk value).
+        var firstChkIndex = ihaveCommand.IndexOf("chk=", StringComparison.Ordinal);
+        if (firstChkIndex != prefixIndex + 1)
+        {
+            return "chk= must appear only as the last KV";
+        }
+
+        if (!ushort.TryParse(providedChk, System.Globalization.NumberStyles.HexNumber, null, out var providedValue))
+        {
+            return "chk value is not 4 hex characters";
+        }
+
+        var coveredBytes = Encoding.UTF8.GetBytes(ihaveCommand[..prefixIndex]);
+        var expected = Crc16CcittFalse.Compute(coveredBytes);
+
+        return expected == providedValue ? null : "chk mismatch (line corruption?)";
     }
 
     private async Task HandleData(NetworkStream stream, string id, CancellationToken stoppingToken)
-    { 
+    {
         var offer = await database.LoadOfferMetadata(id);
 
         var buffer = new byte[offer.Length];
 
         if (offer.Format == "d") // deflate
         {
-            logger.LogInformation("Waiting for deflated data");
-            using var decompressor = new DeflateStream(stream, CompressionMode.Decompress, leaveOpen: true);
-            await decompressor.ReadExactlyAsync(buffer, stoppingToken);
-            logger.LogInformation("Received deflated data");
+            if (offer.CompressedLength is null)
+            {
+                // Shouldn't happen — we validate at offer time — but defend
+                // against a corrupted DB row.
+                logger.LogError("Offer {0} marked fmt=d but has no clen stored", id);
+                await stream.WriteUtf8AndFlush("bad " + id + "\n");
+                return;
+            }
+
+            logger.LogInformation("Waiting for {0} compressed bytes", offer.CompressedLength.Value);
+            var compressed = new byte[offer.CompressedLength.Value];
+            try
+            {
+                await Extensions.WithInactivityTimeout(t => stream.ReadExactlyAsync(compressed, t).AsTask(), InactivityTimeout, stoppingToken);
+            }
+            catch (OperationCanceledException) when (!stoppingToken.IsCancellationRequested)
+            {
+                logger.LogWarning("Inactivity timeout waiting for compressed payload, closing");
+                return;
+            }
+            logger.LogInformation("Received compressed bytes, decompressing");
+
+            using var inputMs = new MemoryStream(compressed);
+            using var decompressor = new DeflateStream(inputMs, CompressionMode.Decompress);
+            using var outputMs = new MemoryStream(buffer.Length);
+            await decompressor.CopyToAsync(outputMs, stoppingToken);
+
+            if (outputMs.Length != buffer.Length)
+            {
+                logger.LogWarning("Decompressed length {0} does not match declared len={1}", outputMs.Length, buffer.Length);
+                await stream.WriteUtf8AndFlush("bad " + id + "\n");
+                return;
+            }
+
+            buffer = outputMs.ToArray();
         }
-        else if (offer.Format == "p") // plain
+        else // fmt=p (or absent — default plain)
         {
-            logger.LogInformation("Waiting for uncompressed data");
-            await stream.ReadExactlyAsync(buffer, stoppingToken);
+            logger.LogInformation("Waiting for {0} uncompressed bytes", buffer.Length);
+            try
+            {
+                await Extensions.WithInactivityTimeout(t => stream.ReadExactlyAsync(buffer, t).AsTask(), InactivityTimeout, stoppingToken);
+            }
+            catch (OperationCanceledException) when (!stoppingToken.IsCancellationRequested)
+            {
+                logger.LogWarning("Inactivity timeout waiting for uncompressed payload, closing");
+                return;
+            }
             logger.LogInformation("Received uncompressed data");
         }
 
@@ -242,7 +351,6 @@ public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory logger
 
         if (offer.Timestamp == null)
         {
-            logger.LogWarning("No timestamp specified in message offer, no dupe check");
             hash = ComputeHash(buffer, null);
         }
         else

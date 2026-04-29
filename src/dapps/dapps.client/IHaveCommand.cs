@@ -1,5 +1,4 @@
-﻿using System.Security.Cryptography;
-using System.Text;
+﻿using System.Text;
 
 namespace dapps.client;
 
@@ -7,16 +6,13 @@ public class IHaveCommand
 {
     public DappsMessage Message { get; init; } = new();
 
-    public static string Checksum(string ihave)
-    {
-        var hash = SHA1.HashData(Encoding.UTF8.GetBytes(ihave));
-        return BitConverter.ToString(hash).Replace("-", "").ToLower()[..2];
-    }
+    public static string Checksum(string ihave) =>
+        Crc16CcittFalse.ComputeHex(Encoding.UTF8.GetBytes(ihave));
 
     public override string ToString()
     {
         var sb = new StringBuilder();
-        sb.Append($"ihave {Message.Id} len={Message.Payload.Length} fmt={(Message.Format == DappsMessage.MessageFormat.Deflate ? 'd' : 'p')} ts={Message.Timestamp}");
+        sb.Append($"ihave {Message.Id} len={Message.Payload.Length} fmt={(Message.Format == DappsMessage.MessageFormat.Deflate ? 'd' : 'p')} s={Message.Timestamp}");
         if (Message.Kvps.Count > 0)
         {
             sb.Append($" {string.Join(" ", Message.Kvps.Select(kvp => $"{kvp.Key}={kvp.Value}"))}");

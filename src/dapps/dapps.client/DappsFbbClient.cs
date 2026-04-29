@@ -32,7 +32,7 @@ public class DappsFbbClient(string host, int port, ILoggerFactory loggerFactory)
         var commandBuilder = new StringBuilder($"ihave {id} len={len} fmt={messageFormat.ToString().ToLower()[0]} dst={destination}");
         if (timestamp.HasValue)
         {
-            commandBuilder.Append($" ts={timestamp}");
+            commandBuilder.Append($" s={timestamp}");
         }
 
         var command = commandBuilder.ToString();
