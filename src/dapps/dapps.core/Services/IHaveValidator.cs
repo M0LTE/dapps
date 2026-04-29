@@ -130,6 +130,14 @@ public static class IHaveValidator
     /// </summary>
     private static string? ValidateChecksum(string ihaveCommand, string providedChk)
     {
+        // Check the value's shape first; otherwise a wrong-length chk would
+        // get caught by the position rule and surface a misleading error.
+        if (providedChk.Length != ChkValueLength
+            || !ushort.TryParse(providedChk, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var providedValue))
+        {
+            return "chk value is not 4 hex characters";
+        }
+
         var prefixIndex = ihaveCommand.LastIndexOf(ChkSuffixPrefix, StringComparison.Ordinal);
         if (prefixIndex < 0)
         {
@@ -145,12 +153,6 @@ public static class IHaveValidator
         if (firstChkIndex != prefixIndex + 1)
         {
             return "chk= must appear only as the last KV";
-        }
-
-        if (!ushort.TryParse(providedChk, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var providedValue)
-            || providedChk.Length != ChkValueLength)
-        {
-            return "chk value is not 4 hex characters";
         }
 
         var coveredBytes = Encoding.UTF8.GetBytes(ihaveCommand[..prefixIndex]);
