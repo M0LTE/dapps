@@ -9,7 +9,12 @@ namespace dapps.core.Services;
 public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory loggerFactory, Database database)
 {
     private readonly ILogger logger = loggerFactory.CreateLogger<InboundConnectionHandler>();
-    
+
+    // Inactivity timeout per spec — AX.25 T3 default is 3 min; matching that
+    // keeps DAPPS sessions tearing down on roughly the same cadence as the
+    // underlying link layer would on its own.
+    private static readonly TimeSpan InactivityTimeout = TimeSpan.FromMinutes(3);
+
     internal async Task Handle(CancellationToken stoppingToken)
     {
         try
@@ -17,7 +22,16 @@ public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory logger
             logger.LogInformation("Got connection from {0}, waiting for node to send callsign..", tcpClient.Client.RemoteEndPoint!.ToString());
             var stream = tcpClient.GetStream();
 
-            var callsign = await stream.ReadLine(stoppingToken);
+            string callsign;
+            try
+            {
+                callsign = await Extensions.WithInactivityTimeout(t => stream.ReadLine(t), InactivityTimeout, stoppingToken);
+            }
+            catch (OperationCanceledException) when (!stoppingToken.IsCancellationRequested)
+            {
+                logger.LogInformation("Inactivity timeout waiting for callsign, closing connection");
+                return;
+            }
             logger.LogInformation("Connection is from callsign {0}", callsign);
 
             await stream.WriteAsync(Encoding.UTF8.GetBytes("DAPPSv1>\n"));
@@ -26,7 +40,17 @@ public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory logger
             while (!stoppingToken.IsCancellationRequested)
             {
                 logger.LogInformation("Waiting for command");
-                var command = await stream.ReadLine(stoppingToken);
+
+                string command;
+                try
+                {
+                    command = await Extensions.WithInactivityTimeout(t => stream.ReadLine(t), InactivityTimeout, stoppingToken);
+                }
+                catch (OperationCanceledException) when (!stoppingToken.IsCancellationRequested)
+                {
+                    logger.LogInformation("Inactivity timeout waiting for command, closing connection");
+                    return;
+                }
 
                 if (string.IsNullOrWhiteSpace(command))
                 {
@@ -280,7 +304,15 @@ public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory logger
 
             logger.LogInformation("Waiting for {0} compressed bytes", offer.CompressedLength.Value);
             var compressed = new byte[offer.CompressedLength.Value];
-            await stream.ReadExactlyAsync(compressed, stoppingToken);
+            try
+            {
+                await Extensions.WithInactivityTimeout(t => stream.ReadExactlyAsync(compressed, t).AsTask(), InactivityTimeout, stoppingToken);
+            }
+            catch (OperationCanceledException) when (!stoppingToken.IsCancellationRequested)
+            {
+                logger.LogWarning("Inactivity timeout waiting for compressed payload, closing");
+                return;
+            }
             logger.LogInformation("Received compressed bytes, decompressing");
 
             using var inputMs = new MemoryStream(compressed);
@@ -300,7 +332,15 @@ public class InboundConnectionHandler(TcpClient tcpClient, ILoggerFactory logger
         else // fmt=p (or absent — default plain)
         {
             logger.LogInformation("Waiting for {0} uncompressed bytes", buffer.Length);
-            await stream.ReadExactlyAsync(buffer, stoppingToken);
+            try
+            {
+                await Extensions.WithInactivityTimeout(t => stream.ReadExactlyAsync(buffer, t).AsTask(), InactivityTimeout, stoppingToken);
+            }
+            catch (OperationCanceledException) when (!stoppingToken.IsCancellationRequested)
+            {
+                logger.LogWarning("Inactivity timeout waiting for uncompressed payload, closing");
+                return;
+            }
             logger.LogInformation("Received uncompressed data");
         }
 
