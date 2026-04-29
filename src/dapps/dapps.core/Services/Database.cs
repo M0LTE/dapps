@@ -64,7 +64,8 @@ public class Database(ILogger<Database> logger, IOptionsMonitor<SystemOptions> o
         var salt = (long)(DateTime.UtcNow - DateTime.UnixEpoch).TotalMilliseconds;
         var id = DappsMessage.ComputeHash(payload, salt)[..7];
         var destination = $"{appName}@{destCallsign}";
-        await SaveMessage(id, payload, salt, destination, "{}");
+        var ourCall = options.CurrentValue.Callsign;
+        await SaveMessage(id, payload, salt, destination, sourceCallsign: ourCall, "{}");
         return id;
     }
 
@@ -75,7 +76,7 @@ public class Database(ILogger<Database> logger, IOptionsMonitor<SystemOptions> o
         return data;
     }
 
-    internal async Task SaveMessage(string id, byte[] buffer, long? salt, string destination, string additionalProperties)
+    internal async Task SaveMessage(string id, byte[] buffer, long? salt, string destination, string sourceCallsign, string additionalProperties)
     {
         var connection = DbInfo.GetAsyncConnection();
 
@@ -93,6 +94,7 @@ public class Database(ILogger<Database> logger, IOptionsMonitor<SystemOptions> o
             Salt = salt,
             Payload = buffer,
             Destination = destination,
+            SourceCallsign = sourceCallsign,
             AdditionalProperties = additionalProperties
         });
     }

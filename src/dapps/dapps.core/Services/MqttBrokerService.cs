@@ -72,12 +72,16 @@ public sealed class MqttBrokerService(
         if (app.Length == 0) return;
 
         var topic = InTopicPrefix + app;
-        var msg = new MqttApplicationMessageBuilder()
+        var builder = new MqttApplicationMessageBuilder()
             .WithTopic(topic)
             .WithPayload(message.Payload)
             .WithUserProperty("dapps-id", message.Id)
-            .WithQualityOfServiceLevel(MQTTnet.Protocol.MqttQualityOfServiceLevel.AtLeastOnce)
-            .Build();
+            .WithQualityOfServiceLevel(MQTTnet.Protocol.MqttQualityOfServiceLevel.AtLeastOnce);
+        if (!string.IsNullOrEmpty(message.SourceCallsign))
+        {
+            builder = builder.WithUserProperty("dapps-source", message.SourceCallsign);
+        }
+        var msg = builder.Build();
 
         try
         {

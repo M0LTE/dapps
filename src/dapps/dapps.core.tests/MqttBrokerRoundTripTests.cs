@@ -91,10 +91,11 @@ public sealed class MqttBrokerRoundTripTests : IAsyncLifetime
     [Fact]
     public async Task SubscribeToInTopic_ReplaysUnacknowledgedMessages()
     {
-        // Pre-load a local-destined message into the DB.
+        // Pre-load a local-destined message into the DB, stamped with the
+        // callsign of the node that delivered it.
         var payload = Encoding.UTF8.GetBytes("hi from another node");
         await database.SaveMessage("abc1234", payload, salt: 1L,
-            destination: "myapp@N0CALL", additionalProperties: "{}");
+            destination: "myapp@N0CALL", sourceCallsign: "G7XYZ-3", additionalProperties: "{}");
 
         var client = await ConnectClient();
         var received = new TaskCompletionSource<MqttApplicationMessage>(
@@ -111,6 +112,7 @@ public sealed class MqttBrokerRoundTripTests : IAsyncLifetime
         msg.Topic.Should().Be("dapps/in/myapp");
         msg.PayloadSegment.ToArray().Should().Equal(payload);
         msg.UserProperties.Single(p => p.Name == "dapps-id").Value.Should().Be("abc1234");
+        msg.UserProperties.Single(p => p.Name == "dapps-source").Value.Should().Be("G7XYZ-3");
 
         await client.DisconnectAsync();
     }
@@ -119,7 +121,7 @@ public sealed class MqttBrokerRoundTripTests : IAsyncLifetime
     public async Task ClientPublishToAckTopic_MarksMessageDelivered()
     {
         await database.SaveMessage("xyz9999", "data"u8.ToArray(), salt: null,
-            destination: "myapp@N0CALL", additionalProperties: "{}");
+            destination: "myapp@N0CALL", sourceCallsign: "G7XYZ-3", additionalProperties: "{}");
 
         var client = await ConnectClient();
 

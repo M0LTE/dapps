@@ -39,7 +39,7 @@ public class AppApiController(Database database) : ControllerBase
     public async Task<ActionResult<List<InboundMessage>>> GetInbound(string app)
     {
         var pending = await database.GetUnacknowledgedLocalMessagesForApp(app);
-        return Ok(pending.Select(m => new InboundMessage(m.Id, m.Payload)).ToList());
+        return Ok(pending.Select(m => new InboundMessage(m.Id, m.SourceCallsign, m.Payload)).ToList());
     }
 
     /// <summary>
@@ -57,4 +57,4 @@ public class AppApiController(Database database) : ControllerBase
 
 public sealed record OutboundRequest(string App, string DestCallsign, byte[] Payload);
 public sealed record OutboundResponse(string Id);
-public sealed record InboundMessage(string Id, byte[] Payload);
+public sealed record InboundMessage(string Id, string SourceCallsign, byte[] Payload);

@@ -21,6 +21,11 @@ public class InboundConnectionHandler(
     // underlying link layer would on its own.
     private static readonly TimeSpan InactivityTimeout = TimeSpan.FromMinutes(3);
 
+    /// <summary>The callsign of the connecting station, sent by BPQ as the
+    /// first line of the TCP stream. Captured in <see cref="Handle"/> and
+    /// stamped onto every message saved during this connection.</summary>
+    private string sourceCallsign = "";
+
     internal async Task Handle(CancellationToken stoppingToken)
     {
         try
@@ -28,17 +33,17 @@ public class InboundConnectionHandler(
             logger.LogInformation("Got connection from {0}, waiting for node to send callsign..", tcpClient.Client.RemoteEndPoint!.ToString());
             var stream = tcpClient.GetStream();
 
-            string callsign;
             try
             {
-                callsign = await Extensions.WithInactivityTimeout(t => stream.ReadLine(t), InactivityTimeout, stoppingToken);
+                sourceCallsign = (await Extensions.WithInactivityTimeout(
+                    t => stream.ReadLine(t), InactivityTimeout, stoppingToken)).Trim();
             }
             catch (OperationCanceledException) when (!stoppingToken.IsCancellationRequested)
             {
                 logger.LogInformation("Inactivity timeout waiting for callsign, closing connection");
                 return;
             }
-            logger.LogInformation("Connection is from callsign {0}", callsign);
+            logger.LogInformation("Connection is from callsign {0}", sourceCallsign);
 
             await stream.WriteAsync(Encoding.UTF8.GetBytes("DAPPSv1>\n"));
             await stream.FlushAsync();
@@ -248,7 +253,7 @@ public class InboundConnectionHandler(
         if (computedId == id)
         {
             logger.LogInformation("Hash matches, saving and acknowledging message {0}", id);
-            await database.SaveMessage(id, buffer, offer.Salt, offer.Destination, offer.AdditionalProperties);
+            await database.SaveMessage(id, buffer, offer.Salt, offer.Destination, sourceCallsign, offer.AdditionalProperties);
             await database.DeleteOffer(id);
             await stream.WriteAsync(Encoding.UTF8.GetBytes("ack " + id + "\n"));
 
@@ -264,6 +269,7 @@ public class InboundConnectionHandler(
                     Payload = buffer,
                     Salt = offer.Salt,
                     Destination = offer.Destination,
+                    SourceCallsign = sourceCallsign,
                     AdditionalProperties = offer.AdditionalProperties,
                 };
                 await mqtt.InjectInboundMessage(dbMessage);
