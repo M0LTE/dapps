@@ -188,12 +188,9 @@ Direction: native single-file binaries published as GitHub Release assets, not a
 - Structured log output (JSON option) so sysops who want to ingest into Loki / Elastic can.
 - A simple metrics endpoint (Prometheus format) covering: queue depth, messages forwarded last hour, neighbours seen, failed forward attempts.
 
-### C4. Install / upgrade docs
+### C4. Install / upgrade docs *(done)*
 
-The README's "Installation" section is fine for a happy path. Needs to grow:
-- Upgrading: schema changes (`dapps.db` rebuilds aren't great if state matters).
-- Backups: just back up `dapps.db` and the config dir.
-- Troubleshooting: the most common things that go wrong are AGW config mismatches, callsign typos, BPQ port-byte indexing surprises.
+README "Getting started" rewritten end-to-end for the native-binary distribution: prerequisites, the BPQ-side `bpq32.cfg` snippet (AGW + Apps Interface slot + APPLICATION line with `TRANS`), download/run instructions for each release artifact, env-var bootstrap, neighbour add/remove via REST, and a verification step that connects from a node prompt and sees the `DAPPSv1>` banner. Troubleshooting block covers the usual surprises (AGW config, callsign typos, BPQ port-byte indexing, `TRANS` flag missing). Backups + upgrade notes added.
 
 ## Phase D — web management UI
 
