@@ -4,7 +4,7 @@ Living planning document. Aim is to get DAPPS into the hands of node operators w
 
 ## Where we are now
 
-Six PRs have landed since the restart:
+Seven PRs have landed since the restart:
 
 | # | Title | What it did |
 |---|---|---|
@@ -13,31 +13,24 @@ Six PRs have landed since the restart:
 | 3 | Internal Timestamp→Salt rename + IHaveValidator extraction + tests | Code cosmetic alignment with the spec, parser logic lifted into a pure static for testability, 4→37 tests. |
 | 4 | AGW outbound transport behind a pluggable interface; remove FBB-telnet | `IDappsOutboundTransport`, `AgwOutboundTransport`, `DappsProtocolClient`. FBB-telnet path entirely deleted. Real-BPQ integration tests via `m0lte/linbpq` Docker image. 60 tests. |
 | 7 | App interface: embedded MQTT broker + REST mirror | Embedded MQTTnet broker + REST endpoints sharing one SQLite-backed queue. DAPPS-as-queue, broker-as-channel design. Source-callsign threading. 77 tests. |
-| (this) | .NET 10 + central package management + xunit.v3 + Microsoft Testing Platform + this plan.md | Toolchain refresh + roadmap doc. |
+| 8 | .NET 10 + central package management + xunit.v3 + Microsoft Testing Platform + this plan.md | Toolchain refresh + roadmap doc. |
+| 9 | A1: TTL forwarder logic + two-instance integration test (closes #6) | `DbMessage.Ttl` + `CreatedAt` columns, residual-decrement at forward, drop-on-expiry, `TtlSweeperService`, `TwoInstanceLinbpqFixture`, end-to-end TTL test through real BPQ over AXIP-UDP. 105 tests. Diagnosed M0LTE/linbpq#41 (image's `mail chat` default CMD) along the way. |
 
-The protocol is fully specified (`README.md`'s "On-air protocol" section). The implementation matches the spec for the parts it implements. The on-air format is byte-validated against real BPQ in CI via `m0lte/linbpq`. Local apps can talk to a DAPPS instance via MQTT (durable, idempotent on `dapps-id`) or REST (POST + poll).
+The protocol is fully specified (`README.md`'s "On-air protocol" section). The implementation matches the spec for the parts it implements. The on-air format is byte-validated against real BPQ in CI via `m0lte/linbpq`. Local apps can talk to a DAPPS instance via MQTT (durable, idempotent on `dapps-id`) or REST (POST + poll). TTL forwarding works end-to-end across two BPQs.
 
-What's missing to call this complete is the parts that turn a single-node demo into a network: forwarding logic that actually acts on TTL + neighbour-table semantics, peer discovery, route exchange, a deployable container, sysop and developer documentation, and a couple of specific spec follow-ups (multi-part messages, end-to-end source tracking).
+What's missing to call this complete is the parts that turn a single-node demo into a network: a sysop-friendly neighbour table, peer discovery, route exchange, a deployable container, sysop and developer documentation, and a couple of specific spec follow-ups (multi-part messages, end-to-end source tracking).
 
 ## Open tasks (issues filed)
 
 - **#5** — Switch integration tests from raw `Process` to Testcontainers. Today the `LinbpqIntegrationFixture` shells `docker run` directly; should be on Testcontainers.NET like the rest of the .NET integration-test world. Cleanup, no feature impact.
-- **#6** — End-to-end happy-path AGW connect test (BPQ-A → BPQ-B via AXIP-UDP). PR #4 left this as a known gap because BPQ-B's inbound delivery to a registered AGW listener doesn't fire in our Docker bridge networking setup despite linbpq's own native test of the same topology working. Needs investigation. Useful diagnostic asset: a working python repro that reaches `*** CONNECTED` on side A but observes zero frames on side B's registered AGW client.
 
 ## Phase A — make forwarding actually forward
 
 **Goal:** the existing transit-and-deliver path works correctly across two nodes for a local sysop running both BPQs.
 
-### A1. TTL forwarder logic *(spec already pinned; impl absent)*
+### A1. TTL forwarder logic *(done — PR #9)*
 
-The spec defines `ttl=N` as residual lifetime in seconds, decremented at each hop. The implementation today doesn't act on it — `OutboundMessageManager` doesn't read it, `InboundConnectionHandler` doesn't decrement, and there's no expiry sweep over the SQLite tables.
-
-What's needed:
-
-- On `ihave` receive: capture `ttl` into `DbMessage.Ttl` (new column).
-- On forward: subtract elapsed time-in-queue (now() - row.created_at) from ttl; if ≤ 0, drop and log; else forward with new ttl in the outgoing `ihave`.
-- Background sweeper to delete expired offers / messages — both for outbound (forwarded but TTL expired before next hop) and inbound (un-acked but TTL passed).
-- Tests: unit on the decrement math; integration once two-instance test infra is back (issue #6).
+Landed: `DbMessage.Ttl` + `CreatedAt` columns, residual-TTL decrement on forward, drop-and-delete on expiry, `TtlSweeperService` for background expiry of offers and messages, two-instance integration fixture with end-to-end coverage through real BPQ over AXIP-UDP. M0LTE/linbpq#41 (image's `mail chat` CMD blocking AGW dispatch) was diagnosed and fixed in the same arc, which closed #6.
 
 ### A2. Better neighbour table than "manual MAP entries"
 
@@ -272,7 +265,7 @@ Resolved during the toolchain refresh: tests use **AwesomeAssertions** (MIT-lice
 
 Roughly:
 
-1. **A1 + A2** (TTL forwarding + neighbour-table cleanup) — gates anything multi-node working correctly.
+1. **A1** (TTL forwarding) — *done*. **A2** (neighbour-table cleanup) — next.
 2. **C1 + C2 + C4** (docker image, config tooling, install docs) — gets the thing into one sysop's hands.
 3. **A4** (per-app auth) — needed before anyone with a publicly-reachable node can run it.
 4. **D1 + D2** (web UI inspection + exercise) — turns "running" into "comfortable to run".
@@ -299,4 +292,4 @@ If picking this up cold:
 
 Test runner today is `dotnet test` — MTP filter syntax is `-- --filter-trait "Category=Integration"` (not `--filter Category=...`, which is the old VSTest syntax).
 
-The protocol is frozen at v1. The implementation is honest about which spec features it actually performs vs. which are still words on a page (TTL forwarding being the main one). The integration-test setup proves the wire format is correct against real BPQ; the gap at issue #6 is about *delivery routing inside BPQ*, not about our code's correctness.
+The protocol is frozen at v1. The implementation now performs TTL forwarding end-to-end across hops; remaining spec features that are still words-on-a-page are the explicit deferrals in Phase F (multi-part, end-to-end source, signing, polling). The integration-test setup proves the wire format is correct against real BPQ.
