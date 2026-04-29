@@ -85,17 +85,27 @@ public class OutboundMessageManager(
 
     private async Task<DbNeighbour?> ResolveNeighbour(DbMessage message, ICollection<DbNeighbour> neighbours)
     {
-        var direct = neighbours.FirstOrDefault(n => n.Callsign.Split('-')[0].Equals(message.Destination, StringComparison.OrdinalIgnoreCase));
+        // Destinations are `app@call[-ssid]`. Match a neighbour whose base
+        // callsign equals the destination's @-suffix base callsign — an
+        // SSID mismatch on either side is fine, the DAPPS instance and
+        // its forwarder are reachable on whichever SSID the neighbour row
+        // recorded.
+        var destBaseCall = message.Destination.Split('@').Last().Split('-')[0];
+        var direct = neighbours.FirstOrDefault(
+            n => n.Callsign.Split('-')[0].Equals(destBaseCall, StringComparison.OrdinalIgnoreCase));
         if (direct != null)
         {
             return direct;
         }
 
-        var destSystem = message.Destination.Split('@').Last();
-        var routeHint = await database.GetRouteHint(destSystem) ?? await database.GetRouteHint("*");
+        // Fall back to a hand-maintained DbRouteHint for next-hop overrides
+        // — useful when a destination isn't a direct neighbour but a known
+        // neighbour can relay onward. Phase B's auto-discovery will replace
+        // this fallback with learned routes.
+        var routeHint = await database.GetRouteHint(destBaseCall) ?? await database.GetRouteHint("*");
         if (routeHint == null)
         {
-            logger.LogWarning("No route hint and no default route set for {0}", message.Destination);
+            logger.LogWarning("No matching neighbour or route hint for {0}", message.Destination);
             return null;
         }
 
