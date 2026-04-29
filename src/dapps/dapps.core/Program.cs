@@ -30,6 +30,7 @@ builder.Services.AddSingleton<InboundConnectionHandlerFactory>();
 builder.Services.AddSingleton<MqttBrokerService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<MqttBrokerService>());
 builder.Services.AddHostedService<BpqConnectionListener>();
+builder.Services.AddHostedService<TtlSweeperService>();
 builder.Services.AddSingleton<Database>();
 builder.Services.AddSingleton<OptionsRepo>();
 builder.Services.AddSingleton<OutboundMessageManager>();

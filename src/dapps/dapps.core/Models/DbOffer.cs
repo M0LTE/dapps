@@ -14,4 +14,13 @@ internal sealed class DbOffer
     public int? CompressedLength { get; init; }
     public string Destination { get; init; } = "";
     public string AdditionalProperties { get; set; } = "{}";
+
+    /// <summary>Residual ttl in seconds from the offer line, or null if not
+    /// supplied. Carried forward into the <c>DbMessage</c> row when the
+    /// payload arrives.</summary>
+    public int? Ttl { get; init; }
+
+    /// <summary>UTC instant the offer was accepted. Used to expire offers
+    /// whose payload never arrived.</summary>
+    public DateTime CreatedAt { get; init; } = DateTime.UtcNow;
 }

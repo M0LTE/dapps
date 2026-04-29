@@ -34,8 +34,8 @@ public class IHaveValidatorTests
         result.Offer.Format.Should().Be("p");
         result.Offer.Salt.Should().Be(12345678L);
         result.Offer.Destination.Should().Be("appname@gb7aaa-4");
-        result.Offer.AdditionalHeaders.Keys.Should().BeEquivalentTo(["ttl", "key"]);
-        result.Offer.AdditionalHeaders["ttl"].Should().Be("86400");
+        result.Offer.Ttl.Should().Be(86400);
+        result.Offer.AdditionalHeaders.Keys.Should().BeEquivalentTo(["key"]);
         result.Offer.AdditionalHeaders["key"].Should().Be("value");
     }
 
@@ -187,6 +187,34 @@ public class IHaveValidatorTests
         var result = IHaveValidator.Validate(line);
 
         result.IsValid.Should().BeTrue($"got error: {result.Error}");
-        result.Offer!.AdditionalHeaders.Keys.Should().BeEquivalentTo(["ttl", "priority"]);
+        result.Offer!.AdditionalHeaders.Keys.Should().BeEquivalentTo(["priority"]);
+        result.Offer.Ttl.Should().Be(3600);
+    }
+
+    [Fact]
+    public void Validate_TtlAbsent_ParsesAsNull()
+    {
+        var result = IHaveValidator.Validate("ihave abc len=5 dst=app@x");
+        result.IsValid.Should().BeTrue($"got error: {result.Error}");
+        result.Offer!.Ttl.Should().BeNull();
+    }
+
+    [Fact]
+    public void Validate_TtlPresent_ParsesAsInt()
+    {
+        var result = IHaveValidator.Validate("ihave abc len=5 dst=app@x ttl=120");
+        result.IsValid.Should().BeTrue($"got error: {result.Error}");
+        result.Offer!.Ttl.Should().Be(120);
+    }
+
+    [Theory]
+    [InlineData("ttl=foo")]
+    [InlineData("ttl=-1")]
+    [InlineData("ttl=0")]
+    public void Validate_BadTtl_Fails(string ttlToken)
+    {
+        var result = IHaveValidator.Validate($"ihave abc len=5 dst=app@x {ttlToken}");
+        result.IsValid.Should().BeFalse();
+        result.Error.Should().Contain("ttl");
     }
 }

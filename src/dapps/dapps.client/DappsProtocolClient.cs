@@ -61,7 +61,8 @@ public class DappsProtocolClient(Stream stream, ILoggerFactory loggerFactory)
         DappsMessage.MessageFormat format,
         string destination,
         int length,
-        CancellationToken ct)
+        CancellationToken ct,
+        int? ttl = null)
     {
         if (format != DappsMessage.MessageFormat.Plain)
         {
@@ -72,6 +73,10 @@ public class DappsProtocolClient(Stream stream, ILoggerFactory loggerFactory)
         if (salt.HasValue)
         {
             sb.Append($" s={salt}");
+        }
+        if (ttl.HasValue)
+        {
+            sb.Append($" ttl={ttl.Value}");
         }
         sb.Append('\n');
 

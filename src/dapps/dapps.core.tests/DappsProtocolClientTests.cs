@@ -79,6 +79,26 @@ public class DappsProtocolClientTests
     }
 
     [Fact]
+    public async Task OfferMessageAsync_IncludesTtlWhenProvided()
+    {
+        var canned = Encoding.UTF8.GetBytes("send abc\n");
+        var stream = new FakeDuplexStream(canned);
+        var client = new DappsProtocolClient(stream, NullLoggerFactory.Instance);
+
+        await client.OfferMessageAsync(
+            id: "abc",
+            salt: 42L,
+            format: DappsMessage.MessageFormat.Plain,
+            destination: "x@y",
+            length: 5,
+            ct: CancellationToken.None,
+            ttl: 600);
+
+        var written = Encoding.UTF8.GetString(stream.WriteCapture.ToArray());
+        written.Should().Be("ihave abc len=5 fmt=p dst=x@y s=42 ttl=600\n");
+    }
+
+    [Fact]
     public async Task OfferMessageAsync_ReturnsFalseWhenReplyIsntSend()
     {
         var canned = Encoding.UTF8.GetBytes("error abc\n");

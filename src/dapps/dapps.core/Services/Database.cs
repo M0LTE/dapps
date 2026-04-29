@@ -65,7 +65,7 @@ public class Database(ILogger<Database> logger, IOptionsMonitor<SystemOptions> o
         var id = DappsMessage.ComputeHash(payload, salt)[..7];
         var destination = $"{appName}@{destCallsign}";
         var ourCall = options.CurrentValue.Callsign;
-        await SaveMessage(id, payload, salt, destination, sourceCallsign: ourCall, "{}");
+        await SaveMessage(id, payload, salt, destination, sourceCallsign: ourCall, "{}", ttl: null);
         return id;
     }
 
@@ -76,7 +76,7 @@ public class Database(ILogger<Database> logger, IOptionsMonitor<SystemOptions> o
         return data;
     }
 
-    internal async Task SaveMessage(string id, byte[] buffer, long? salt, string destination, string sourceCallsign, string additionalProperties)
+    internal async Task SaveMessage(string id, byte[] buffer, long? salt, string destination, string sourceCallsign, string additionalProperties, int? ttl)
     {
         var connection = DbInfo.GetAsyncConnection();
 
@@ -95,7 +95,9 @@ public class Database(ILogger<Database> logger, IOptionsMonitor<SystemOptions> o
             Payload = buffer,
             Destination = destination,
             SourceCallsign = sourceCallsign,
-            AdditionalProperties = additionalProperties
+            AdditionalProperties = additionalProperties,
+            Ttl = ttl,
+            CreatedAt = DateTime.UtcNow,
         });
     }
 
@@ -119,6 +121,8 @@ public class Database(ILogger<Database> logger, IOptionsMonitor<SystemOptions> o
             CompressedLength = offer.CompressedLength,
             Destination = offer.Destination,
             AdditionalProperties = JsonSerializer.Serialize(offer.AdditionalHeaders),
+            Ttl = offer.Ttl,
+            CreatedAt = DateTime.UtcNow,
         });
 
         logger.LogInformation("Saved metadata for offer {0}", offer.Id);
@@ -137,6 +141,43 @@ public class Database(ILogger<Database> logger, IOptionsMonitor<SystemOptions> o
     internal async Task MarkMessageAsForwarded(string id)
     {
         await DbInfo.GetAsyncConnection().ExecuteAsync("update messages set forwarded=1 where id=?", id);
+    }
+
+    internal async Task DeleteMessage(string id)
+    {
+        await DbInfo.GetAsyncConnection().DeleteAsync<DbMessage>(id);
+    }
+
+    /// <summary>
+    /// Delete every message and offer whose ttl has elapsed. Returns the
+    /// total row count removed. Rows with no ttl set are left alone.
+    /// </summary>
+    internal async Task<int> DeleteExpired(DateTime now)
+    {
+        var connection = DbInfo.GetAsyncConnection();
+
+        // SQLite-net stores DateTime as ticks. CreatedAt + ttl seconds < now.
+        // We can't do "+ ttl seconds" portably in SQL, so do the comparison
+        // in C# after pulling the candidate rows. Both tables are small.
+        var expiredOffers = (await connection.QueryAsync<DbOffer>(
+                "select * from offers where Ttl is not null"))
+            .Where(o => TtlMath.HasExpired(o.Ttl, o.CreatedAt, now))
+            .ToList();
+        foreach (var offer in expiredOffers)
+        {
+            await connection.DeleteAsync<DbOffer>(offer.Id);
+        }
+
+        var expiredMessages = (await connection.QueryAsync<DbMessage>(
+                "select * from messages where Ttl is not null"))
+            .Where(m => TtlMath.HasExpired(m.Ttl, m.CreatedAt, now))
+            .ToList();
+        foreach (var message in expiredMessages)
+        {
+            await connection.DeleteAsync<DbMessage>(message.Id);
+        }
+
+        return expiredOffers.Count + expiredMessages.Count;
     }
 
     internal async Task<ICollection<DbNeighbour>> GetNeighbours()
