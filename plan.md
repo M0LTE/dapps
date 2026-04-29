@@ -178,12 +178,9 @@ Direction: native single-file binaries published as GitHub Release assets, not a
 - Trimming left off — ASP.NET Core + DI + JSON have enough reflection that trimming tends to break startup in subtle ways. Binary is ~100MB; acceptable for the ergonomics win.
 - Release workflow auto-creates the GitHub Release with the four binaries attached, named `dapps-<rid>` / `dapps-<rid>.exe`.
 
-### C2. Config tooling
+### C2. Config tooling *(env-var seeding done; CLI subcommand deferred)*
 
-Today config lives in `dapps.db` (the `systemoptions` table) and the only way to seed it is via REST `/Config` POST or by editing the DB directly. Improve:
-- CLI subcommand `dapps configure --callsign <X> --node-host <Y>` etc. that writes to the DB.
-- Or: read defaults from environment variables on startup (`DAPPS_CALLSIGN`, `DAPPS_NODE_HOST`, …) and seed missing rows. Easiest path for `docker-compose`.
-- Sensible error if required values are missing instead of silently using `N0CALL`.
+`DbStartup` now seeds missing `systemoptions` rows from `DAPPS_*` environment variables (`DAPPS_CALLSIGN`, `DAPPS_NODE_HOST`, `DAPPS_AGW_PORT`, `DAPPS_DEFAULT_BPQ_PORT`, `DAPPS_MQTT_PORT`, `DAPPS_NODE_TYPE`). Once a row exists, env vars stop mattering — no surprise overwrites of operator-set values on restart. After seed, the startup refuses to run with the placeholder `N0CALL` callsign and logs a clear error pointing the operator at `DAPPS_CALLSIGN` or `/Config`. The originally-listed `dapps configure` CLI subcommand is unnecessary given env-var seeding plus the existing `/Config` REST endpoint; deferred unless a real need surfaces.
 
 ### C3. Health, logs, observability
 
