@@ -1,17 +1,15 @@
-﻿using Microsoft.Extensions.Options;
-using System.Net.Sockets;
-using dapps.core.Models;
+﻿using System.Net.Sockets;
+using dapps.client.Backhaul;
 
 namespace dapps.core.Services;
 
 public class InboundConnectionHandlerFactory(
     ILoggerFactory loggerFactory,
     Database database,
-    MqttBrokerService mqtt,
-    IOptionsMonitor<SystemOptions> options)
+    IBackhaulInbox inbox)
 {
     internal InboundConnectionHandler Create(TcpClient tcpClient)
     {
-        return new InboundConnectionHandler(tcpClient, loggerFactory, database, mqtt, options);
+        return new InboundConnectionHandler(tcpClient, loggerFactory, database, inbox);
     }
 }
