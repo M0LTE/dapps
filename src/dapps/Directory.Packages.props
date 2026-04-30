@@ -6,14 +6,16 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Microsoft.Extensions -->
-    <PackageVersion Include="Microsoft.Extensions.Logging" Version="10.0.7" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.7" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Console" Version="10.0.7" />
+    <!-- Microsoft.Extensions / ASP.NET Core — pinned to .NET 8 LTS. .NET
+         10's Linux baseline is glibc 2.36 (Debian 12 / Bookworm), which
+         excludes Raspberry Pi OS 11 (Bullseye, glibc 2.31) deployments
+         still in the wild. .NET 8 LTS targets glibc 2.23 — broad Pi
+         compatibility, supported through Nov 2026. -->
+    <PackageVersion Include="Microsoft.Extensions.Logging" Version="8.0.1" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.3" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Console" Version="8.0.1" />
 
-    <!-- ASP.NET Core / OpenAPI -->
-    <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.0" />
-    <PackageVersion Include="Scalar.AspNetCore" Version="2.14.7" />
+    <PackageVersion Include="System.IO.Pipelines" Version="8.0.0" />
 
     <!-- Storage / messaging -->
     <PackageVersion Include="sqlite-net-pcl" Version="1.9.172" />

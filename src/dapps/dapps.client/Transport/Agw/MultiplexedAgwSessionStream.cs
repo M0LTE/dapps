@@ -63,15 +63,22 @@ public sealed class MultiplexedAgwSessionStream : Stream
 
         var available = result.Buffer;
         var toCopy = (int)Math.Min(available.Length, buffer.Length);
-        var dest = buffer.Span;
-        var written = 0;
-        foreach (var segment in available.Slice(0, toCopy))
-        {
-            segment.Span.CopyTo(dest.Slice(written));
-            written += segment.Length;
-        }
+        // Span-typed work has to live in a sync helper — async methods
+        // can't hold ref-struct locals in C# 12 / .NET 8.
+        CopyToMemory(available.Slice(0, toCopy), buffer);
         incoming.Reader.AdvanceTo(available.GetPosition(toCopy));
         return toCopy;
+    }
+
+    private static void CopyToMemory(System.Buffers.ReadOnlySequence<byte> source, Memory<byte> dest)
+    {
+        var span = dest.Span;
+        var written = 0;
+        foreach (var segment in source)
+        {
+            segment.Span.CopyTo(span.Slice(written));
+            written += segment.Length;
+        }
     }
 
     public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken ct)
