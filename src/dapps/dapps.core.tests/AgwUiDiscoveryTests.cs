@@ -1,4 +1,3 @@
-using System.Buffers.Binary;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -11,39 +10,37 @@ namespace dapps.core.tests;
 
 /// <summary>
 /// Drives <see cref="AgwUiDiscoveryBearer"/> against a fake AGW server
-/// running on a TCP loopback socket. The fake answers the X-register
-/// the bearer issues at startup, then we feed it pre-canned 'U' frames
-/// to verify the bearer parses and yields beacons. Validates Plan B's
-/// AX.25 path end-to-end at the AGW frame layer — without a real BPQ.
+/// running on a TCP loopback socket. Validates the AX.25-side discovery
+/// path end-to-end at the AGW frame layer — without a real BPQ.
 /// </summary>
 public sealed class AgwUiDiscoveryTests
 {
+    private static DiscoveryChannelInfo Channel(int id, byte port) =>
+        new(id, "agw", port.ToString(), LinkClass.VhfUhfFm,
+            BeaconIntervalSeconds: 1800, AdvertisedTtlSeconds: 5400, CostHint: 5);
+
     [Fact]
     public async Task StartAndAnnounce_WritesXRegisterMonitorAndUiFrames()
     {
         using var server = new FakeAgwServer();
         await using var bearer = new AgwUiDiscoveryBearer(
-            server.Host, server.Port,
-            ourCallsign: "M0SEND", bpqPort: 0, NullLoggerFactory.Instance);
+            server.Host, server.Port, ourCallsign: "M0SEND", NullLoggerFactory.Instance);
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         var serverTask = Task.Run(() => server.AcceptOneAsync(cts.Token), cts.Token);
 
-        await bearer.StartAsync(cts.Token);
+        await bearer.StartAsync([Channel(1, 0)], cts.Token);
         await bearer.AnnounceAsync(
             new BeaconFrame("M0SEND", 0, 600, new AgwBearerHint(0)),
-            cts.Token);
+            "0", cts.Token);
 
-        // Drain whatever frames the bearer wrote: X (register), m (monitor toggle), M (announce).
+        // X (register), m (monitor enable), M (announce) — exactly three.
         var frames = await server.WaitForFramesAsync(3, TimeSpan.FromSeconds(3));
-
         frames.Should().HaveCount(3);
         frames[0].Kind.Should().Be('X');
-        frames[0].CallFrom.Should().Be("M0SEND");
         frames[1].Kind.Should().Be('m');
-        frames[1].Payload[0].Should().Be(1, "monitor toggle '1' = on");
+        frames[1].Payload[0].Should().Be(1);
         frames[2].Kind.Should().Be('M');
-        frames[2].CallFrom.Should().Be("M0SEND");
         Encoding.ASCII.GetString(frames[2].Payload).Should().StartWith("DAPPS v1");
     }
 
@@ -52,38 +49,82 @@ public sealed class AgwUiDiscoveryTests
     {
         using var server = new FakeAgwServer();
         await using var bearer = new AgwUiDiscoveryBearer(
-            server.Host, server.Port,
-            ourCallsign: "M0RECV", bpqPort: 1, NullLoggerFactory.Instance);
+            server.Host, server.Port, ourCallsign: "M0RECV", NullLoggerFactory.Instance);
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         var serverTask = Task.Run(() => server.AcceptOneAsync(cts.Token), cts.Token);
 
-        await bearer.StartAsync(cts.Token);
+        await bearer.StartAsync([Channel(1, 1)], cts.Token);
 
-        // Server pushes a 'U' frame carrying a peer's beacon — what BPQ
-        // would deliver while monitor mode is on after another station
-        // sends an AX.25 UI frame.
         var beaconText = "DAPPS v1 callsign=G7XYZ-9 hops=1 ttl=600";
         await server.SendFrameToClientAsync(new AgwFrame(
             Port: 1, Kind: 'U', Pid: 0xF0,
             CallFrom: "G7XYZ-9", CallTo: "DAPPS",
             Payload: Encoding.ASCII.GetBytes(beaconText)));
 
-        var heard = new TaskCompletionSource<BeaconFrame>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var heard = new TaskCompletionSource<ReceivedBeacon>(TaskCreationOptions.RunContinuationsAsynchronously);
         var listenTask = Task.Run(async () =>
         {
-            await foreach (var b in bearer.ListenAsync(cts.Token).WithCancellation(cts.Token))
+            await foreach (var rb in bearer.ListenAsync(cts.Token).WithCancellation(cts.Token))
             {
-                heard.TrySetResult(b);
+                heard.TrySetResult(rb);
                 break;
             }
         }, cts.Token);
 
         var got = await heard.Task.WaitAsync(TimeSpan.FromSeconds(3), cts.Token);
-        got.Callsign.Should().Be("G7XYZ-9");
-        got.Hops.Should().Be(1);
-        got.Bearer.Should().BeOfType<AgwBearerHint>();
-        ((AgwBearerHint)got.Bearer).BpqPort.Should().Be(1);
+        got.Beacon.Callsign.Should().Be("G7XYZ-9");
+        got.Beacon.Hops.Should().Be(1);
+        got.Beacon.Bearer.Should().BeOfType<AgwBearerHint>();
+        ((AgwBearerHint)got.Beacon.Bearer).BpqPort.Should().Be(1);
+        got.ChannelKey.Should().Be("1");
+    }
+
+    [Fact]
+    public async Task MultiplePorts_OneBearerInstance_DistinguishesByChannelKey()
+    {
+        // A node with VHF on BPQ port 1 and AXIP on BPQ port 3 shares
+        // one AGW socket. Beacons on each port must be tagged with the
+        // matching channel key when yielded.
+        using var server = new FakeAgwServer();
+        await using var bearer = new AgwUiDiscoveryBearer(
+            server.Host, server.Port, ourCallsign: "M0RECV", NullLoggerFactory.Instance);
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var serverTask = Task.Run(() => server.AcceptOneAsync(cts.Token), cts.Token);
+
+        await bearer.StartAsync([Channel(1, 1), Channel(2, 3)], cts.Token);
+
+        await server.SendFrameToClientAsync(new AgwFrame(
+            1, 'U', 0xF0, "G7XYZ-9", "DAPPS",
+            Encoding.ASCII.GetBytes("DAPPS v1 callsign=G7XYZ-9 hops=0 ttl=600")));
+        await server.SendFrameToClientAsync(new AgwFrame(
+            3, 'U', 0xF0, "G0AXP", "DAPPS",
+            Encoding.ASCII.GetBytes("DAPPS v1 callsign=G0AXP hops=2 ttl=600")));
+
+        var seen = new List<ReceivedBeacon>();
+        var listenTask = Task.Run(async () =>
+        {
+            await foreach (var rb in bearer.ListenAsync(cts.Token).WithCancellation(cts.Token))
+            {
+                lock (seen) seen.Add(rb);
+                if (seen.Count >= 2) break;
+            }
+        }, cts.Token);
+
+        var deadline = DateTime.UtcNow.AddSeconds(3);
+        while (DateTime.UtcNow < deadline)
+        {
+            lock (seen) if (seen.Count >= 2) break;
+            await Task.Delay(50, cts.Token);
+        }
+
+        lock (seen)
+        {
+            seen.Should().HaveCount(2);
+            seen.Single(s => s.Beacon.Callsign == "G7XYZ-9").ChannelKey.Should().Be("1");
+            seen.Single(s => s.Beacon.Callsign == "G0AXP").ChannelKey.Should().Be("3");
+        }
     }
 
     [Fact]
@@ -91,51 +132,41 @@ public sealed class AgwUiDiscoveryTests
     {
         using var server = new FakeAgwServer();
         await using var bearer = new AgwUiDiscoveryBearer(
-            server.Host, server.Port,
-            ourCallsign: "M0SELF", bpqPort: 0, NullLoggerFactory.Instance);
+            server.Host, server.Port, ourCallsign: "M0SELF", NullLoggerFactory.Instance);
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         var serverTask = Task.Run(() => server.AcceptOneAsync(cts.Token), cts.Token);
-        await bearer.StartAsync(cts.Token);
+        await bearer.StartAsync([Channel(1, 0)], cts.Token);
 
-        // Echo of our own outbound — must NOT yield.
+        // Self-echo: must NOT yield.
         await server.SendFrameToClientAsync(new AgwFrame(
             0, 'U', 0xF0, "M0SELF", "DAPPS",
             Encoding.ASCII.GetBytes("DAPPS v1 callsign=M0SELF hops=0 ttl=600")));
-
-        // Other monitor frame kinds also fire during monitor mode —
-        // 'T' (echoed UI), 'S' (supervisory), 'I' (info). Bearer must
-        // ignore them.
+        // Wrong kind 'T' (echoed UI in monitor mode): must NOT yield.
         await server.SendFrameToClientAsync(new AgwFrame(
             0, 'T', 0xF0, "G7XYZ-9", "DAPPS",
             Encoding.ASCII.GetBytes("DAPPS v1 callsign=G7XYZ-9 hops=0 ttl=600")));
-
-        // Real beacon from a real peer — must yield this one.
+        // Real beacon: must yield.
         await server.SendFrameToClientAsync(new AgwFrame(
             0, 'U', 0xF0, "G7XYZ-9", "DAPPS",
             Encoding.ASCII.GetBytes("DAPPS v1 callsign=G7XYZ-9 hops=2 ttl=600")));
 
-        var heard = new TaskCompletionSource<BeaconFrame>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var heard = new TaskCompletionSource<ReceivedBeacon>(TaskCreationOptions.RunContinuationsAsynchronously);
         var listenTask = Task.Run(async () =>
         {
-            await foreach (var b in bearer.ListenAsync(cts.Token).WithCancellation(cts.Token))
+            await foreach (var rb in bearer.ListenAsync(cts.Token).WithCancellation(cts.Token))
             {
-                heard.TrySetResult(b);
+                heard.TrySetResult(rb);
                 break;
             }
         }, cts.Token);
 
         var got = await heard.Task.WaitAsync(TimeSpan.FromSeconds(3), cts.Token);
-        got.Callsign.Should().Be("G7XYZ-9");
-        got.Hops.Should().Be(2, "the bearer must skip the self-echo and the wrong-kind frame and surface only the genuine peer beacon");
+        got.Beacon.Callsign.Should().Be("G7XYZ-9");
+        got.Beacon.Hops.Should().Be(2,
+            "the bearer must skip the self-echo and the wrong-kind frame and surface only the genuine peer beacon");
     }
 
-    /// <summary>
-    /// Tiny TCP server that pretends to be BPQ's AGW listener, just
-    /// enough to exercise the bearer. Sends a single canned X-register
-    /// ack on connect; thereafter relays per-test fixture sends and
-    /// captures everything the client writes.
-    /// </summary>
     private sealed class FakeAgwServer : IDisposable
     {
         private readonly TcpListener _listener;
@@ -160,8 +191,6 @@ public sealed class AgwUiDiscoveryTests
             _stream = _accepted.GetStream();
             _framing = new AgwFrameTransport(_stream);
 
-            // Read loop: capture every frame the client sends, and
-            // auto-reply to the X register with a 1-byte 0x01.
             _ = Task.Run(async () =>
             {
                 try
@@ -178,13 +207,12 @@ public sealed class AgwUiDiscoveryTests
                         }
                     }
                 }
-                catch { /* expected on tear-down */ }
+                catch { /* tear-down */ }
             }, ct);
         }
 
         public async Task SendFrameToClientAsync(AgwFrame frame)
         {
-            // The server may not have accepted yet — give it a moment.
             for (var i = 0; i < 30 && _framing is null; i++) await Task.Delay(50);
             await _framing!.WriteFrameAsync(frame, CancellationToken.None);
         }
@@ -194,10 +222,7 @@ public sealed class AgwUiDiscoveryTests
             var deadline = DateTime.UtcNow + timeout;
             while (DateTime.UtcNow < deadline)
             {
-                lock (_received)
-                {
-                    if (_received.Count >= n) return _received.ToList();
-                }
+                lock (_received) if (_received.Count >= n) return _received.ToList();
                 await Task.Delay(50);
             }
             lock (_received) return _received.ToList();

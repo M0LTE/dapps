@@ -228,13 +228,14 @@ public class Database(ILogger<Database> logger, IOptionsMonitor<SystemOptions> o
 
     /// <summary>
     /// Insert or refresh a discovered-peer row. Keyed on
-    /// (callsign, bearer) so the same peer heard via two bearers
-    /// occupies two rows. Idempotent — beacons re-arrive every cadence
-    /// and just bump <see cref="DbDiscoveredPeer.LastSeen"/>.
+    /// (callsign, bearer, channel-key) so the same peer heard on
+    /// multiple channels occupies multiple rows. Idempotent — beacons
+    /// re-arrive every cadence and just bump
+    /// <see cref="DbDiscoveredPeer.LastSeen"/>.
     /// </summary>
     internal async Task UpsertDiscoveredPeer(DbDiscoveredPeer peer)
     {
-        peer.PeerKey = DbDiscoveredPeer.MakeKey(peer.Callsign, peer.Bearer);
+        peer.PeerKey = DbDiscoveredPeer.MakeKey(peer.Callsign, peer.Bearer, peer.ChannelKey);
         var connection = DbInfo.GetAsyncConnection();
         var existing = await connection.FindAsync<DbDiscoveredPeer>(peer.PeerKey);
         if (existing is null)
@@ -245,6 +246,44 @@ public class Database(ILogger<Database> logger, IOptionsMonitor<SystemOptions> o
         {
             await connection.UpdateAsync(peer);
         }
+    }
+
+    /// <summary>Insert a new <see cref="DbDiscoveryChannel"/> row, or
+    /// update the bearer-specific tunables on an existing one. Identity
+    /// is (Bearer, ChannelKey) — same channel re-POSTed updates in
+    /// place. Channel defaults are filled from <see cref="LinkClass"/>
+    /// before persisting.</summary>
+    internal async Task UpsertDiscoveryChannel(DbDiscoveryChannel channel)
+    {
+        channel.ApplyClassDefaults();
+        var connection = DbInfo.GetAsyncConnection();
+        var existing = await connection.FindWithQueryAsync<DbDiscoveryChannel>(
+            "select * from discoverychannels where Bearer=? and ChannelKey=?",
+            channel.Bearer, channel.ChannelKey);
+        if (existing is null)
+        {
+            await connection.InsertAsync(channel);
+        }
+        else
+        {
+            channel.Id = existing.Id;
+            await connection.UpdateAsync(channel);
+        }
+    }
+
+    public async Task<IReadOnlyList<DbDiscoveryChannel>> GetDiscoveryChannels()
+    {
+        var connection = DbInfo.GetAsyncConnection();
+        return await connection.QueryAsync<DbDiscoveryChannel>(
+            "select * from discoverychannels order by CostHint, Bearer, ChannelKey");
+    }
+
+    internal async Task<bool> RemoveDiscoveryChannel(int id)
+    {
+        var connection = DbInfo.GetAsyncConnection();
+        var deleted = await connection.ExecuteAsync(
+            "delete from discoverychannels where Id=?", id);
+        return deleted > 0;
     }
 
     /// <summary>List all currently-known discovered peers, irrespective

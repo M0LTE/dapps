@@ -103,10 +103,46 @@ else
     </table>
 }
 
+<h2>Discovery channels</h2>
+@if (Model.DiscoveryChannels.Count == 0)
+{
+    <p class="muted">No discovery channels configured. POST to <code>/DiscoveryChannels</code> with <code>{"Bearer":"agw","ChannelKey":"1","LinkClass":"VhfUhfFm"}</code> (or <code>"udp"</code> + a multicast endpoint) to start beaconing.</p>
+}
+else
+{
+    <table>
+        <thead>
+            <tr>
+                <th>Bearer</th>
+                <th>Channel</th>
+                <th>Link class</th>
+                <th>Cost</th>
+                <th>Beacon every</th>
+                <th>Advertised TTL</th>
+                <th>Enabled</th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var c in Model.DiscoveryChannels)
+        {
+            <tr>
+                <td>@c.Bearer</td>
+                <td><code>@c.ChannelKey</code></td>
+                <td>@c.LinkClass</td>
+                <td class="numeric">@c.CostHint</td>
+                <td class="numeric">@c.BeaconIntervalSeconds s</td>
+                <td class="numeric">@c.AdvertisedTtlSeconds s</td>
+                <td>@(c.Enabled ? "yes" : "no")</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}
+
 <h2>Discovered peers</h2>
 @if (Model.DiscoveredPeers.Count == 0)
 {
-    <p class="muted">No peers heard yet. Set <code>DAPPS_MULTICAST_GROUP</code> (UDP) or <code>DAPPS_AGW_DISCOVERY=true</code> (AX.25 UI) to start beaconing.</p>
+    <p class="muted">No peers heard yet.</p>
 }
 else
 {
@@ -115,6 +151,9 @@ else
             <tr>
                 <th>Callsign</th>
                 <th>Bearer</th>
+                <th>Channel</th>
+                <th>Link class</th>
+                <th>Cost</th>
                 <th>Hops</th>
                 <th>Source</th>
                 <th>Last seen</th>
@@ -127,6 +166,9 @@ else
             <tr>
                 <td>@p.Callsign</td>
                 <td>@p.Bearer</td>
+                <td><code>@p.ChannelKey</code></td>
+                <td>@p.LinkClass</td>
+                <td class="numeric">@p.CostHint</td>
                 <td class="numeric">@p.Hops</td>
                 <td>@(p.UdpEndpoint ?? (p.BpqPort is { } bp ? $"BPQ port {bp}" : "—"))</td>
                 <td>@IndexModel.Age(p.LastSeen) ago</td>

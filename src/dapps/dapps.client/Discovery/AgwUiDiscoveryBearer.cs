@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net.Sockets;
 using System.Threading.Channels;
 using dapps.client.Transport.Agw;
@@ -6,25 +7,20 @@ using Microsoft.Extensions.Logging;
 namespace dapps.client.Discovery;
 
 /// <summary>
-/// Discovery over AGW UI (unconnected) frames. The AGW protocol exposes
-/// three primitives we need:
+/// Discovery over AGW UI (unconnected) frames. One AGW TCP socket
+/// monitors all configured AGW channels (one per BPQ port byte),
+/// emits an `M` frame on whichever port the channel names, and
+/// yields parsed `U` frames stamped with the matching channel key.
 ///
-///   'X' — register our callsign so BPQ knows who's emitting frames
-///   'm' — toggle monitor mode on this AGW connection (then BPQ pushes
-///         every overheard frame as a 'U' record)
-///   'M' — emit a UI frame (we use this to broadcast our beacon)
+/// AGW protocol primitives:
+///   `X` — register our callsign (BPQ won't accept emitted frames otherwise)
+///   `m` — toggle monitor mode on a port (sent once per port we want)
+///   `M` — emit a UI frame on a port
+///   `U` — inbound monitored UI frame (BPQ → us)
 ///
-/// The bearer holds a dedicated AGW TCP connection (separate from the
-/// per-stream connections <c>AgwOutboundTransport</c> opens for outbound
-/// forwarding). It reads the connection's frames in a background loop,
-/// filters for 'U' kind, attempts to parse the payload as a beacon, and
-/// puts successful parses on a channel the daemon iterates.
-///
-/// Outgoing UI frames are addressed to a fixed broadcast destination
-/// callsign (default <c>DAPPS</c>). The destination call doesn't gate
-/// who hears the frame — every AGW client in monitor mode on the port
-/// sees it — but it's a good convention so traffic captures can be
-/// filtered in monitor tools later.
+/// Channels for this bearer have <c>ChannelKey</c> = the BPQ port
+/// byte stringified ("0", "1", …). The bearer rejects any other key
+/// shape on start.
 /// </summary>
 public sealed class AgwUiDiscoveryBearer : IDiscoveryBearer
 {
@@ -35,7 +31,6 @@ public sealed class AgwUiDiscoveryBearer : IDiscoveryBearer
     private readonly string _host;
     private readonly int _port;
     private readonly string _ourCallsign;
-    private readonly byte _bpqPort;
     private readonly string _broadcastCall;
     private readonly ILogger _logger;
 
@@ -43,9 +38,10 @@ public sealed class AgwUiDiscoveryBearer : IDiscoveryBearer
     private AgwFrameTransport? _framing;
     private CancellationTokenSource? _readLoopCts;
     private Task? _readLoop;
+    private readonly Dictionary<byte, string> _portToChannelKey = new();
 
-    private readonly Channel<BeaconFrame> _incoming
-        = Channel.CreateUnbounded<BeaconFrame>(new UnboundedChannelOptions
+    private readonly Channel<ReceivedBeacon> _incoming
+        = Channel.CreateUnbounded<ReceivedBeacon>(new UnboundedChannelOptions
         {
             SingleReader = true,
             SingleWriter = true,
@@ -53,30 +49,38 @@ public sealed class AgwUiDiscoveryBearer : IDiscoveryBearer
 
     public AgwUiDiscoveryBearer(
         string host, int port,
-        string ourCallsign, int bpqPort,
+        string ourCallsign,
         ILoggerFactory loggerFactory,
         string broadcastCall = DefaultBroadcastCall)
     {
         _host = host;
         _port = port;
         _ourCallsign = ourCallsign;
-        if (bpqPort < 0 || bpqPort > 255)
-            throw new ArgumentOutOfRangeException(nameof(bpqPort), "must fit in a single AGW port byte (0..255)");
-        _bpqPort = (byte)bpqPort;
         _broadcastCall = broadcastCall;
         _logger = loggerFactory.CreateLogger<AgwUiDiscoveryBearer>();
     }
 
-    public async Task StartAsync(CancellationToken ct)
+    public async Task StartAsync(IReadOnlyList<DiscoveryChannelInfo> channels, CancellationToken ct)
     {
         if (_tcp is not null) return;
+        if (channels.Count == 0)
+        {
+            throw new ArgumentException("AgwUiDiscoveryBearer requires at least one channel", nameof(channels));
+        }
+
+        // Channel-key parsing: all keys must be valid BPQ port bytes.
+        _portToChannelKey.Clear();
+        foreach (var ch in channels)
+        {
+            var portByte = ParsePortByte(ch.ChannelKey);
+            _portToChannelKey[portByte] = ch.ChannelKey;
+        }
 
         var tcp = new TcpClient();
         await tcp.ConnectAsync(_host, _port, ct);
         var framing = new AgwFrameTransport(tcp.GetStream());
 
-        // Register our callsign — without this, BPQ has no source to
-        // attribute outgoing UI frames to and rejects the 'M' frame.
+        // Register our callsign once for the whole connection.
         await framing.WriteFrameAsync(
             new AgwFrame(0, 'X', 0, _ourCallsign, "", []),
             ct);
@@ -88,37 +92,41 @@ public sealed class AgwUiDiscoveryBearer : IDiscoveryBearer
                 $"AGW register {_ourCallsign} for discovery failed (kind '{registerReply.Kind}')");
         }
 
-        // Enable monitor mode on this connection — BPQ now mirrors every
-        // overheard frame on the port to us as 'U' / 'T' / 'S' / 'I'.
-        // The first byte of the toggle frame's payload is 1 (on).
-        await framing.WriteFrameAsync(
-            new AgwFrame(_bpqPort, 'm', 0, _ourCallsign, "", [1]),
-            ct);
+        // Enable monitor mode on each configured port.
+        foreach (var portByte in _portToChannelKey.Keys)
+        {
+            await framing.WriteFrameAsync(
+                new AgwFrame(portByte, 'm', 0, _ourCallsign, "", [1]),
+                ct);
+        }
 
         _tcp = tcp;
         _framing = framing;
-
         _readLoopCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         _readLoop = Task.Run(() => ReadLoopAsync(_readLoopCts.Token), _readLoopCts.Token);
 
-        _logger.LogInformation("AGW UI discovery monitoring on BPQ port {0} as {1}", _bpqPort, _ourCallsign);
+        _logger.LogInformation(
+            "AGW UI discovery monitoring ports [{0}] as {1}",
+            string.Join(",", _portToChannelKey.Keys),
+            _ourCallsign);
     }
 
-    public async Task AnnounceAsync(BeaconFrame beacon, CancellationToken ct)
+    public async Task AnnounceAsync(BeaconFrame beacon, string channelKey, CancellationToken ct)
     {
         if (_framing is null) throw new InvalidOperationException("AgwUiDiscoveryBearer not started");
+        var portByte = ParsePortByte(channelKey);
         var payload = BeaconCodec.Encode(beacon);
         await _framing.WriteFrameAsync(
-            new AgwFrame(_bpqPort, 'M', 0xF0, _ourCallsign, _broadcastCall, payload),
+            new AgwFrame(portByte, 'M', 0xF0, _ourCallsign, _broadcastCall, payload),
             ct);
     }
 
-    public async IAsyncEnumerable<BeaconFrame> ListenAsync(
+    public async IAsyncEnumerable<ReceivedBeacon> ListenAsync(
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
     {
-        await foreach (var beacon in _incoming.Reader.ReadAllAsync(ct))
+        await foreach (var rb in _incoming.Reader.ReadAllAsync(ct))
         {
-            yield return beacon;
+            yield return rb;
         }
     }
 
@@ -141,21 +149,21 @@ public sealed class AgwUiDiscoveryBearer : IDiscoveryBearer
                     break;
                 }
 
-                // 'U' = decoded inbound UI frame from BPQ. Other kinds
-                // ('T', 'S', 'I') are fired during monitor mode too but
-                // aren't UI frames — skip them.
                 if (frame.Kind != 'U') continue;
-
-                // Skip our own frames echoed back via monitor (they
-                // arrive with our callsign as CallFrom).
                 if (string.Equals(frame.CallFrom, _ourCallsign, StringComparison.OrdinalIgnoreCase))
+                    continue; // self-echo
+
+                if (!_portToChannelKey.TryGetValue(frame.Port, out var channelKey))
+                {
+                    // Frame on a port we didn't ask to monitor — odd; skip.
                     continue;
+                }
 
                 var hint = new AgwBearerHint(frame.Port);
                 if (!BeaconCodec.TryParse(frame.Payload, hint, out var beacon) || beacon is null)
                     continue;
 
-                await _incoming.Writer.WriteAsync(beacon, ct);
+                await _incoming.Writer.WriteAsync(new ReceivedBeacon(beacon, channelKey), ct);
             }
         }
         finally
@@ -179,5 +187,15 @@ public sealed class AgwUiDiscoveryBearer : IDiscoveryBearer
             _tcp?.Dispose();
             _readLoopCts?.Dispose();
         }
+    }
+
+    private static byte ParsePortByte(string channelKey)
+    {
+        if (!byte.TryParse(channelKey, NumberStyles.None, CultureInfo.InvariantCulture, out var b))
+        {
+            throw new FormatException(
+                $"AGW discovery channel-key must be a BPQ port byte (e.g. '0', '1'); got '{channelKey}'");
+        }
+        return b;
     }
 }

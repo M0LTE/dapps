@@ -27,19 +27,12 @@ builder.Services.AddOptions<SystemOptions>().Configure<OptionsRepo, ILogger<Syst
         options.SingleOrDefault(opt => opt.Option == "UdpListenPort")?.Value, out var udpPort) ? udpPort : 0;
     o.AuthRequired = bool.TryParse(
         options.SingleOrDefault(opt => opt.Option == "AuthRequired")?.Value, out var auth) && auth;
-    o.AgwDiscovery = bool.TryParse(
-        options.SingleOrDefault(opt => opt.Option == "AgwDiscovery")?.Value, out var agwDisc) && agwDisc;
-    o.MulticastGroup = options.SingleOrDefault(opt => opt.Option == "MulticastGroup")?.Value ?? "";
-    o.DiscoveryBeaconIntervalSeconds = int.TryParse(
-        options.SingleOrDefault(opt => opt.Option == "DiscoveryBeaconIntervalSeconds")?.Value,
-        out var beaconInt) ? beaconInt : 300;
 
     logger.LogInformation($"Callsign: {o.Callsign}");
     logger.LogInformation($"BPQ AGW: {o.NodeHost}:{o.AgwPort} (default port byte {o.DefaultBpqPort})");
     logger.LogInformation($"MQTT broker: localhost:{o.MqttPort}");
     logger.LogInformation($"UDP datagram listener: {(o.UdpListenPort > 0 ? $":{o.UdpListenPort}" : "disabled")}");
     logger.LogInformation($"App-interface auth required: {o.AuthRequired}");
-    logger.LogInformation($"Discovery: agw={o.AgwDiscovery}, multicast={(string.IsNullOrEmpty(o.MulticastGroup) ? "off" : o.MulticastGroup)}, interval={o.DiscoveryBeaconIntervalSeconds}s");
 });
 
 builder.Services.AddSingleton<InboundConnectionHandlerFactory>();
