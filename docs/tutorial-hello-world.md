@@ -195,6 +195,8 @@ Both surfaces share the same queue. An app written against MQTT and an `apt-get`
 
 ## Where to go next
 
+- **Read [the gallery](gallery.md)** for working examples of the other common app shapes — group chat, sensor publisher, two-way pager.
+- **Read [the reference](reference.md)** for the full MQTT/REST surface, every user property's semantics, and the idempotency contract spelled out explicitly.
 - **Persist `seen` to disk.** SQLite (`sqlite3` stdlib) is easiest. Insert the id under `INSERT OR IGNORE` and use the `changes()` count to decide whether to reply.
 - **Handle malformed payloads.** `decode("utf-8", errors="replace")` keeps the demo from crashing on a binary blob, but a real app should validate input and ack-without-replying on garbage rather than ignoring it (otherwise garbage piles up in your queue).
 - **Set sensible TTLs.** "How fresh does this still need to be?" is a useful design question. Match the value to what your app does.
