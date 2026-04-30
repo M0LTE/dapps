@@ -259,9 +259,9 @@ https://gist.github.com/M0LTE/be1fd071ca1867703d1f2d4c17fabca2
 
 You'll need:
 
-- A working linbpq instance you control (or another packet node speaking AGW + the linbpq Apps Interface).
+- A working linbpq instance you control (or another packet node speaking the SV2AGW protocol).
 - A licensed callsign with an unused SSID for DAPPS to live under (e.g. `M0LTE-9`).
-- A Linux, macOS, or Windows host that can talk to BPQ — same machine is the simplest case.
+- A Linux, macOS, or Windows host that can reach BPQ's `AGWPORT` over TCP. Same machine is the simplest case but not required.
 
 DAPPS ships as a self-contained single-file binary; no .NET runtime install, no Docker required.
 
@@ -324,7 +324,6 @@ export DAPPS_NODE_HOST=127.0.0.1     # where BPQ is listening
 export DAPPS_AGW_PORT=8000           # BPQ AGWPORT
 export DAPPS_DEFAULT_BPQ_PORT=0      # 0-indexed BPQ port byte to use for outbound by default
 export DAPPS_MQTT_PORT=1883          # embedded MQTT broker port (for app subscribers)
-export DAPPS_BPQ_INBOUND_LISTENER_PORT=11000  # TCP port BPQ's CMDPORT slot dials (must match)
 
 ./dapps
 ```
@@ -334,8 +333,8 @@ DAPPS refuses to start with the placeholder `N0CALL` value — set `DAPPS_CALLSI
 You should see startup logs ending with something like:
 
 ```
-Waiting for connection on port 0.0.0.0:11000
-MQTT broker listening on :1883
+BPQ AGW: 127.0.0.1:8000 (default port byte 0)
+MQTT broker: localhost:1883
 Now listening on: http://localhost:5000
 ```
 
@@ -383,8 +382,8 @@ Type `info` for help, `q` to quit.
 
 - **`Callsign is not configured`** at startup → set `DAPPS_CALLSIGN` env var or POST `/Config` and restart.
 - **`Did not see DAPPSv1> prompt`** when forwarding → the remote DAPPS isn't reachable through BPQ. Check the neighbour's BPQ-side `APPLICATION` line and that it's running.
-- **Inbound `*** Connected to DAPPS` but nothing more** → likely BPQ is sending text-mode bytes; double-check the `TRANS` flag on the `APPLICATION` line.
 - **`AGW register ... failed`** in the logs → BPQ isn't accepting the registration. Check `AGWMASK=1` and that the AGW port is reachable from where DAPPS is running.
+- **Inbound L2 connects to DAPPS's callsign hit the node prompt instead of being dispatched** → check that `bpq32.cfg` has the `APPLICATION 1,DAPPS,,...` line for that callsign. Without it, BPQ treats the inbound as a regular node session and the AGW `'X'` registration is silently inert.
 - **Port byte indexing surprises** → AGW port indices are 0-based; BPQ port numbers in `bpq32.cfg` are 1-based. AGW port 0 = BPQ port 1.
 
 ## Backups
