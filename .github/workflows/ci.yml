@@ -1,0 +1,181 @@
+name: ci
+
+# One workflow that handles every commit:
+#
+#   - PR / workflow_dispatch       → build + test only.
+#   - push to master, tests pass   → check whether a GitHub Release
+#                                    already exists for v$(Version).
+#                                    If not, build the release matrix
+#                                    and publish it.
+#
+# Single source of truth for the version is `<Version>` in
+# `src/dapps/Directory.Build.props`. Bump it in the same PR as the
+# change you want released; merge → release. Don't bump it →
+# the merge lands as a normal commit, no release. Same version twice
+# → second push is a no-op (release-already-exists check).
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write   # release job creates a Release on master pushes
+
+env:
+  # GitHub announced Node 20's deprecation in actions; runners auto-
+  # promote v4 actions (upload-artifact, download-artifact) to Node 24
+  # when this flag is set. Without it every job emits a deprecation
+  # warning until those actions cut a v5.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      version: ${{ steps.version.outputs.value }}
+      should_release: ${{ steps.decide.outputs.should_release }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Pre-pull linbpq image
+        # The integration tests spin up two m0lte/linbpq containers
+        # (TwoInstanceLinbpqFixture). Pulling here makes per-test
+        # startup deterministic; without it the first integration test
+        # blocks on a docker pull and sometimes trips its own timeout.
+        run: docker pull m0lte/linbpq:latest
+
+      - name: Restore
+        run: dotnet restore src/dapps/dapps.sln
+
+      - name: Build
+        run: dotnet build src/dapps/dapps.sln --no-restore --configuration Release
+
+      - name: Test
+        run: dotnet test src/dapps/dapps.core.tests/dapps.core.tests.csproj --no-build --configuration Release
+
+      - name: Read version
+        id: version
+        # `dotnet msbuild -getProperty:Version` is the official supported
+        # way to read an MSBuild property without parsing XML.
+        run: |
+          v=$(dotnet msbuild src/dapps/dapps.core/dapps.core.csproj -getProperty:Version -nologo)
+          echo "value=${v}" >> "$GITHUB_OUTPUT"
+          echo "version: ${v}"
+
+      - name: Decide release
+        id: decide
+        # Only on master pushes. PRs and workflow_dispatch never publish
+        # — they're just verifying the build/test path works.
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="v${{ steps.version.outputs.value }}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            echo "Release $tag already exists — skipping release."
+          else
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+            echo "Will publish $tag."
+          fi
+
+  build:
+    needs: test
+    if: needs.test.outputs.should_release == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Native runner per arch where GitHub provides one; cross-
+          # compile from x64 for the older Pi (linux-arm).
+          - rid: linux-x64
+            os: ubuntu-latest
+            ext: ''
+          - rid: linux-arm64
+            os: ubuntu-24.04-arm
+            ext: ''
+          - rid: linux-arm
+            os: ubuntu-latest      # cross-compiled
+            ext: ''
+          - rid: win-x64
+            os: windows-latest
+            ext: '.exe'
+          - rid: osx-arm64
+            os: macos-latest
+            ext: ''
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Publish self-contained single file
+        # PublishSingleFile bundles managed assemblies; the extra
+        # IncludeNativeLibrariesForSelfExtract flag pulls native deps
+        # (e.g. SQLite's libe_sqlite3.so) into the same exe so the
+        # operator drops one file on a server. Trimming is left off:
+        # ASP.NET Core + DI + JSON have enough reflection that trimming
+        # tends to break startup in subtle ways. Binary size is ~100MB
+        # — acceptable cost for "no runtime install needed".
+        shell: bash
+        run: |
+          dotnet publish src/dapps/dapps.core/dapps.core.csproj \
+            --configuration Release \
+            --runtime ${{ matrix.rid }} \
+            --self-contained true \
+            -p:PublishSingleFile=true \
+            -p:IncludeNativeLibrariesForSelfExtract=true \
+            -p:DebugType=embedded \
+            --output publish
+
+      - name: Stage release artifact
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp "publish/dapps.core${{ matrix.ext }}" "dist/dapps-${{ matrix.rid }}${{ matrix.ext }}"
+          test -s "dist/dapps-${{ matrix.rid }}${{ matrix.ext }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dapps-${{ matrix.rid }}
+          path: dist/dapps-${{ matrix.rid }}${{ matrix.ext }}
+          if-no-files-found: error
+
+  release:
+    needs: [test, build]
+    if: needs.test.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="v${{ needs.test.outputs.version }}"
+          gh release create "$tag" \
+            --title "$tag" \
+            --target "${{ github.sha }}" \
+            --generate-notes \
+            dist/*

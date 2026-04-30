@@ -302,6 +302,7 @@ Grab the latest release for your platform from <https://github.com/M0LTE/dapps/r
 
 - `dapps-linux-x64` — typical desktop / VPS Linux
 - `dapps-linux-arm64` — Raspberry Pi 4 / 5 (64-bit Pi OS)
+- `dapps-linux-arm` — older Raspberry Pi (32-bit Pi OS)
 - `dapps-osx-arm64` — Apple silicon macOS
 - `dapps-win-x64.exe` — Windows
 

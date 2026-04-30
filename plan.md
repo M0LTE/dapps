@@ -226,10 +226,10 @@ If the answer ends up being "DAPPS learns next-hop reachability and leaves path 
 
 Direction: native single-file binaries published as GitHub Release assets, not a Docker image. Operators run a binary; no .NET runtime install, no Docker install, no container plumbing. The Dockerfile in the repo stays as a secondary option for those who want it but isn't the primary distribution.
 
-- GitHub Actions matrix build on tag push (`v*.*.*`) — `linux-x64`, `linux-arm64`, `win-x64`, `osx-arm64`. ARM Linux is the Raspberry Pi case.
+- Single workflow `.github/workflows/ci.yml` handles the full PR-to-release path. Triggered on PR (test only) and master push (test, then conditional release). Tag-push triggers are gone; the release decision is driven by `<Version>` in `src/dapps/Directory.Build.props` — bump it to release, leave it to land a normal commit.
+- Master-push flow: build + test → query whether `v$(Version)` already exists as a GitHub Release → if not, fan out the matrix (`linux-x64`, `linux-arm64`, `linux-arm`, `win-x64`, `osx-arm64`) and `gh release create` with all five binaries attached. Same version twice = second push is a no-op, so re-merging or amending master won't overwrite a published release.
 - `dotnet publish ... --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true` so the SQLite native lib bundles into the executable.
 - Trimming left off — ASP.NET Core + DI + JSON have enough reflection that trimming tends to break startup in subtle ways. Binary is ~100MB; acceptable for the ergonomics win.
-- Release workflow auto-creates the GitHub Release with the four binaries attached, named `dapps-<rid>` / `dapps-<rid>.exe`.
 
 ### C2. Config tooling *(env-var seeding done; CLI subcommand deferred)*
 
