@@ -2,6 +2,15 @@
 
   <PropertyGroup>
     <!--
+      Single source of truth for the dapps semver. Stamps the binary
+      and is read by CI to decide whether to publish a release: each
+      push to master triggers the matrix build only when no GitHub
+      Release already exists for v$(Version). Bump this in the same
+      PR as the change you want released.
+    -->
+    <Version>0.1.0</Version>
+
+    <!--
       sqlite-net-pcl 1.9.x ships a SQLitePCLRaw.lib.e_sqlite3 that lists
       alpine-arm, alpine-arm64, alpine-x64 RIDs. Since .NET 8 those
       version-/distro-specific RIDs aren't auto-resolved by NuGet, which
