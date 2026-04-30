@@ -79,6 +79,10 @@ Sysop-friendly model:
 
 `DappsProtocolClient` wraps every per-byte read with a 3-minute inactivity timeout (matches receiver-side T3-default). On expiry the read surfaces a `TimeoutException` rather than blocking forever; the forwarder loop catches and moves on. `AgwOutboundTransport.ConnectAsync` got the same treatment on the connect-confirm wait. Outer `CancellationToken` (from shutdown) takes precedence over the inactivity timer.
 
+### A5. Outbound TTL on the app interface *(done)*
+
+Apps can now request a residual lifetime when submitting a message, and inbound delivery surfaces residual TTL so apps can discriminate near-expiry messages from fresh ones. REST `OutboundRequest` gains an optional `Ttl` (positive int seconds; 0/negative → 400). MQTT publish reads optional `dapps-ttl` user property; malformed values fall through to no-TTL rather than rejecting the publish (the broker has no way to NACK after the fact). On delivery, both surfaces report the *residual* TTL — initial TTL minus dwell time on this node — so an app polling `/AppApi/inbound/{app}` and an app subscribed to `dapps/in/<app>` see the same number. Closes the spec gap where the on-air protocol carried `ttl=` end-to-end but the app interface couldn't read or write it.
+
 ### A4. Per-app authentication on MQTT/REST *(done)*
 
 Per-app credentials issued via `/AppTokens` (POST mints + returns plaintext once; DELETE revokes). Tokens hashed at rest with PBKDF2-HMAC-SHA256 + 16-byte salt. Verification is constant-time-equality on the derived bytes.

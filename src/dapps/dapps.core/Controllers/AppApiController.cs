@@ -26,9 +26,10 @@ public class AppApiController(Database database) : ControllerBase
         if (string.IsNullOrWhiteSpace(request.App)) return BadRequest("App is required");
         if (string.IsNullOrWhiteSpace(request.DestCallsign)) return BadRequest("DestCallsign is required");
         if (request.Payload is null || request.Payload.Length == 0) return BadRequest("Payload is required");
+        if (request.Ttl is { } ttl && ttl <= 0) return BadRequest("Ttl must be a positive integer (seconds)");
         if (!HttpContext.IsAuthorisedForApp(request.App)) return Forbid();
 
-        var id = await database.SubmitOutboundMessage(request.App, request.DestCallsign, request.Payload);
+        var id = await database.SubmitOutboundMessage(request.App, request.DestCallsign, request.Payload, request.Ttl);
         return Ok(new OutboundResponse(id));
     }
 
@@ -41,7 +42,10 @@ public class AppApiController(Database database) : ControllerBase
     {
         if (!HttpContext.IsAuthorisedForApp(app)) return Forbid();
         var pending = await database.GetUnacknowledgedLocalMessagesForApp(app);
-        return Ok(pending.Select(m => new InboundMessage(m.Id, m.SourceCallsign, m.Payload)).ToList());
+        var now = DateTime.UtcNow;
+        return Ok(pending.Select(m => new InboundMessage(
+            m.Id, m.SourceCallsign, m.Payload,
+            TtlMath.Residual(m.Ttl, m.CreatedAt, now))).ToList());
     }
 
     /// <summary>
@@ -58,6 +62,20 @@ public class AppApiController(Database database) : ControllerBase
     }
 }
 
-public sealed record OutboundRequest(string App, string DestCallsign, byte[] Payload);
+/// <summary>
+/// Submit-an-outbound-message request body. <see cref="Ttl"/> is
+/// optional residual lifetime in seconds — propagates onto the
+/// outgoing <c>ihave</c> as <c>ttl=N</c>. Null = no expiry; the
+/// message stays in the queue until forwarded or manually deleted.
+/// Apps that care about cleanup should set a value.
+/// </summary>
+public sealed record OutboundRequest(string App, string DestCallsign, byte[] Payload, int? Ttl = null);
+
 public sealed record OutboundResponse(string Id);
-public sealed record InboundMessage(string Id, string SourceCallsign, byte[] Payload);
+
+/// <summary>
+/// One pending inbound message. <see cref="Ttl"/> is the residual
+/// lifetime in seconds at the moment of the GET (initial TTL minus
+/// dwell time on this node); null when the message has no TTL.
+/// </summary>
+public sealed record InboundMessage(string Id, string SourceCallsign, byte[] Payload, int? Ttl = null);

@@ -92,6 +92,18 @@ public sealed class MqttBrokerService(
         {
             builder = builder.WithUserProperty("dapps-source", message.SourceCallsign);
         }
+        if (message.Ttl is { } ttl)
+        {
+            // Residual TTL the originator advertised (or what's left of
+            // it after queue dwell). Apps that care about freshness
+            // can drop / deprioritise near-expiry messages.
+            var residual = TtlMath.Residual(ttl, message.CreatedAt, DateTime.UtcNow) ?? ttl;
+            if (residual > 0)
+            {
+                builder = builder.WithUserProperty(
+                    "dapps-ttl", residual.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            }
+        }
         var msg = builder.Build();
 
         try
@@ -231,10 +243,25 @@ public sealed class MqttBrokerService(
                 return;
             }
 
+            // Optional TTL: an app sets the outbound message's residual
+            // lifetime via a `dapps-ttl` user property on the publish.
+            // Missing or unparseable → null, i.e. "no expiry".
+            int? ttl = null;
+            var ttlProp = e.ApplicationMessage.UserProperties?
+                .FirstOrDefault(p => string.Equals(p.Name, "dapps-ttl", StringComparison.OrdinalIgnoreCase));
+            if (ttlProp is not null
+                && int.TryParse(ttlProp.Value, System.Globalization.NumberStyles.None,
+                    System.Globalization.CultureInfo.InvariantCulture, out var parsedTtl)
+                && parsedTtl > 0)
+            {
+                ttl = parsedTtl;
+            }
+
             try
             {
-                var id = await database.SubmitOutboundMessage(app, dest, e.ApplicationMessage.PayloadSegment.ToArray());
-                logger.LogInformation("MQTT: queued outbound {0} from app {1} to {2}", id, app, dest);
+                var id = await database.SubmitOutboundMessage(app, dest, e.ApplicationMessage.PayloadSegment.ToArray(), ttl);
+                logger.LogInformation("MQTT: queued outbound {0} from app {1} to {2} (ttl={3})",
+                    id, app, dest, ttl?.ToString() ?? "none");
             }
             catch (Exception ex)
             {

@@ -181,8 +181,8 @@ Embedded MQTTnet broker, listening on `MqttPort` (default 1883). Connect with an
 
 | Topic | Direction | Purpose |
 |---|---|---|
-| `dapps/in/<app>` | DAPPS → app | Apps subscribe; DAPPS publishes incoming messages destined for `<app>` on this node. Each delivery carries `dapps-id` (the 7-char message id) and `dapps-source` (the callsign that handed us this message — the last hop, not necessarily the original sender) as MQTT 5 user properties. |
-| `dapps/out/<app>/<dest-callsign>` | app → DAPPS | Apps publish here to send a message to `<app>` running at `<dest-callsign>`. The payload is the message body. |
+| `dapps/in/<app>` | DAPPS → app | Apps subscribe; DAPPS publishes incoming messages destined for `<app>` on this node. Each delivery carries `dapps-id` (the 7-char message id) and `dapps-source` (the callsign that handed us this message — the last hop, not necessarily the original sender) as MQTT 5 user properties. If the message was submitted with a TTL, `dapps-ttl` carries the *residual* lifetime in seconds at the moment of delivery (initial TTL minus dwell time on this node). |
+| `dapps/out/<app>/<dest-callsign>` | app → DAPPS | Apps publish here to send a message to `<app>` running at `<dest-callsign>`. The payload is the message body. Optional MQTT 5 user property `dapps-ttl` sets the message lifetime in seconds (positive integer); malformed values are ignored and the message is queued without a TTL. |
 | `dapps/ack/<app>` | app → DAPPS | Apps publish a message id (as the UTF-8 payload) to acknowledge receipt. |
 
 ### REST
@@ -191,8 +191,8 @@ Same semantics, pull-based. All endpoints under `/AppApi`:
 
 | Method + path | Body | Purpose |
 |---|---|---|
-| `POST /AppApi/outbound` | `{ "app": "...", "destCallsign": "...", "payload": <bytes> }` | Submit an outbound message. Returns `{ "id": "..." }`. |
-| `GET /AppApi/inbound/{app}` | — | Returns `[ { "id": "...", "sourceCallsign": "...", "payload": <bytes> }, … ]` of unacked inbound messages for `{app}`. |
+| `POST /AppApi/outbound` | `{ "app": "...", "destCallsign": "...", "payload": <bytes>, "ttl": <seconds, optional> }` | Submit an outbound message. `ttl` (if present) must be a positive integer; non-positive values return `400`. Returns `{ "id": "..." }`. |
+| `GET /AppApi/inbound/{app}` | — | Returns `[ { "id": "...", "sourceCallsign": "...", "payload": <bytes>, "ttl": <residual seconds or null> }, … ]` of unacked inbound messages for `{app}`. `ttl` is the *residual* lifetime (initial TTL minus dwell time) at the moment of the GET, or `null` if the message has no TTL. |
 | `POST /AppApi/inbound/{app}/{id}/ack` | — | Mark message `{id}` as delivered. Idempotent. |
 
 REST and MQTT can be used by different apps simultaneously — they're just two views of the same queue.
