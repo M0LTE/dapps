@@ -149,7 +149,19 @@ Distance-vector for v1: beacons advertise self only. A peer reachable on three c
 2. **Fresh `DbDiscoveredPeer` rows** for that base callsign, freshness-filtered by `LastSeen + TtlSeconds`, sorted by `CostHint` then by hop count.
 3. **`DbRouteHint`** next-hop fallback — explicit "I know X is reachable via Y" when there's no live discovery record.
 
-Cost-based selection lets a node reachable on multiple channels prefer LAN multicast (cost 1) over VHF (5) over HF (10) automatically. Tie on cost breaks on hop count, then row order. The denormalised `LinkClass` + `CostHint` on each peer row means the resolver doesn't need to join `discoverychannels`.
+Cost ordering is **RF-first** per the project's amateur-radio identity. Default `CostHint` per class:
+
+| Class | Cost | Notes |
+|---|---:|---|
+| `VhfUhfFm` | 1 | RF, line-of-sight, ~always-on — the preferred channel |
+| `MeshCore` | 3 | RF mesh, slow but in-spirit |
+| `Hf` | 5 | RF continental, propagation-locked |
+| `LanMulticast` | 8 | IP, scoped — testing ergonomics |
+| `InternetIp` | 10 | IP, last-resort bridge between RF islands |
+
+Internet routes exist to glue isolated RF islands together, not as a preferred path. The denormalised `LinkClass` + `CostHint` on each peer row means the resolver doesn't need to join `discoverychannels`. Tie on cost breaks on hop count.
+
+`LinkClassDefaultsTests` pins this ordering so a casually-tweaked default doesn't quietly invert the project's identity.
 
 ### B5. Explore MeshCore-style route learning inside DAPPS
 

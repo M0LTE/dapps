@@ -204,10 +204,16 @@ public sealed class DiscoveryStorageTests : IAsyncLifetime
     [Fact]
     public async Task GetDiscoveryChannels_OrderedByCostHint()
     {
-        // Cheap LAN multicast first, then internet, then VHF, then HF.
+        // RF-first ordering per the project ethos: VHF/UHF cheapest,
+        // then HF, then LAN multicast (testing-scope IP), then
+        // generic internet last-resort.
         await database.UpsertDiscoveryChannel(new DbDiscoveryChannel
         {
-            Bearer = "agw", ChannelKey = "5", LinkClass = LinkClass.Hf,
+            Bearer = "udp", ChannelKey = "ip", LinkClass = LinkClass.InternetIp,
+        });
+        await database.UpsertDiscoveryChannel(new DbDiscoveryChannel
+        {
+            Bearer = "agw", ChannelKey = "1", LinkClass = LinkClass.VhfUhfFm,
         });
         await database.UpsertDiscoveryChannel(new DbDiscoveryChannel
         {
@@ -215,12 +221,12 @@ public sealed class DiscoveryStorageTests : IAsyncLifetime
         });
         await database.UpsertDiscoveryChannel(new DbDiscoveryChannel
         {
-            Bearer = "agw", ChannelKey = "1", LinkClass = LinkClass.VhfUhfFm,
+            Bearer = "agw", ChannelKey = "5", LinkClass = LinkClass.Hf,
         });
 
         var rows = await database.GetDiscoveryChannels();
         rows.Select(r => r.LinkClass).Should().Equal(
-            LinkClass.LanMulticast, LinkClass.VhfUhfFm, LinkClass.Hf);
+            LinkClass.VhfUhfFm, LinkClass.Hf, LinkClass.LanMulticast, LinkClass.InternetIp);
     }
 
     private sealed class TestOptionsMonitor<T>(T value) : IOptionsMonitor<T>
