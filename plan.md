@@ -79,6 +79,21 @@ Sysop-friendly model:
 
 `DappsProtocolClient` wraps every per-byte read with a 3-minute inactivity timeout (matches receiver-side T3-default). On expiry the read surfaces a `TimeoutException` rather than blocking forever; the forwarder loop catches and moves on. `AgwOutboundTransport.ConnectAsync` got the same treatment on the connect-confirm wait. Outer `CancellationToken` (from shutdown) takes precedence over the inactivity timer.
 
+### A6. BPQ APPLICATION+TCP-bridge inbound coverage *(done — issue #32)*
+
+The inbound path dapps actually uses in production — `RF user → BPQ L2 SABM → APPLICATION → ATTACH-style TCP bridge → BpqConnectionListener` — was previously covered only by manual RF testing and an in-process `FakeBpqAndDappsClient` that talked straight to `:11000` and bypassed BPQ entirely. The AGW E2E tests proved BPQ frame-layer correctness but not this bridge.
+
+Two new test classes against a new `TwoInstanceAttachFixture`:
+
+- `BpqAttachBridgeTests` — focused tests of the bridge itself (no DAPPS in the loop). Pin: connection arrives, first line is `<calling-callsign>\r\n` (TelnetV6.c:5775), bytes flow bidirectionally, clean disconnect from the dapps-side socket propagates as an L2 disconnect through BPQ-B → AXIP → BPQ-A.
+- `InboundDeliveryViaBpqAttachTests` — full real-DAPPS-receiver E2E. Real `Dappsv1SessionBackhaul` sender → real BPQ-A → AXIP-UDP → real BPQ-B → APPLICATION+TCP bridge → real `BpqConnectionListener` + `InboundConnectionHandler` running in-process → message lands in `IBackhaulInbox` with correct id, payload, salt, destination, and source callsign. Combined with the existing forwarder-side coverage, this gives the "rock-solid, proven path of inbound and outbound connections" the issue was after.
+
+Fixture uses the documented Apps-Interface form (`C 1 HOST 0 TRANS S` + `CMDPORT`) rather than the legacy `ATTACH <port> <host> <tcp_port>` form some production deployments use — the latter goes through a post-attach C-command injection path that returned "Error - Invalid Command" from the Telnet driver in this two-container setup; needs separate investigation. From dapps's POV the bridge surface is identical (BPQ writes `<call>\r\n` then bridges bytes either way), so the gap closes either way.
+
+Two ergonomic improvements landed alongside:
+- `SystemOptions.BpqInboundListenerPort` (default 11000) makes the listener port configurable — tests pick a free port; sysops can move the port if needed.
+- `DappsProtocolClient.ReadInitialPromptAsync` and `ReadLineAsync` now accept any of `\n`, `\r`, or `\r\n` as line terminator. BPQ's Telnet driver rewrites LF→CR in the app→user direction (apps-interface.md), so strict `\n`-only matching would hang any time dapps was reached over the bridge.
+
 ### A5. Outbound TTL on the app interface *(done)*
 
 Apps can now request a residual lifetime when submitting a message, and inbound delivery surfaces residual TTL so apps can discriminate near-expiry messages from fresh ones. REST `OutboundRequest` gains an optional `Ttl` (positive int seconds; 0/negative → 400). MQTT publish reads optional `dapps-ttl` user property; malformed values fall through to no-TTL rather than rejecting the publish (the broker has no way to NACK after the fact). On delivery, both surfaces report the *residual* TTL — initial TTL minus dwell time on this node — so an app polling `/AppApi/inbound/{app}` and an app subscribed to `dapps/in/<app>` see the same number. Closes the spec gap where the on-air protocol carried `ttl=` end-to-end but the app interface couldn't read or write it.
