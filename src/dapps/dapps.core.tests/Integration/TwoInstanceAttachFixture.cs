@@ -45,10 +45,6 @@ namespace dapps.core.tests.Integration;
 /// byte-level assertions in tests and is the safer default for any
 /// future binary use of the bridge.
 ///
-/// **SecureTelnet=0** in the Telnet PORT config: by default the driver
-/// requires SYSOP-authenticated sessions to issue outward connects, and
-/// an inbound L2 session isn't SYSOP. This option opts out of that
-/// check (TelnetV6.c:436 sets the default to 1; we override to 0).
 /// </summary>
 public sealed class TwoInstanceAttachFixture : IAsyncLifetime
 {
@@ -252,7 +248,6 @@ public sealed class TwoInstanceAttachFixture : IAsyncLifetime
              FBBPORT={fbbInsidePort}
              APIPORT={apiInsidePort}
              MAXSESSIONS=20
-             SecureTelnet=0
             {cmdPortLine}
              USER=test,test,{nodeCall},,SYSOP
             ENDPORT
