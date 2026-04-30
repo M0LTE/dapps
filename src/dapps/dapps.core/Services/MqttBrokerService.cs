@@ -22,13 +22,20 @@ namespace dapps.core.Services;
 public sealed class MqttBrokerService(
     ILogger<MqttBrokerService> logger,
     IOptionsMonitor<SystemOptions> options,
-    Database database) : IHostedService
+    Database database,
+    AppTokenStore tokens) : IHostedService
 {
     private const string OutTopicPrefix = "dapps/out/";
     private const string InTopicPrefix = "dapps/in/";
     private const string AckTopicPrefix = "dapps/ack/";
 
     private MqttServer? server;
+
+    /// <summary>Tracks which app a connected MQTT client authenticated as,
+    /// keyed on ClientId. When auth is required, publish/subscribe
+    /// interceptors check this to enforce topic-app scoping.</summary>
+    private readonly Dictionary<string, string> clientApps = new(StringComparer.Ordinal);
+    private readonly object clientAppsLock = new();
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
@@ -41,11 +48,15 @@ public sealed class MqttBrokerService(
 
         server = new MqttFactory().CreateMqttServer(serverOptions);
 
+        server.ValidatingConnectionAsync += OnValidatingConnection;
         server.InterceptingPublishAsync += OnInterceptingPublish;
+        server.InterceptingSubscriptionAsync += OnInterceptingSubscription;
         server.ClientSubscribedTopicAsync += OnClientSubscribedTopic;
+        server.ClientDisconnectedAsync += OnClientDisconnected;
 
         await server.StartAsync();
-        logger.LogInformation("MQTT broker listening on :{port}", opts.MqttPort);
+        logger.LogInformation("MQTT broker listening on :{port} (auth required: {auth})",
+            opts.MqttPort, opts.AuthRequired);
     }
 
     public async Task StopAsync(CancellationToken cancellationToken)
@@ -94,6 +105,96 @@ public sealed class MqttBrokerService(
         }
     }
 
+    /// <summary>
+    /// MQTT CONNECT validation. Username = app name, password = token
+    /// plaintext. When <see cref="SystemOptions.AuthRequired"/> is true,
+    /// rejects with NotAuthorized on missing or invalid creds.
+    /// On accept, records ClientId → app-name so the publish/subscribe
+    /// interceptors can enforce topic-app scoping.
+    /// </summary>
+    private async Task OnValidatingConnection(ValidatingConnectionEventArgs e)
+    {
+        var authRequired = options.CurrentValue.AuthRequired;
+
+        var hasCreds = !string.IsNullOrEmpty(e.UserName)
+            && !string.IsNullOrEmpty(e.Password);
+
+        if (!hasCreds)
+        {
+            if (authRequired)
+            {
+                e.ReasonCode = MQTTnet.Protocol.MqttConnectReasonCode.BadUserNameOrPassword;
+                logger.LogInformation("MQTT: rejected client {0} — missing credentials", e.ClientId);
+            }
+            return;
+        }
+
+        var app = await tokens.VerifyAsync(e.Password!);
+        if (app is null || !string.Equals(app, e.UserName, StringComparison.OrdinalIgnoreCase))
+        {
+            if (authRequired)
+            {
+                e.ReasonCode = MQTTnet.Protocol.MqttConnectReasonCode.BadUserNameOrPassword;
+                logger.LogInformation("MQTT: rejected client {0} — invalid credentials", e.ClientId);
+            }
+            return;
+        }
+
+        lock (clientAppsLock)
+        {
+            clientApps[e.ClientId] = app;
+        }
+        logger.LogInformation("MQTT: client {0} authenticated as {1}", e.ClientId, app);
+    }
+
+    private Task OnClientDisconnected(MQTTnet.Server.ClientDisconnectedEventArgs e)
+    {
+        lock (clientAppsLock)
+        {
+            clientApps.Remove(e.ClientId);
+        }
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// SUBSCRIBE-time topic scope. When auth is required, only the
+    /// authenticated app may subscribe to its own <c>dapps/in/&lt;app&gt;</c>;
+    /// other DAPPS topics aren't subscribable by clients (they're
+    /// app→DAPPS direction).
+    /// </summary>
+    private Task OnInterceptingSubscription(InterceptingSubscriptionEventArgs e)
+    {
+        if (!options.CurrentValue.AuthRequired) return Task.CompletedTask;
+
+        var topic = e.TopicFilter.Topic;
+        if (!topic.StartsWith(InTopicPrefix, StringComparison.Ordinal))
+        {
+            // Non-DAPPS topic — keep MQTTnet's default behaviour for app
+            // coordination topics that aren't ours.
+            return Task.CompletedTask;
+        }
+
+        string? authedApp;
+        lock (clientAppsLock)
+        {
+            clientApps.TryGetValue(e.ClientId, out authedApp);
+        }
+        if (authedApp is null)
+        {
+            e.ProcessSubscription = false;
+            return Task.CompletedTask;
+        }
+
+        var requested = topic[InTopicPrefix.Length..];
+        if (!string.Equals(requested, authedApp, StringComparison.OrdinalIgnoreCase))
+        {
+            logger.LogInformation("MQTT: client {0} (auth={1}) blocked from subscribing to {2}",
+                e.ClientId, authedApp, topic);
+            e.ProcessSubscription = false;
+        }
+        return Task.CompletedTask;
+    }
+
     private async Task OnInterceptingPublish(InterceptingPublishEventArgs e)
     {
         // Internal injections (server-side) have null ClientId — let those through
@@ -101,6 +202,12 @@ public sealed class MqttBrokerService(
         if (string.IsNullOrEmpty(e.ClientId)) return;
 
         var topic = e.ApplicationMessage.Topic;
+        var authRequired = options.CurrentValue.AuthRequired;
+        string? authedApp = null;
+        if (authRequired)
+        {
+            lock (clientAppsLock) clientApps.TryGetValue(e.ClientId, out authedApp);
+        }
 
         if (topic.StartsWith(OutTopicPrefix, StringComparison.Ordinal))
         {
@@ -115,6 +222,14 @@ public sealed class MqttBrokerService(
             }
             var app = rest[..slash];
             var dest = rest[(slash + 1)..];
+
+            if (authRequired && !string.Equals(authedApp, app, StringComparison.OrdinalIgnoreCase))
+            {
+                logger.LogInformation("MQTT: client {0} (auth={1}) blocked from publishing on {2}",
+                    e.ClientId, authedApp ?? "?", topic);
+                e.ProcessPublish = false;
+                return;
+            }
 
             try
             {
@@ -134,6 +249,15 @@ public sealed class MqttBrokerService(
 
         if (topic.StartsWith(AckTopicPrefix, StringComparison.Ordinal))
         {
+            var ackApp = topic[AckTopicPrefix.Length..];
+            if (authRequired && !string.Equals(authedApp, ackApp, StringComparison.OrdinalIgnoreCase))
+            {
+                logger.LogInformation("MQTT: client {0} (auth={1}) blocked from publishing on {2}",
+                    e.ClientId, authedApp ?? "?", topic);
+                e.ProcessPublish = false;
+                return;
+            }
+
             var id = Encoding.UTF8.GetString(e.ApplicationMessage.PayloadSegment).Trim();
             if (id.Length > 0)
             {

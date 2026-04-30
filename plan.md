@@ -79,16 +79,18 @@ Sysop-friendly model:
 
 Receiver-side timeouts landed in PR #2. Sender-side (in `DappsProtocolClient` / `AgwOutboundTransport`) currently just relies on caller-supplied cancellation tokens. The spec says **both** sides SHOULD apply an inactivity timeout. Add per-operation cancellation defaults inside the protocol client so a hung peer can't wedge a forwarder run indefinitely.
 
-### A4. Per-app authentication on MQTT/REST
+### A4. Per-app authentication on MQTT/REST *(done)*
 
-Today anyone reachable on `MqttPort` or HTTPPORT can pretend to be any app. Acceptable for "single-host loopback" deployments, not for shared nodes.
+Per-app credentials issued via `/AppTokens` (POST mints + returns plaintext once; DELETE revokes). Tokens hashed at rest with PBKDF2-HMAC-SHA256 + 16-byte salt. Verification is constant-time-equality on the derived bytes.
 
-Minimum:
-- MQTT: username/password on connect (MQTT 5 supports it natively; MQTTnet validates via a connection-handler hook).
-- REST: bearer token in `Authorization` header; check against a small list of apps stored in DB.
-- Both: configurable via the existing `SystemOptions` / config DB, not a separate file.
+Off by default — `SystemOptions.AuthRequired` is false initially, so existing single-host-loopback deployments don't break on upgrade. Operators issue tokens, then flip the flag (via `/Config` or `DAPPS_AUTH_REQUIRED=true` on first run).
 
-Doesn't need to be PKI-grade — operators can issue tokens out-of-band. This isn't an internet protocol.
+When enabled:
+- **REST**: `BearerAuthMiddleware` on `/AppApi/*` requires `Authorization: Bearer <token>` and stamps the authenticated app onto `HttpContext.Items`. Controllers call `IsAuthorisedForApp(...)` and return 403 on path-app mismatch.
+- **MQTT**: `MqttBrokerService.OnValidatingConnection` validates `username` (= app name) + `password` (= token plaintext); rejects with `BadUserNameOrPassword` on mismatch. `InterceptingPublish` and `InterceptingSubscription` enforce that a connected client only operates on its own `dapps/in/<app>`, `dapps/out/<app>/...`, `dapps/ack/<app>` topics.
+- **Admin surfaces** (`/Config`, `/Neighbours`, `/AppTokens` itself) are deliberately not behind the bearer check — pairing them with bearer auth would be a chicken-and-egg on first use. Loopback-binding remains the recommendation in the README until proper admin auth lands.
+
+Not PKI-grade by design (no TLS, OAuth, JWT, 2FA). For TLS, sysops front the REST API with a reverse proxy.
 
 ## Phase B — peer discovery and routing evolution
 
@@ -322,7 +324,7 @@ Roughly:
 
 1. **A0.1–A0.3** (backhaul seam) — *done*. **A1** (TTL forwarding) — *done*. **A2** (neighbour-table cleanup) — *done*.
 3. **C1 + C2 + C4** (docker image, config tooling, install docs) — gets the thing into one sysop's hands.
-4. **A4** (per-app auth) — needed before anyone with a publicly-reachable node can run it.
+4. **A4** (per-app auth) — *done*.
 5. **D1 + D2** (web UI inspection + exercise) — turns "running" into "comfortable to run".
 6. **B1–B5** (beacon discovery + routing evolution, including MeshCore-inspired exploration) — graduates from manual neighbour config to a real network.
 7. **A0.4** — UDP datagram stand-in *done*; first real alternate bearer (likely MeshCore Companion) when the seam is ready.

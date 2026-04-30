@@ -48,8 +48,9 @@ public sealed class MqttBrokerRoundTripTests : IAsyncLifetime
             MqttPort = brokerPort,
         });
         database = new Database(NullLogger<Database>.Instance, optionsMonitor);
+        var tokens = new AppTokenStore(NullLogger<AppTokenStore>.Instance);
         broker = new MqttBrokerService(
-            NullLogger<MqttBrokerService>.Instance, optionsMonitor, database);
+            NullLogger<MqttBrokerService>.Instance, optionsMonitor, database, tokens);
 
         await broker.StartAsync(CancellationToken.None);
     }

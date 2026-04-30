@@ -26,6 +26,7 @@ public class AppApiController(Database database) : ControllerBase
         if (string.IsNullOrWhiteSpace(request.App)) return BadRequest("App is required");
         if (string.IsNullOrWhiteSpace(request.DestCallsign)) return BadRequest("DestCallsign is required");
         if (request.Payload is null || request.Payload.Length == 0) return BadRequest("Payload is required");
+        if (!HttpContext.IsAuthorisedForApp(request.App)) return Forbid();
 
         var id = await database.SubmitOutboundMessage(request.App, request.DestCallsign, request.Payload);
         return Ok(new OutboundResponse(id));
@@ -38,6 +39,7 @@ public class AppApiController(Database database) : ControllerBase
     [HttpGet("inbound/{app}")]
     public async Task<ActionResult<List<InboundMessage>>> GetInbound(string app)
     {
+        if (!HttpContext.IsAuthorisedForApp(app)) return Forbid();
         var pending = await database.GetUnacknowledgedLocalMessagesForApp(app);
         return Ok(pending.Select(m => new InboundMessage(m.Id, m.SourceCallsign, m.Payload)).ToList());
     }
@@ -50,6 +52,7 @@ public class AppApiController(Database database) : ControllerBase
     [HttpPost("inbound/{app}/{id}/ack")]
     public async Task<IActionResult> Ack(string app, string id)
     {
+        if (!HttpContext.IsAuthorisedForApp(app)) return Forbid();
         await database.MarkLocallyDelivered(id);
         return NoContent();
     }

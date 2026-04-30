@@ -41,6 +41,7 @@ public class DbStartup(ILogger<DbStartup> logger) : IHostedService
         db.CreateTable<DbSystemOption>();
         db.CreateTable<DbRouteHint>();
         db.CreateTable<DbNeighbour>();
+        db.CreateTable<DbAppToken>();
 
         var optionsTable = db.Table<DbSystemOption>().Table.TableName;
         var options = db.Query<DbSystemOption>($"select * from {optionsTable};");
@@ -56,6 +57,7 @@ public class DbStartup(ILogger<DbStartup> logger) : IHostedService
         InsertIfNotPresent(options, "Callsign", PlaceholderCallsign);
         InsertIfNotPresent(options, "MqttPort", "1883");
         InsertIfNotPresent(options, "UdpListenPort", "0");
+        InsertIfNotPresent(options, "AuthRequired", "false");
 
         ValidateRequiredConfig();
 
