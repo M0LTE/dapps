@@ -18,6 +18,12 @@ public class DappsProtocolClient(Stream stream, ILoggerFactory loggerFactory)
     private const string ExpectedPrompt = "DAPPSv1>\n";
     private const int PromptScanCapBytes = 256;
 
+    /// <summary>Per-read inactivity timeout. Mirrors the receiver-side
+    /// budget in <c>InboundConnectionHandler</c> (3 minutes, matching the
+    /// AX.25 T3 default) so a hung peer can't wedge a forwarder run
+    /// indefinitely. Plan A3.</summary>
+    public static TimeSpan InactivityTimeout { get; set; } = TimeSpan.FromMinutes(3);
+
     /// <summary>
     /// Reads from the stream until either the DAPPSv1 prompt is seen or we
     /// exceed PromptScanCapBytes (which is enough to absorb a typical noisy
@@ -31,7 +37,7 @@ public class DappsProtocolClient(Stream stream, ILoggerFactory loggerFactory)
 
         while (seen.Count < PromptScanCapBytes)
         {
-            var n = await stream.ReadAsync(oneByte, ct);
+            var n = await ReadWithTimeoutAsync(oneByte, ct);
             if (n == 0)
             {
                 logger.LogWarning("EOF before DAPPSv1> prompt (got {0} bytes)", seen.Count);
@@ -125,11 +131,33 @@ public class DappsProtocolClient(Stream stream, ILoggerFactory loggerFactory)
         var oneByte = new byte[1];
         while (true)
         {
-            var n = await stream.ReadAsync(oneByte, ct);
+            var n = await ReadWithTimeoutAsync(oneByte, ct);
             if (n == 0) break;
             if (oneByte[0] == '\n') break;
             buffer.Add(oneByte[0]);
         }
         return Encoding.UTF8.GetString(buffer.ToArray());
+    }
+
+    /// <summary>
+    /// Reads with a per-call inactivity timeout layered on top of the
+    /// caller's cancellation token. Surfaces an explicit
+    /// <see cref="TimeoutException"/> when the peer goes silent —
+    /// callers (e.g. <c>OutboundMessageManager</c>) catch and log,
+    /// then move on to the next message rather than hanging the run.
+    /// </summary>
+    private async ValueTask<int> ReadWithTimeoutAsync(Memory<byte> buffer, CancellationToken outer)
+    {
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(outer);
+        cts.CancelAfter(InactivityTimeout);
+        try
+        {
+            return await stream.ReadAsync(buffer, cts.Token);
+        }
+        catch (OperationCanceledException) when (!outer.IsCancellationRequested)
+        {
+            throw new TimeoutException(
+                $"DAPPS sender: no data from peer within {InactivityTimeout.TotalSeconds:F0}s");
+        }
     }
 }

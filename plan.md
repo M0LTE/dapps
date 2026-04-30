@@ -75,9 +75,9 @@ Sysop-friendly model:
 - Optional: surface in the planned web UI (Phase D).
 - The auto-discovery work (Phase B) feeds this same table; manual + auto coexist.
 
-### A3. Sender-side inactivity timeout on AGW
+### A3. Sender-side inactivity timeout on AGW *(done)*
 
-Receiver-side timeouts landed in PR #2. Sender-side (in `DappsProtocolClient` / `AgwOutboundTransport`) currently just relies on caller-supplied cancellation tokens. The spec says **both** sides SHOULD apply an inactivity timeout. Add per-operation cancellation defaults inside the protocol client so a hung peer can't wedge a forwarder run indefinitely.
+`DappsProtocolClient` wraps every per-byte read with a 3-minute inactivity timeout (matches receiver-side T3-default). On expiry the read surfaces a `TimeoutException` rather than blocking forever; the forwarder loop catches and moves on. `AgwOutboundTransport.ConnectAsync` got the same treatment on the connect-confirm wait. Outer `CancellationToken` (from shutdown) takes precedence over the inactivity timer.
 
 ### A4. Per-app authentication on MQTT/REST *(done)*
 

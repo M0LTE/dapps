@@ -60,9 +60,27 @@ public sealed class AgwOutboundTransport(string host, int port, ILoggerFactory l
             // the request on success, or 'd' on failure. Other frames may
             // arrive ahead of the answer (e.g. 'G' if we'd queried, port
             // descriptors, monitor traffic if turned on); skip them.
+            //
+            // Per-read inactivity timeout (Plan A3): if BPQ goes silent
+            // mid-handshake, the per-frame read times out at 3 minutes
+            // and we surface a TimeoutException to the caller rather
+            // than wedging the forwarder run forever.
             while (true)
             {
-                var frame = await framing.ReadFrameAsync(stoppingToken);
+                AgwFrame frame;
+                using (var perReadCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken))
+                {
+                    perReadCts.CancelAfter(TimeSpan.FromMinutes(3));
+                    try
+                    {
+                        frame = await framing.ReadFrameAsync(perReadCts.Token);
+                    }
+                    catch (OperationCanceledException) when (!stoppingToken.IsCancellationRequested)
+                    {
+                        throw new TimeoutException(
+                            $"AGW: no frame from BPQ for 3 minutes while awaiting connect confirmation to {remoteCallsign}");
+                    }
+                }
 
                 // BPQ's 'C' confirmation comes back with callfrom/callto
                 // swapped relative to the request — the remote (the one we
