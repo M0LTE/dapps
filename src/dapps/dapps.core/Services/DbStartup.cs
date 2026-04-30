@@ -43,6 +43,7 @@ public class DbStartup(ILogger<DbStartup> logger) : IHostedService
         db.CreateTable<DbNeighbour>();
         db.CreateTable<DbAppToken>();
         db.CreateTable<DbDiscoveredPeer>();
+        db.CreateTable<DbDiscoveryChannel>();
 
         var optionsTable = db.Table<DbSystemOption>().Table.TableName;
         var options = db.Query<DbSystemOption>($"select * from {optionsTable};");
@@ -59,9 +60,6 @@ public class DbStartup(ILogger<DbStartup> logger) : IHostedService
         InsertIfNotPresent(options, "MqttPort", "1883");
         InsertIfNotPresent(options, "UdpListenPort", "0");
         InsertIfNotPresent(options, "AuthRequired", "false");
-        InsertIfNotPresent(options, "AgwDiscovery", "false");
-        InsertIfNotPresent(options, "MulticastGroup", "");
-        InsertIfNotPresent(options, "DiscoveryBeaconIntervalSeconds", "300");
 
         ValidateRequiredConfig();
 

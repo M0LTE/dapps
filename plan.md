@@ -105,39 +105,45 @@ MeshCore is relevant here in two separate ways:
 
 The second one matters even if DAPPS never ships a MeshCore backend.
 
-### B1. Discovery seam *(done — different shape than originally sketched)*
+### B1. Discovery seam *(done — channels are first-class)*
 
-The originally-sketched `IDappsUiTransport` was AGW-flavoured. After the A0 backhaul-seam work it made more sense to lift discovery to the same level — bearer-neutral. Implemented as:
+A bearer (AGW, UDP multicast, future MeshCore) can serve many *channels*: AGW BPQ port 1 (VHF) and BPQ port 3 (AXIP) share one AGW socket; future MeshCore radios are per-channel; UDP can hold multiple multicast groups. The seam:
 
 ```csharp
 public interface IDiscoveryBearer : IAsyncDisposable
 {
     string Name { get; }
-    Task StartAsync(CancellationToken ct);
-    Task AnnounceAsync(BeaconFrame beacon, CancellationToken ct);
-    IAsyncEnumerable<BeaconFrame> ListenAsync(CancellationToken ct);
+    Task StartAsync(IReadOnlyList<DiscoveryChannelInfo> channels, CancellationToken ct);
+    Task AnnounceAsync(BeaconFrame beacon, string channelKey, CancellationToken ct);
+    IAsyncEnumerable<ReceivedBeacon> ListenAsync(CancellationToken ct);
 }
 ```
 
-Two implementations: `AgwUiDiscoveryBearer` (AGW `'X'` register + `'m'` monitor + `'M'` send + parses `'U'` frames) and `UdpMulticastDiscoveryBearer` (UDP multicast group, useful for LAN dev/testing without a BPQ stack).
+`ReceivedBeacon = (BeaconFrame, ChannelKey)` so the daemon knows which channel a peer was heard on. Each channel has its own beacon cadence and advertised TTL — chattering every 5 minutes is fine on AXIP, antisocial on 1200 baud VHF, inappropriate on HF where propagation is part-time.
 
-### B2. Beacon protocol *(done)*
+### B2. Channels-as-first-class + LinkClass *(done)*
 
-Wire form: `DAPPS v1 callsign=M0LTE-9 hops=0 ttl=300`. KV style rather than positional so future fields slot in without breaking existing parsers. The `Bearer` field on `BeaconFrame` is stamped by the receiver from the channel a beacon arrived on — never carried on the wire (would let a misbehaving peer claim routes it doesn't have).
+`DbDiscoveryChannel` table — one row per channel — is the authoritative configuration. Fields:
 
-Cadence: configurable `DiscoveryBeaconIntervalSeconds`, default 300s. Operators on shared RF channels should bump to 1800+ before enabling AGW discovery.
+- `Bearer` (`agw` / `udp` / future `meshcore`)
+- `ChannelKey` (bearer-specific: BPQ port byte, multicast endpoint, MeshCore radio+channel)
+- `LinkClass` enum: `InternetIp` / `LanMulticast` / `VhfUhfFm` / `Hf` / `MeshCore` / `Unknown`
+- `BeaconIntervalSeconds`, `AdvertisedTtlSeconds`, `CostHint` — default per `LinkClass`, operator-overridable
+- `Enabled`, `Notes`
 
-Distance-vector for v1, as recommended in the original sketch — beacons advertise self only; future hop-count routing tracks paths by remembering which bearer the beacon arrived on.
+`LinkClassDefaults` encodes the channel-nature knowledge: HF advertises a 24-hour TTL because propagation closes overnight and a peer that "went away" at sundown is back at sunup; MeshCore beacons every hour because the bearer floods anyway; LAN multicast is cheap and frequent; VHF/UHF FM is in between.
 
-### B3. Discovery daemon *(done)*
+`/DiscoveryChannels` REST surface (parallel to `/Neighbours`): GET / POST upsert / DELETE. Dashboard shows channel list and discovered-peers tagged with channel + link class + cost.
 
-`DiscoveryService` is the hosted service. For each configured bearer it: starts the bearer, fires its own beacon on a timer, concurrently iterates the bearer's listen stream, upserts `DbDiscoveredPeer` rows. Sweeper drops rows whose `(now - LastSeen) > beacon.Ttl`.
+### B3. Beacon protocol *(done)*
 
-The dashboard surfaces discovered peers (callsign, bearer, hops, source endpoint, age, ttl) so a sysop can verify discovery in real time without log-grepping.
+Wire form: `DAPPS v1 callsign=M0LTE-9 hops=0 ttl=300`. KV style rather than positional so future fields slot in without breaking parsers. The `Bearer` field on `BeaconFrame` is stamped by the receiver — never carried on the wire (would let a misbehaving peer claim routes it doesn't have).
 
-### B4. Routing decisions *(deferred — DiscoveredPeer rows present, resolver doesn't consult them yet)*
+Distance-vector for v1: beacons advertise self only. A peer reachable on three channels gets three rows; the resolver picks by `CostHint`.
 
-`OutboundMessageManager.ResolveNeighbour` currently consults `DbNeighbour` (manual) and `DbRouteHint` (manual fallback). Promoting `DbDiscoveredPeer` into the resolver is a small follow-up; the data is already in the DB and the seam is bearer-neutral, so the resolver just needs to merge sources and pick by hops.
+### B4. Routing decisions *(next)*
+
+`OutboundMessageManager.ResolveNeighbour` currently consults `DbNeighbour` (manual) and `DbRouteHint` (manual fallback). Next step: merge `DbDiscoveredPeer` into the candidate set and pick by `CostHint`. Per-row `LinkClass` and `CostHint` are denormalized so the resolver doesn't need to join. Manual `DbNeighbour` rows still win when present (operator override), then learned peers in cost order.
 
 ### B5. Explore MeshCore-style route learning inside DAPPS
 
@@ -315,7 +321,7 @@ Roughly:
 3. **C1 + C2 + C4** (docker image, config tooling, install docs) — gets the thing into one sysop's hands.
 4. **A4** (per-app auth) — *done*.
 5. **D1 + D2** (web UI inspection + exercise) — *MVP done*. SSE inbound feed + ihave terminal still pending.
-6. **B1–B3** (beacon discovery seam, AGW UI + UDP multicast bearers, daemon, dashboard surface) — *done*. **B4** (resolver consulting DbDiscoveredPeer) and **B5** (MeshCore-inspired flood-and-learn) remain.
+6. **B1–B3** (beacon discovery seam, channels-as-first-class with LinkClass, AGW UI + UDP multicast bearers, daemon, dashboard surface) — *done*. **B4** (resolver consulting DbDiscoveredPeer with cost-based selection) is next; **B5** (MeshCore-inspired flood-and-learn) remains.
 7. **A0.4** — UDP datagram stand-in *done*; first real alternate bearer (likely MeshCore Companion) when the seam is ready.
 8. **E1–E5** (developer guide + sample apps + Python ref impl) — unlocks third-party app development.
 9. **A3, C3, D3, D4, F1–F4** in parallel as polish.

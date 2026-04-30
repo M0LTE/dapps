@@ -1,0 +1,83 @@
+using dapps.client.Discovery;
+using dapps.core.Models;
+using dapps.core.Services;
+using Microsoft.AspNetCore.Mvc;
+
+namespace dapps.core.Controllers;
+
+/// <summary>
+/// REST surface for the discovery-channel table — the per-bearer,
+/// per-physical-port configuration that drives the discovery daemon.
+/// Parallel in shape to <c>/Neighbours</c>: list, upsert, delete.
+///
+/// Identity is (bearer, channelKey). POST is upsert (re-POSTing a
+/// channel changes its tunables without erroring). Channel defaults
+/// (cadence, ttl, cost) are derived from <c>LinkClass</c> when fields
+/// are left at their zero values.
+/// </summary>
+[ApiController]
+[Route("[controller]")]
+public class DiscoveryChannelsController(Database database) : ControllerBase
+{
+    [HttpGet]
+    public async Task<IEnumerable<DiscoveryChannelModel>> List()
+    {
+        var rows = await database.GetDiscoveryChannels();
+        return rows.Select(c => new DiscoveryChannelModel(
+            Id: c.Id,
+            Bearer: c.Bearer,
+            ChannelKey: c.ChannelKey,
+            LinkClass: c.LinkClass.ToString(),
+            BeaconIntervalSeconds: c.BeaconIntervalSeconds,
+            AdvertisedTtlSeconds: c.AdvertisedTtlSeconds,
+            CostHint: c.CostHint,
+            Enabled: c.Enabled,
+            Notes: c.Notes));
+    }
+
+    [HttpPost]
+    public async Task<IActionResult> Upsert([FromBody] DiscoveryChannelModel model)
+    {
+        if (string.IsNullOrWhiteSpace(model.Bearer)) return BadRequest("Bearer is required");
+        if (string.IsNullOrWhiteSpace(model.ChannelKey)) return BadRequest("ChannelKey is required");
+        if (!Enum.TryParse<LinkClass>(model.LinkClass, ignoreCase: true, out var linkClass))
+        {
+            return BadRequest($"LinkClass must be one of: {string.Join(", ", Enum.GetNames<LinkClass>())}");
+        }
+
+        await database.UpsertDiscoveryChannel(new DbDiscoveryChannel
+        {
+            Bearer = model.Bearer.Trim().ToLowerInvariant(),
+            ChannelKey = model.ChannelKey.Trim(),
+            LinkClass = linkClass,
+            BeaconIntervalSeconds = model.BeaconIntervalSeconds,
+            AdvertisedTtlSeconds = model.AdvertisedTtlSeconds,
+            CostHint = model.CostHint,
+            Enabled = model.Enabled,
+            Notes = model.Notes ?? "",
+        });
+        return NoContent();
+    }
+
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> Remove(int id)
+    {
+        var removed = await database.RemoveDiscoveryChannel(id);
+        return removed ? NoContent() : NotFound();
+    }
+}
+
+/// <summary>
+/// Wire shape for /DiscoveryChannels. Leave numeric fields at 0 to pick
+/// up <see cref="LinkClassDefaults"/> for the chosen <c>LinkClass</c>.
+/// </summary>
+public sealed record DiscoveryChannelModel(
+    int Id,
+    string Bearer,
+    string ChannelKey,
+    string LinkClass,
+    int BeaconIntervalSeconds = 0,
+    int AdvertisedTtlSeconds = 0,
+    int CostHint = 0,
+    bool Enabled = true,
+    string? Notes = null);

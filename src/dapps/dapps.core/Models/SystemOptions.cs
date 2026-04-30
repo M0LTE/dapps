@@ -47,27 +47,4 @@ public class SystemOptions
     /// not fine for shared nodes. Plan A4.
     /// </summary>
     public bool AuthRequired { get; set; }
-
-    /// <summary>
-    /// When true, the discovery service runs an AGW UI-frame bearer
-    /// using the configured BPQ port (sends/listens on AX.25 UI frames
-    /// via AGW 'M' / 'm'). Default false; opt in once the operator is
-    /// happy that beaconing into the local RF is appropriate. Plan B.
-    /// </summary>
-    public bool AgwDiscovery { get; set; }
-
-    /// <summary>
-    /// IP multicast group ("host:port", e.g. "239.42.42.42:1881") that
-    /// the UDP discovery bearer joins. Empty = disabled. Useful for
-    /// LAN dev/testing — every DAPPS instance on the same subnet sees
-    /// every other instance's beacons within seconds. Plan B.
-    /// </summary>
-    public string MulticastGroup { get; set; } = "";
-
-    /// <summary>Seconds between beacon emissions. Default 300 (5 min)
-    /// keeps a quiet test environment chatty enough for end-to-end
-    /// observability without pollluting busy channels. Operators on
-    /// shared RF should bump this to 1800+ before enabling AGW
-    /// discovery.</summary>
-    public int DiscoveryBeaconIntervalSeconds { get; set; } = 300;
 }

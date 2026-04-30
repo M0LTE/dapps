@@ -6,90 +6,97 @@ using Microsoft.Extensions.Logging;
 namespace dapps.client.Discovery;
 
 /// <summary>
-/// Discovery over IP multicast. Sends and receives beacons on a
-/// configurable group (e.g. <c>239.42.42.42:1881</c>). Useful for
-/// LAN dev / testing — every DAPPS instance on the same subnet sees
-/// every other instance's beacons within seconds, without configuring
-/// neighbour tables by hand.
+/// Discovery over IP multicast. Each configured channel is one
+/// multicast group endpoint ("239.42.42.42:1881"); the bearer joins
+/// each group on its own socket. Datagram bodies are bare beacon
+/// strings.
 ///
-/// Off by default. Operators opt in by setting
-/// <c>SystemOptions.MulticastGroup</c> ("host:port"); doing so is a
-/// statement of intent ("I want to discover peers on this segment"),
-/// which avoids stomping on other multicast traffic in shared LANs.
-///
-/// The receive socket joins the group on the loopback or default
-/// interface and rejects datagrams whose body parses as our own beacon
-/// (callsign-match) — a node mustn't list itself as a neighbour.
+/// Useful for LAN dev / testing — every DAPPS instance on the same
+/// subnet sees every other instance's beacons within seconds.
+/// Operators opt in by adding a <c>udp</c> channel to the discovery
+/// channels table.
 /// </summary>
 public sealed class UdpMulticastDiscoveryBearer : IDiscoveryBearer
 {
-    public string Name => "udp-multicast";
+    public string Name => "udp";
 
-    private readonly IPEndPoint _group;
     private readonly string _ourCallsign;
     private readonly ILogger _logger;
 
-    private UdpClient? _send;
-    private UdpClient? _recv;
-    private readonly Channel<BeaconFrame> _incoming
-        = Channel.CreateUnbounded<BeaconFrame>(new UnboundedChannelOptions
+    private readonly Dictionary<string, GroupBinding> _groups = new(StringComparer.Ordinal);
+
+    private readonly Channel<ReceivedBeacon> _incoming
+        = Channel.CreateUnbounded<ReceivedBeacon>(new UnboundedChannelOptions
         {
             SingleReader = true,
             SingleWriter = true,
         });
-    private CancellationTokenSource? _readLoopCts;
-    private Task? _readLoop;
 
-    public UdpMulticastDiscoveryBearer(string groupEndpoint, string ourCallsign, ILoggerFactory loggerFactory)
+    public UdpMulticastDiscoveryBearer(string ourCallsign, ILoggerFactory loggerFactory)
     {
-        _group = ParseGroup(groupEndpoint);
         _ourCallsign = ourCallsign;
         _logger = loggerFactory.CreateLogger<UdpMulticastDiscoveryBearer>();
     }
 
-    public Task StartAsync(CancellationToken ct)
+    public async Task StartAsync(IReadOnlyList<DiscoveryChannelInfo> channels, CancellationToken ct)
     {
-        if (_recv is not null) return Task.CompletedTask;
+        foreach (var ch in channels)
+        {
+            if (_groups.ContainsKey(ch.ChannelKey)) continue;
 
-        // Receiver: bound to ANY:port, joined to the group.
-        _recv = new UdpClient();
-        _recv.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
-        _recv.Client.Bind(new IPEndPoint(IPAddress.Any, _group.Port));
-        _recv.JoinMulticastGroup(_group.Address);
+            IPEndPoint endpoint;
+            try
+            {
+                endpoint = ParseGroup(ch.ChannelKey);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "UDP multicast discovery: invalid channel-key '{0}' — skipping", ch.ChannelKey);
+                continue;
+            }
 
-        // Sender: ephemeral source port, MulticastLoopback on so a single-
-        // host test setup can hear its own peers via this same daemon
-        // (different DAPPS instance on the same box still shares the
-        // loopback — and we callsign-filter our own).
-        _send = new UdpClient();
-        _send.Client.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastLoopback, true);
+            var recv = new UdpClient();
+            recv.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
+            recv.Client.Bind(new IPEndPoint(IPAddress.Any, endpoint.Port));
+            recv.JoinMulticastGroup(endpoint.Address);
 
-        _readLoopCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        _readLoop = Task.Run(() => ReadLoopAsync(_readLoopCts.Token), _readLoopCts.Token);
+            var send = new UdpClient();
+            send.Client.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastLoopback, true);
 
-        _logger.LogInformation("UDP multicast discovery joined {0}", _group);
-        return Task.CompletedTask;
+            var loopCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            var binding = new GroupBinding(ch.ChannelKey, endpoint, send, recv, loopCts);
+            _groups[ch.ChannelKey] = binding;
+            binding.ReadLoop = Task.Run(() => ReadLoopAsync(binding, loopCts.Token), loopCts.Token);
+
+            _logger.LogInformation("UDP multicast discovery joined {0} (channel-key '{1}')",
+                endpoint, ch.ChannelKey);
+        }
+        await Task.CompletedTask;
     }
 
-    public async Task AnnounceAsync(BeaconFrame beacon, CancellationToken ct)
+    public async Task AnnounceAsync(BeaconFrame beacon, string channelKey, CancellationToken ct)
     {
-        if (_send is null) throw new InvalidOperationException("UdpMulticastDiscoveryBearer not started");
+        if (!_groups.TryGetValue(channelKey, out var binding))
+        {
+            throw new InvalidOperationException(
+                $"No UDP multicast group bound for channel-key '{channelKey}'");
+        }
         var bytes = BeaconCodec.Encode(beacon);
-        await _send.SendAsync(bytes, _group, ct);
+        await binding.Send.SendAsync(bytes, binding.Endpoint, ct);
     }
 
-    public async IAsyncEnumerable<BeaconFrame> ListenAsync(
+    public async IAsyncEnumerable<ReceivedBeacon> ListenAsync(
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
     {
-        await foreach (var beacon in _incoming.Reader.ReadAllAsync(ct))
+        await foreach (var rb in _incoming.Reader.ReadAllAsync(ct))
         {
-            yield return beacon;
+            yield return rb;
         }
     }
 
-    private async Task ReadLoopAsync(CancellationToken ct)
+    private async Task ReadLoopAsync(GroupBinding binding, CancellationToken ct)
     {
-        var recv = _recv ?? throw new InvalidOperationException();
         try
         {
             while (!ct.IsCancellationRequested)
@@ -97,51 +104,49 @@ public sealed class UdpMulticastDiscoveryBearer : IDiscoveryBearer
                 UdpReceiveResult dgram;
                 try
                 {
-                    dgram = await recv.ReceiveAsync(ct);
+                    dgram = await binding.Recv.ReceiveAsync(ct);
                 }
                 catch (OperationCanceledException) { break; }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "UDP multicast receive failed; continuing");
+                    _logger.LogWarning(ex,
+                        "UDP multicast receive failed on {0}; continuing", binding.Endpoint);
                     continue;
                 }
 
                 var hint = new UdpBearerHint($"{dgram.RemoteEndPoint.Address}:{dgram.RemoteEndPoint.Port}");
                 if (!BeaconCodec.TryParse(dgram.Buffer, hint, out var beacon) || beacon is null)
-                {
-                    continue; // not a DAPPS beacon, or malformed — drop
-                }
+                    continue;
 
                 if (string.Equals(beacon.Callsign, _ourCallsign, StringComparison.OrdinalIgnoreCase))
-                {
-                    continue; // our own beacon looped back; ignore
-                }
+                    continue; // self-echo via MulticastLoopback
 
-                await _incoming.Writer.WriteAsync(beacon, ct);
+                await _incoming.Writer.WriteAsync(new ReceivedBeacon(beacon, binding.ChannelKey), ct);
             }
         }
         finally
         {
-            _incoming.Writer.TryComplete();
+            // We only complete the writer when ALL groups have stopped;
+            // a single binding ending shouldn't shut listening down for
+            // the others. The bearer's DisposeAsync handles final close.
         }
     }
 
     public async ValueTask DisposeAsync()
     {
-        try
+        foreach (var b in _groups.Values)
         {
-            _readLoopCts?.Cancel();
-            if (_readLoop is not null)
+            try { b.Cts.Cancel(); } catch { /* best effort */ }
+            if (b.ReadLoop is not null)
             {
-                try { await _readLoop; } catch { /* expected on cancel */ }
+                try { await b.ReadLoop; } catch { /* expected on cancel */ }
             }
+            b.Send.Dispose();
+            b.Recv.Dispose();
+            b.Cts.Dispose();
         }
-        finally
-        {
-            _recv?.Dispose();
-            _send?.Dispose();
-            _readLoopCts?.Dispose();
-        }
+        _groups.Clear();
+        _incoming.Writer.TryComplete();
     }
 
     private static IPEndPoint ParseGroup(string raw)
@@ -156,5 +161,20 @@ public sealed class UdpMulticastDiscoveryBearer : IDiscoveryBearer
         if (!int.TryParse(raw[(colon + 1)..], out var port) || port is < 1 or > 65535)
             throw new FormatException($"port must be 1..65535, got '{raw[(colon + 1)..]}'");
         return new IPEndPoint(addr, port);
+    }
+
+    private sealed class GroupBinding(
+        string channelKey,
+        IPEndPoint endpoint,
+        UdpClient send,
+        UdpClient recv,
+        CancellationTokenSource cts)
+    {
+        public string ChannelKey { get; } = channelKey;
+        public IPEndPoint Endpoint { get; } = endpoint;
+        public UdpClient Send { get; } = send;
+        public UdpClient Recv { get; } = recv;
+        public CancellationTokenSource Cts { get; } = cts;
+        public Task? ReadLoop { get; set; }
     }
 }
