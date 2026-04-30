@@ -47,6 +47,7 @@ public class TtlForwardingIntegrationTests(TwoInstanceLinbpqFixture fixture) : I
             c.CreateTable<DbMessage>();
             c.CreateTable<DbNeighbour>();
             c.CreateTable<DbRouteHint>();
+            c.CreateTable<DbDiscoveredPeer>();
             // Adding the neighbour is enough — the resolver matches its
             // base callsign against the destination's @-suffix, no
             // separate route hint required (A2).
