@@ -310,6 +310,17 @@ APPLICATION 1,DAPPS,C 2 HOST 1 S TRANS
 
 Replace `M0LTE-9` with your DAPPS callsign and `M0LTE` with your sysop callsign. Restart linbpq for the changes to take effect.
 
+#### Same-host constraint
+
+BPQ's HOST-slot dispatcher hard-codes the dial-out target as `127.0.0.1` (TelnetV6.c:2689). DAPPS therefore has to be reachable on the BPQ host's loopback when an L2 connect arrives. The simple shape is **DAPPS and BPQ co-located on the same host** — that's the assumption baked into the example above.
+
+If you genuinely need DAPPS on a different machine from BPQ, tunnel rather than route around BPQ:
+
+- **SSH reverse tunnel** (recommended): on the DAPPS host, `ssh -N -R 11000:localhost:11000 user@bpq-host`. sshd binds the remote-side port to loopback by default — exactly where BPQ wants to reach it, and only there.
+- **socat / WireGuard / similar** on the BPQ host, terminating BPQ's loopback dial and relaying to your remote DAPPS.
+
+The legacy `APPLICATION ...,ATTACH <port> <host> <tcp_port>,...` form *does* take an explicit host argument, but reaching the dial requires `SecureTelnet=0` in the Telnet PORT config — which then permits any non-SYSOP L2 station to issue arbitrary `C <host> <port>` outward connects through BPQ. Don't.
+
 If you're trying out two BPQs over AXIP-UDP for testing, see [`src/dapps/dapps.core.tests/Integration/TwoInstanceAttachFixture.cs`](src/dapps/dapps.core.tests/Integration/TwoInstanceAttachFixture.cs) for a worked example mirroring the config above.
 
 ### 2. Download the DAPPS binary
