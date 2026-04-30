@@ -186,6 +186,47 @@ public class Database(ILogger<Database> logger, IOptionsMonitor<SystemOptions> o
     }
 
     /// <summary>
+    /// Most-recent messages across both local and remote destinations,
+    /// newest first. Used by the dashboard to give a sysop a live view
+    /// of activity without paging through the whole queue.
+    /// </summary>
+    public async Task<IReadOnlyList<DbMessage>> GetRecentMessages(int limit)
+    {
+        var connection = DbInfo.GetAsyncConnection();
+        return await connection.QueryAsync<DbMessage>(
+            "select * from messages order by CreatedAt desc limit ?", limit);
+    }
+
+    /// <summary>Total message-table row count, for dashboard summaries.</summary>
+    public async Task<int> CountMessages()
+    {
+        var connection = DbInfo.GetAsyncConnection();
+        return await connection.ExecuteScalarAsync<int>("select count(*) from messages");
+    }
+
+    /// <summary>Pending outbound rows — messages destined for a remote
+    /// node that haven't yet been forwarded.</summary>
+    public async Task<int> CountPendingOutbound()
+    {
+        var connection = DbInfo.GetAsyncConnection();
+        var local = options.CurrentValue.Callsign.Split('-')[0];
+        return await connection.ExecuteScalarAsync<int>(
+            "select count(*) from messages where forwarded=0 and not (destination like ?);",
+            $"%@{local}%");
+    }
+
+    /// <summary>Undelivered local rows — messages destined for a local
+    /// app that haven't been ack'd by the app yet.</summary>
+    public async Task<int> CountUndeliveredLocal()
+    {
+        var connection = DbInfo.GetAsyncConnection();
+        var local = options.CurrentValue.Callsign.Split('-')[0];
+        return await connection.ExecuteScalarAsync<int>(
+            "select count(*) from messages where locallydelivered=0 and (destination like ?);",
+            $"%@{local}%");
+    }
+
+    /// <summary>
     /// Insert a neighbour or update its bearer hints if one already
     /// exists for the same callsign. Idempotent: callers can re-POST
     /// the same neighbour without checking for prior existence.

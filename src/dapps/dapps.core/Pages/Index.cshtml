@@ -1,0 +1,158 @@
+@page
+@model IndexModel
+@{
+    ViewData["Title"] = $"DAPPS — {Model.Options.Callsign}";
+}
+
+<h1>DAPPS — @Model.Options.Callsign</h1>
+
+@if (Model.FlashOk is not null)
+{
+    <div class="ok-banner">@Model.FlashOk</div>
+}
+@if (Model.FlashError is not null)
+{
+    <div class="err-banner">@Model.FlashError</div>
+}
+
+<h2>Node</h2>
+<div class="grid">
+    <div class="card">
+        <div class="label">Callsign</div>
+        <div class="value">@Model.Options.Callsign</div>
+    </div>
+    <div class="card">
+        <div class="label">BPQ AGW</div>
+        <div class="value">
+            @Model.Options.NodeHost:@Model.Options.AgwPort
+            @if (Model.BpqAgwReachable)
+            {
+                <span class="ok">●</span>
+            }
+            else
+            {
+                <span class="warn">●</span>
+            }
+        </div>
+    </div>
+    <div class="card">
+        <div class="label">Default BPQ port</div>
+        <div class="value">@Model.Options.DefaultBpqPort</div>
+    </div>
+    <div class="card">
+        <div class="label">MQTT broker</div>
+        <div class="value">:@Model.Options.MqttPort</div>
+    </div>
+    <div class="card">
+        <div class="label">UDP listener</div>
+        <div class="value">
+            @(Model.Options.UdpListenPort > 0 ? $":{Model.Options.UdpListenPort}" : "disabled")
+        </div>
+    </div>
+    <div class="card">
+        <div class="label">Auth required</div>
+        <div class="value">@(Model.Options.AuthRequired ? "yes" : "no")</div>
+    </div>
+</div>
+
+<h2>Queue</h2>
+<div class="grid">
+    <div class="card">
+        <div class="label">Total messages</div>
+        <div class="value">@Model.TotalMessages</div>
+    </div>
+    <div class="card">
+        <div class="label">Pending outbound</div>
+        <div class="value">@Model.PendingOutbound</div>
+    </div>
+    <div class="card">
+        <div class="label">Undelivered local</div>
+        <div class="value">@Model.UndeliveredLocal</div>
+    </div>
+    <div class="card">
+        <div class="label">Neighbours</div>
+        <div class="value">@Model.NeighbourCount</div>
+    </div>
+</div>
+
+<h2>Neighbours</h2>
+@if (Model.Neighbours.Count == 0)
+{
+    <p class="muted">No neighbours configured. POST to <code>/Neighbours</code> to add one.</p>
+}
+else
+{
+    <table>
+        <thead>
+            <tr>
+                <th>Callsign</th>
+                <th>BPQ port</th>
+                <th>UDP endpoint</th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var n in Model.Neighbours)
+        {
+            <tr>
+                <td>@n.Callsign</td>
+                <td class="numeric">@(n.BpqPort?.ToString() ?? "—")</td>
+                <td>@(n.UdpEndpoint ?? "—")</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}
+
+<h2>Recent messages</h2>
+@if (Model.RecentMessages.Count == 0)
+{
+    <p class="muted">No messages yet.</p>
+}
+else
+{
+    <table>
+        <thead>
+            <tr>
+                <th>Id</th>
+                <th>Destination</th>
+                <th>Source</th>
+                <th>Bytes</th>
+                <th>Status</th>
+                <th>TTL</th>
+                <th>Age</th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var m in Model.RecentMessages)
+        {
+            <tr>
+                <td><code>@m.Id</code></td>
+                <td>@m.Destination</td>
+                <td>@m.SourceCallsign</td>
+                <td class="numeric">@m.Payload.Length</td>
+                <td>@IndexModel.MessageStatus(m, Model.Options.Callsign)</td>
+                <td class="numeric">@(m.Ttl?.ToString() ?? "—")</td>
+                <td>@IndexModel.Age(m.CreatedAt)</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}
+
+<h2>Send a test message</h2>
+<p class="muted">
+    Posts an outbound message via <code>Database.SubmitOutboundMessage</code>, just
+    like an app would over MQTT or REST. Useful for verifying a node-to-node link.
+</p>
+<form class="inline" method="post" asp-page-handler="Send">
+    <label for="send-app">App</label>
+    <input type="text" id="send-app" name="Send.App" value="@Model.Send.App" placeholder="myapp" required />
+
+    <label for="send-dest">Destination callsign</label>
+    <input type="text" id="send-dest" name="Send.Destination" value="@Model.Send.Destination" placeholder="G7XYZ-9" required />
+
+    <label for="send-payload">Payload (UTF-8 text)</label>
+    <input type="text" id="send-payload" name="Send.Payload" value="@Model.Send.Payload" placeholder="hello world" required />
+
+    <button type="submit">Queue message</button>
+</form>

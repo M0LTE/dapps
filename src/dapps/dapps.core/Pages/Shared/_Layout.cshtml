@@ -1,0 +1,53 @@
+@{
+    var title = ViewData["Title"] as string ?? "DAPPS";
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@title</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+               margin: 1.5rem; max-width: 1200px; line-height: 1.45; color: #222; }
+        h1 { margin-top: 0; font-size: 1.5rem; }
+        h2 { font-size: 1.1rem; border-bottom: 1px solid #ddd; padding-bottom: 0.25rem; margin-top: 1.5rem; }
+        nav { margin-bottom: 1rem; padding: 0.5rem 0; border-bottom: 1px solid #eee; }
+        nav a { margin-right: 1rem; color: #06c; text-decoration: none; }
+        nav a:hover { text-decoration: underline; }
+        table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+        th, td { text-align: left; padding: 0.35rem 0.6rem; border-bottom: 1px solid #eee; }
+        th { background: #f6f6f6; font-weight: 600; }
+        td.numeric { text-align: right; font-variant-numeric: tabular-nums; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem; }
+        .card { background: #fafafa; border: 1px solid #e5e5e5; border-radius: 6px; padding: 0.75rem 1rem; }
+        .card .label { font-size: 0.8rem; color: #666; text-transform: uppercase; letter-spacing: 0.05em; }
+        .card .value { font-size: 1.25rem; font-weight: 500; margin-top: 0.25rem; font-variant-numeric: tabular-nums; }
+        .ok { color: #0a8043; }
+        .warn { color: #b54300; }
+        .muted { color: #888; }
+        form.inline { background: #fafafa; border: 1px solid #e5e5e5; border-radius: 6px;
+                      padding: 1rem; margin-top: 0.5rem; }
+        form.inline label { display: block; margin: 0.5rem 0 0.2rem; font-size: 0.85rem; color: #555; }
+        form.inline input[type=text] { width: 100%; max-width: 30rem; padding: 0.4rem 0.5rem;
+                                       border: 1px solid #ccc; border-radius: 4px; font: inherit; }
+        form.inline button { margin-top: 0.75rem; padding: 0.4rem 1rem;
+                             border: 1px solid #06c; background: #06c; color: white;
+                             border-radius: 4px; cursor: pointer; font: inherit; }
+        form.inline button:hover { background: #048; }
+        .ok-banner { background: #e7f5ec; border: 1px solid #b9e0c5; padding: 0.5rem 0.75rem;
+                     border-radius: 4px; margin: 0.5rem 0; font-size: 0.9rem; }
+        .err-banner { background: #fdecea; border: 1px solid #f5b3ad; padding: 0.5rem 0.75rem;
+                      border-radius: 4px; margin: 0.5rem 0; font-size: 0.9rem; }
+        code { background: #f0f0f0; padding: 0.05rem 0.3rem; border-radius: 3px; font-size: 0.9em; }
+    </style>
+</head>
+<body>
+    <nav>
+        <a href="/">Dashboard</a>
+        <a href="/scalar">API</a>
+        <a href="/swagger">Swagger</a>
+    </nav>
+    @RenderBody()
+</body>
+</html>
