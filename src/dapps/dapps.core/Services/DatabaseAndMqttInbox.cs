@@ -17,6 +17,7 @@ namespace dapps.core.Services;
 public sealed class DatabaseAndMqttInbox(
     Database database,
     MqttBrokerService mqtt,
+    InboundEventBus events,
     IOptionsMonitor<SystemOptions> options,
     ILogger<DatabaseAndMqttInbox> logger) : IBackhaulInbox
 {
@@ -57,5 +58,15 @@ public sealed class DatabaseAndMqttInbox(
             logger.LogDebug("Message {0} for {1} is not local — leaving in queue for forwarding",
                 message.Id, message.Destination);
         }
+
+        // Notify dashboard SSE subscribers regardless of local-vs-relay —
+        // operators want to see traffic flowing through the node.
+        events.Publish(new InboundEvent(
+            ReceivedAt: DateTime.UtcNow,
+            Id: message.Id,
+            SourceCallsign: sourceCallsign,
+            Destination: message.Destination,
+            PayloadLength: message.Payload.Length,
+            Ttl: message.Ttl));
     }
 }

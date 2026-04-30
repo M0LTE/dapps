@@ -5,6 +5,7 @@ using dapps.client.Transport;
 using dapps.client.Transport.Agw;
 using dapps.core.Models;
 using dapps.core.Services;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.Extensions.Options;
 // OpenAPI / Scalar dropped in the .NET 8 rollback — the native
 // OpenAPI generation (AddOpenApi / MapOpenApi) is a .NET 9+ API.
@@ -43,6 +44,25 @@ builder.Services.AddHostedService<TtlSweeperService>();
 builder.Services.AddSingleton<Database>();
 builder.Services.AddSingleton<OptionsRepo>();
 builder.Services.AddSingleton<AppTokenStore>();
+builder.Services.AddSingleton<AdminPasswordStore>();
+builder.Services.AddSingleton<InboundEventBus>();
+
+// Cookie auth for the dashboard / admin endpoints. Long sliding
+// expiry (90 days) — this is a sysop's home node, the cookie's
+// "remember me indefinitely" by design. /AppApi/* doesn't use this
+// scheme; it has its own bearer-token middleware.
+builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddCookie(options =>
+    {
+        options.Cookie.Name = "dapps.admin";
+        options.Cookie.HttpOnly = true;
+        options.Cookie.SameSite = SameSiteMode.Strict;
+        options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+        options.LoginPath = "/Login";
+        options.LogoutPath = "/Logout";
+        options.ExpireTimeSpan = TimeSpan.FromDays(90);
+        options.SlidingExpiration = true;
+    });
 builder.Services.AddSingleton<OutboundMessageManager>();
 builder.Services.AddSingleton<IDappsOutboundTransport>(sp =>
 {
@@ -77,8 +97,10 @@ builder.Services.AddLogging(logging =>
 });
 var app = builder.Build();
 
+app.UseAuthentication();
 app.UseAuthorization();
 app.UseMiddleware<BearerAuthMiddleware>();
+app.UseMiddleware<AdminAuthMiddleware>();
 app.MapControllers();
 app.MapRazorPages();
 
