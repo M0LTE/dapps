@@ -199,21 +199,17 @@ README "Getting started" rewritten end-to-end for the native-binary distribution
 
 The existing app exposes ASP.NET Core + Scalar/Swagger for its REST surface — that's enough scaffolding to host a UI alongside.
 
-### D1. Inspection / dashboard
+### D1. Inspection / dashboard *(MVP done)*
 
-- **Overview** — callsign, AGW status (connected/last-seen), MQTT broker status, queue depths (inbound, outbound, total messages).
-- **Messages** table — id, source, destination, ttl, status (pending/forwarded/locally-delivered/expired), age. Filter by app, callsign, status. Click for payload preview.
-- **Neighbours** — manually configured + auto-discovered, with last-heard timestamps.
-- **Routes** — current routing table state.
-- **Logs tail** — recent log entries (last N), filterable by level.
+Single Razor Pages dashboard at `/`. Covers: callsign, BPQ AGW reachability probe, MQTT/UDP listener status, auth-required flag, queue depths (total / pending-outbound / undelivered-local / neighbour count), neighbours table, recent-messages table (id, dst, src, bytes, status, ttl, age).
 
-### D2. Exercising the system
+Deferred for follow-up: filter by app/callsign/status, click-for-payload-preview, dedicated routes view (DbRouteHint is mostly gone post-A2 anyway), logs-tail page (sysops can use stdout / journalctl). Filed as items here so they're not lost.
 
-A **"send test message"** form: dropdown of known apps + neighbours, payload textbox, hit send. Useful to verify a node-to-node link works without writing an app first.
+### D2. Exercising the system *(send-test-message done; SSE + ihave terminal deferred)*
 
-A **"subscribe to inbound"** view: pick an app, get a live stream (Server-Sent Events or WebSocket) of messages arriving for that app. Browser becomes a stand-in MQTT subscriber for ad-hoc testing.
+Send-test-message form on the dashboard POSTs into `Database.SubmitOutboundMessage` — same path an app would take via REST/MQTT. Useful for verifying a node-to-node link without writing an app first.
 
-A **"manual ihave"** terminal: paste an `ihave` line, see how the validator parses it, see what `chk` it would compute. Already-pinned `IHaveValidator` is the engine.
+The "subscribe to inbound" SSE view and the "manual ihave" terminal are still useful but bigger surfaces; deferred. Both have natural homes once the dashboard grows beyond a single page (separate `/Inbound` and `/IHave` Razor pages).
 
 ### D3. Configuration UI
 
@@ -325,7 +321,7 @@ Roughly:
 1. **A0.1–A0.3** (backhaul seam) — *done*. **A1** (TTL forwarding) — *done*. **A2** (neighbour-table cleanup) — *done*.
 3. **C1 + C2 + C4** (docker image, config tooling, install docs) — gets the thing into one sysop's hands.
 4. **A4** (per-app auth) — *done*.
-5. **D1 + D2** (web UI inspection + exercise) — turns "running" into "comfortable to run".
+5. **D1 + D2** (web UI inspection + exercise) — *MVP done*. SSE inbound feed + ihave terminal still pending.
 6. **B1–B5** (beacon discovery + routing evolution, including MeshCore-inspired exploration) — graduates from manual neighbour config to a real network.
 7. **A0.4** — UDP datagram stand-in *done*; first real alternate bearer (likely MeshCore Companion) when the seam is ready.
 8. **E1–E5** (developer guide + sample apps + Python ref impl) — unlocks third-party app development.
