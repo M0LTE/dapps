@@ -103,6 +103,40 @@ else
     </table>
 }
 
+<h2>Discovered peers</h2>
+@if (Model.DiscoveredPeers.Count == 0)
+{
+    <p class="muted">No peers heard yet. Set <code>DAPPS_MULTICAST_GROUP</code> (UDP) or <code>DAPPS_AGW_DISCOVERY=true</code> (AX.25 UI) to start beaconing.</p>
+}
+else
+{
+    <table>
+        <thead>
+            <tr>
+                <th>Callsign</th>
+                <th>Bearer</th>
+                <th>Hops</th>
+                <th>Source</th>
+                <th>Last seen</th>
+                <th>TTL</th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var p in Model.DiscoveredPeers)
+        {
+            <tr>
+                <td>@p.Callsign</td>
+                <td>@p.Bearer</td>
+                <td class="numeric">@p.Hops</td>
+                <td>@(p.UdpEndpoint ?? (p.BpqPort is { } bp ? $"BPQ port {bp}" : "—"))</td>
+                <td>@IndexModel.Age(p.LastSeen) ago</td>
+                <td class="numeric">@p.TtlSeconds s</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}
+
 <h2>Recent messages</h2>
 @if (Model.RecentMessages.Count == 0)
 {

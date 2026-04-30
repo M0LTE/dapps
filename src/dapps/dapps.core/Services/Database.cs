@@ -227,6 +227,53 @@ public class Database(ILogger<Database> logger, IOptionsMonitor<SystemOptions> o
     }
 
     /// <summary>
+    /// Insert or refresh a discovered-peer row. Keyed on
+    /// (callsign, bearer) so the same peer heard via two bearers
+    /// occupies two rows. Idempotent — beacons re-arrive every cadence
+    /// and just bump <see cref="DbDiscoveredPeer.LastSeen"/>.
+    /// </summary>
+    internal async Task UpsertDiscoveredPeer(DbDiscoveredPeer peer)
+    {
+        peer.PeerKey = DbDiscoveredPeer.MakeKey(peer.Callsign, peer.Bearer);
+        var connection = DbInfo.GetAsyncConnection();
+        var existing = await connection.FindAsync<DbDiscoveredPeer>(peer.PeerKey);
+        if (existing is null)
+        {
+            await connection.InsertAsync(peer);
+        }
+        else
+        {
+            await connection.UpdateAsync(peer);
+        }
+    }
+
+    /// <summary>List all currently-known discovered peers, irrespective
+    /// of staleness. The dashboard / debugger uses this; the routing
+    /// resolver should age out before consulting.</summary>
+    public async Task<IReadOnlyList<DbDiscoveredPeer>> GetDiscoveredPeers()
+    {
+        var connection = DbInfo.GetAsyncConnection();
+        return await connection.QueryAsync<DbDiscoveredPeer>(
+            "select * from discoveredpeers order by LastSeen desc");
+    }
+
+    /// <summary>Remove discovered-peer rows whose freshness window has
+    /// elapsed. Returns the number of rows deleted.</summary>
+    internal async Task<int> AgeOutDiscoveredPeers(DateTime now)
+    {
+        var connection = DbInfo.GetAsyncConnection();
+        var stale = (await connection.QueryAsync<DbDiscoveredPeer>(
+                "select * from discoveredpeers"))
+            .Where(p => (now - p.LastSeen).TotalSeconds > p.TtlSeconds)
+            .ToList();
+        foreach (var p in stale)
+        {
+            await connection.DeleteAsync<DbDiscoveredPeer>(p.PeerKey);
+        }
+        return stale.Count;
+    }
+
+    /// <summary>
     /// Insert a neighbour or update its bearer hints if one already
     /// exists for the same callsign. Idempotent: callers can re-POST
     /// the same neighbour without checking for prior existence.
