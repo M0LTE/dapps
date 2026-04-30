@@ -24,11 +24,14 @@ builder.Services.AddOptions<SystemOptions>().Configure<OptionsRepo, ILogger<Syst
     o.MqttPort = int.Parse(options.Single(o => o.Option == "MqttPort").Value);
     o.UdpListenPort = int.TryParse(
         options.SingleOrDefault(opt => opt.Option == "UdpListenPort")?.Value, out var udpPort) ? udpPort : 0;
+    o.AuthRequired = bool.TryParse(
+        options.SingleOrDefault(opt => opt.Option == "AuthRequired")?.Value, out var auth) && auth;
 
     logger.LogInformation($"Callsign: {o.Callsign}");
     logger.LogInformation($"BPQ AGW: {o.NodeHost}:{o.AgwPort} (default port byte {o.DefaultBpqPort})");
     logger.LogInformation($"MQTT broker: localhost:{o.MqttPort}");
     logger.LogInformation($"UDP datagram listener: {(o.UdpListenPort > 0 ? $":{o.UdpListenPort}" : "disabled")}");
+    logger.LogInformation($"App-interface auth required: {o.AuthRequired}");
 });
 
 builder.Services.AddSingleton<InboundConnectionHandlerFactory>();
@@ -38,6 +41,7 @@ builder.Services.AddHostedService<BpqConnectionListener>();
 builder.Services.AddHostedService<TtlSweeperService>();
 builder.Services.AddSingleton<Database>();
 builder.Services.AddSingleton<OptionsRepo>();
+builder.Services.AddSingleton<AppTokenStore>();
 builder.Services.AddSingleton<OutboundMessageManager>();
 builder.Services.AddSingleton<IDappsOutboundTransport>(sp =>
 {
@@ -71,6 +75,7 @@ app.MapScalarApiReference(options => {
     options.OpenApiRoutePattern = "../swagger/v1/swagger.json";
 });
 app.UseAuthorization();
+app.UseMiddleware<BearerAuthMiddleware>();
 app.MapControllers();
 
 app.Run();

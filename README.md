@@ -352,7 +352,15 @@ Now listening on: http://localhost:5000
 
 Browse to <http://localhost:5000/scalar> for the API explorer (Scalar) or <http://localhost:5000/swagger> for the OpenAPI page. Both surface the same REST endpoints (`/Config`, `/Neighbours`, `/AppApi/...`, `/Message/dorun`).
 
-To bind the HTTP API on a different host/port, set `ASPNETCORE_URLS` before launch — e.g. `ASPNETCORE_URLS=http://0.0.0.0:8080`. There is no auth on the REST surface yet (Phase A4), so don't expose it beyond loopback or trusted LAN until that lands.
+To bind the HTTP API on a different host/port, set `ASPNETCORE_URLS` before launch — e.g. `ASPNETCORE_URLS=http://0.0.0.0:8080`.
+
+App-interface auth is opt-in: by default the MQTT broker and `/AppApi/*` endpoints accept anyone reachable on those ports (fine for single-host loopback, not for shared nodes). To enable enforcement:
+
+1. Mint a token for each app: `curl -X POST http://localhost:5000/AppTokens -H 'content-type: application/json' -d '{"App":"myapp"}'` — capture the returned `token` (it's only shown once).
+2. POST `{"AuthRequired":true, ...}` to `/Config` (or set `DAPPS_AUTH_REQUIRED=true` before first start).
+3. Restart. MQTT clients now CONNECT with `username=app` + `password=token`; REST clients send `Authorization: Bearer <token>` on `/AppApi/*`. Topic / endpoint scope is enforced — an app authenticated as `myapp` can only act on its own slot.
+
+The admin surfaces (`/Config`, `/Neighbours`, `/AppTokens`) remain unauthenticated — bind them to loopback or front them with a reverse proxy.
 
 ### 4. Add a neighbour
 

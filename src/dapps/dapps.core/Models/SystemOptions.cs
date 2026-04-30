@@ -38,4 +38,13 @@ public class SystemOptions
     /// lands.
     /// </summary>
     public int UdpListenPort { get; set; }
+
+    /// <summary>
+    /// When true, app-interface clients (MQTT and REST) must present a
+    /// valid token; topic / endpoint scope is also enforced against the
+    /// authenticated app. When false, the app interface is open to
+    /// anyone reachable on those ports — fine for single-host loopback,
+    /// not fine for shared nodes. Plan A4.
+    /// </summary>
+    public bool AuthRequired { get; set; }
 }
