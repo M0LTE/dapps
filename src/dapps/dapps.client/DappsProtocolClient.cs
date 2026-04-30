@@ -15,7 +15,7 @@ public class DappsProtocolClient(Stream stream, ILoggerFactory loggerFactory)
 {
     private readonly ILogger logger = loggerFactory.CreateLogger<DappsProtocolClient>();
 
-    private const string ExpectedPrompt = "DAPPSv1>\n";
+    private const string PromptText = "DAPPSv1>";
     private const int PromptScanCapBytes = 256;
 
     /// <summary>Per-read inactivity timeout. Mirrors the receiver-side
@@ -28,12 +28,20 @@ public class DappsProtocolClient(Stream stream, ILoggerFactory loggerFactory)
     /// Reads from the stream until either the DAPPSv1 prompt is seen or we
     /// exceed PromptScanCapBytes (which is enough to absorb a typical noisy
     /// connect-banner from a misbehaving node without becoming a DoS sink).
+    ///
+    /// We match on <c>"DAPPSv1>"</c> followed by *any* line terminator
+    /// (<c>\n</c>, <c>\r</c>, or <c>\r\n</c>) — BPQ's Telnet driver, when
+    /// bridging an inbound L2 session via Apps Interface, rewrites LF → CR
+    /// in the app-to-user direction (apps-interface.md "App → user"
+    /// section). Strict <c>\n</c>-only matching would hang every time
+    /// dapps is reached over that bridge.
     /// </summary>
     public async Task<bool> ReadInitialPromptAsync(CancellationToken ct)
     {
-        var prompt = Encoding.UTF8.GetBytes(ExpectedPrompt);
+        var promptBytes = Encoding.UTF8.GetBytes(PromptText);
         var seen = new List<byte>();
         var oneByte = new byte[1];
+        var promptSeen = false;
 
         while (seen.Count < PromptScanCapBytes)
         {
@@ -45,8 +53,15 @@ public class DappsProtocolClient(Stream stream, ILoggerFactory loggerFactory)
             }
             seen.Add(oneByte[0]);
 
-            if (seen.Count >= prompt.Length
-                && seen.GetRange(seen.Count - prompt.Length, prompt.Length).SequenceEqual(prompt))
+            if (!promptSeen
+                && seen.Count >= promptBytes.Length
+                && seen.GetRange(seen.Count - promptBytes.Length, promptBytes.Length).SequenceEqual(promptBytes))
+            {
+                promptSeen = true;
+                continue;
+            }
+
+            if (promptSeen && (oneByte[0] == (byte)'\n' || oneByte[0] == (byte)'\r'))
             {
                 return true;
             }
@@ -125,15 +140,33 @@ public class DappsProtocolClient(Stream stream, ILoggerFactory loggerFactory)
         return false;
     }
 
+    /// <summary>
+    /// Reads a line terminated by <c>\n</c>, <c>\r</c>, or <c>\r\n</c>.
+    /// Leading line terminators are skipped (so a stranded <c>\n</c>
+    /// after a <c>\r\n</c> sequence on the previous call doesn't yield
+    /// a phantom empty line). Empty lines from the peer are not part of
+    /// the DAPPSv1 protocol so this is safe.
+    ///
+    /// BPQ's Telnet driver rewrites line endings in the app→user
+    /// direction (LF → CR with the default text-mode line discipline,
+    /// per apps-interface.md), so accepting either form is necessary
+    /// when dapps is reached via the BPQ APPLICATION+ATTACH bridge.
+    /// </summary>
     private async Task<string> ReadLineAsync(CancellationToken ct)
     {
         var buffer = new List<byte>();
         var oneByte = new byte[1];
+        var sawContent = false;
         while (true)
         {
             var n = await ReadWithTimeoutAsync(oneByte, ct);
             if (n == 0) break;
-            if (oneByte[0] == '\n') break;
+            if (oneByte[0] == (byte)'\n' || oneByte[0] == (byte)'\r')
+            {
+                if (!sawContent) continue;   // skip leading terminator(s)
+                break;
+            }
+            sawContent = true;
             buffer.Add(oneByte[0]);
         }
         return Encoding.UTF8.GetString(buffer.ToArray());

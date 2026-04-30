@@ -23,6 +23,8 @@ builder.Services.AddOptions<SystemOptions>().Configure<OptionsRepo, ILogger<Syst
     o.DefaultBpqPort = int.Parse(options.Single(o => o.Option == "DefaultBpqPort").Value);
     o.Callsign = options.Single(o => o.Option == "Callsign").Value;
     o.MqttPort = int.Parse(options.Single(o => o.Option == "MqttPort").Value);
+    o.BpqInboundListenerPort = int.TryParse(
+        options.SingleOrDefault(opt => opt.Option == "BpqInboundListenerPort")?.Value, out var bpqPort) ? bpqPort : 11000;
     o.UdpListenPort = int.TryParse(
         options.SingleOrDefault(opt => opt.Option == "UdpListenPort")?.Value, out var udpPort) ? udpPort : 0;
     o.AuthRequired = bool.TryParse(
@@ -30,6 +32,7 @@ builder.Services.AddOptions<SystemOptions>().Configure<OptionsRepo, ILogger<Syst
 
     logger.LogInformation($"Callsign: {o.Callsign}");
     logger.LogInformation($"BPQ AGW: {o.NodeHost}:{o.AgwPort} (default port byte {o.DefaultBpqPort})");
+    logger.LogInformation($"BPQ inbound listener: localhost:{o.BpqInboundListenerPort}");
     logger.LogInformation($"MQTT broker: localhost:{o.MqttPort}");
     logger.LogInformation($"UDP datagram listener: {(o.UdpListenPort > 0 ? $":{o.UdpListenPort}" : "disabled")}");
     logger.LogInformation($"App-interface auth required: {o.AuthRequired}");

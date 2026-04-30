@@ -367,6 +367,7 @@ public class Database(ILogger<Database> logger, IOptionsMonitor<SystemOptions> o
         await Upsert(connection, options, systemOptions.DefaultBpqPort.ToString(), nameof(systemOptions.DefaultBpqPort));
         await Upsert(connection, options, systemOptions.Callsign, nameof(systemOptions.Callsign));
         await Upsert(connection, options, systemOptions.MqttPort.ToString(), nameof(systemOptions.MqttPort));
+        await Upsert(connection, options, systemOptions.BpqInboundListenerPort.ToString(), nameof(systemOptions.BpqInboundListenerPort));
     }
 
     private static async Task Upsert(SQLiteAsyncConnection connection, List<DbSystemOption> options, string value, string field)
@@ -392,6 +393,8 @@ public class Database(ILogger<Database> logger, IOptionsMonitor<SystemOptions> o
             DefaultBpqPort = int.Parse(options[nameof(SystemOptions.DefaultBpqPort)]),
             Callsign = options[nameof(SystemOptions.Callsign)],
             MqttPort = int.Parse(options[nameof(SystemOptions.MqttPort)]),
+            BpqInboundListenerPort = options.TryGetValue(nameof(SystemOptions.BpqInboundListenerPort), out var bpqPort)
+                ? int.Parse(bpqPort) : 11000,
         };
     }
 }
