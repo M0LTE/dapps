@@ -350,7 +350,7 @@ MQTT broker listening on :1883
 Now listening on: http://localhost:5000
 ```
 
-Browse to <http://localhost:5000/> for the dashboard (queue depths, neighbour list, recent messages, send-test-message form). The same address serves <http://localhost:5000/scalar> (Scalar API explorer) and <http://localhost:5000/swagger> (OpenAPI) for the REST surface.
+Browse to <http://localhost:5000/> for the dashboard (queue depths, neighbour list, discovered peers, recent messages, send-test-message form). The same address serves <http://localhost:5000/scalar> (Scalar API explorer reading the OpenAPI document at <http://localhost:5000/openapi/v1.json>).
 
 To bind the HTTP API on a different host/port, set `ASPNETCORE_URLS` before launch — e.g. `ASPNETCORE_URLS=http://0.0.0.0:8080`.
 
