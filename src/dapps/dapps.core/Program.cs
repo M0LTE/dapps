@@ -6,14 +6,15 @@ using dapps.client.Transport.Agw;
 using dapps.core.Models;
 using dapps.core.Services;
 using Microsoft.Extensions.Options;
-using Scalar.AspNetCore;
+// OpenAPI / Scalar dropped in the .NET 8 rollback — the native
+// OpenAPI generation (AddOpenApi / MapOpenApi) is a .NET 9+ API.
+// To revisit once we're back on a newer .NET runtime.
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddControllers();
 builder.Services.AddRazorPages();
-builder.Services.AddOpenApi();
 builder.Services.AddHostedService<DbStartup>();
 builder.Services.AddOptions<SystemOptions>().Configure<OptionsRepo, ILogger<SystemOptions>>(async (o, db, logger) =>
 {
@@ -76,14 +77,6 @@ builder.Services.AddLogging(logging =>
 });
 var app = builder.Build();
 
-// .NET 9+ ships native OpenAPI doc generation via Microsoft.AspNetCore.OpenApi.
-// MapOpenApi() serves the generated document at /openapi/v1.json by default;
-// Scalar reads it directly. SwaggerUI dropped — Scalar is the only viewer.
-app.MapOpenApi();
-app.MapScalarApiReference(options =>
-{
-    options.OpenApiRoutePattern = "/openapi/v1.json";
-});
 app.UseAuthorization();
 app.UseMiddleware<BearerAuthMiddleware>();
 app.MapControllers();

@@ -13,7 +13,7 @@ Seven PRs have landed since the restart:
 | 3 | Internal Timestamp→Salt rename + IHaveValidator extraction + tests | Code cosmetic alignment with the spec, parser logic lifted into a pure static for testability, 4→37 tests. |
 | 4 | AGW outbound transport behind a pluggable interface; remove FBB-telnet | `IDappsOutboundTransport`, `AgwOutboundTransport`, `DappsProtocolClient`. FBB-telnet path entirely deleted. Real-BPQ integration tests via `m0lte/linbpq` Docker image. 60 tests. |
 | 7 | App interface: embedded MQTT broker + REST mirror | Embedded MQTTnet broker + REST endpoints sharing one SQLite-backed queue. DAPPS-as-queue, broker-as-channel design. Source-callsign threading. 77 tests. |
-| 8 | .NET 10 + central package management + xunit.v3 + Microsoft Testing Platform + this plan.md | Toolchain refresh + roadmap doc. |
+| 8 | .NET 10 + central package management + xunit.v3 + Microsoft Testing Platform + this plan.md | Toolchain refresh + roadmap doc. **Subsequently rolled back to .NET 8 LTS** — see below for the why. |
 | 9 | A1: TTL forwarder logic + two-instance integration test (closes #6) | `DbMessage.Ttl` + `CreatedAt` columns, residual-decrement at forward, drop-on-expiry, `TtlSweeperService`, `TwoInstanceLinbpqFixture`, end-to-end TTL test through real BPQ over AXIP-UDP. 105 tests. Diagnosed M0LTE/linbpq#41 (image's `mail chat` default CMD) along the way. |
 
 The protocol is fully specified (`README.md`'s "On-air protocol" section). The implementation matches the spec for the parts it implements. The on-air format is byte-validated against real BPQ in CI via `m0lte/linbpq`. Local apps can talk to a DAPPS instance via MQTT (durable, idempotent on `dapps-id`) or REST (POST + poll). TTL forwarding works end-to-end across two BPQs.
@@ -78,6 +78,23 @@ Sysop-friendly model:
 ### A3. Sender-side inactivity timeout on AGW *(done)*
 
 `DappsProtocolClient` wraps every per-byte read with a 3-minute inactivity timeout (matches receiver-side T3-default). On expiry the read surfaces a `TimeoutException` rather than blocking forever; the forwarder loop catches and moves on. `AgwOutboundTransport.ConnectAsync` got the same treatment on the connect-confirm wait. Outer `CancellationToken` (from shutdown) takes precedence over the inactivity timer.
+
+### A8. Roll back runtime to .NET 8 LTS *(done — v0.2.0)*
+
+The .NET 10 v0.1.0/v0.1.1 binaries failed to load on Raspberry Pi OS 11 (Bullseye, glibc 2.31): `/opt/dapps/dapps` requires `GLIBC_2.32`–`2.34` and `GLIBCXX_3.4.29`–`3.4.30`. Initial diagnosis (transitive native deps from build host) was wrong — self-contained `PublishSingleFile` produces byte-identical output regardless of build host. The actual cause: .NET 10 dropped Debian 11 from its supported Linux list; its apphost is built against Bookworm-baseline glibc 2.36.
+
+The previous restart (PR #8 entry above) left a comment that .NET 8 was where they had stayed; this confirms why. Rolling back:
+
+- `<TargetFramework>` flipped to `net8.0` in all four csprojs.
+- `Microsoft.Extensions.Logging*` pinned to `8.0.x`.
+- `Microsoft.AspNetCore.OpenApi` + `Scalar.AspNetCore` dropped — those are .NET 9+ APIs. Dashboard remains; the `/openapi/v1.json` + `/scalar` API explorer routes are gone for now. Re-add when we eventually move back to a newer runtime.
+- `System.IO.Pipelines` added explicitly to `dapps.client.csproj` (not transitively in scope under the Library SDK on net8 the way it is under the Web SDK).
+- `MultiplexedAgwSessionStream.ReadAsync` refactored to extract Span-typed work into a sync helper — async methods can't hold ref-struct locals in C# 12 (the .NET 8 SDK's default).
+- CI: `dotnet-version` 8.0.x, dropped the bullseye-container split (the original split was based on the wrong diagnosis; .NET 8's apphost targets glibc 2.23 so any modern build host's output is fine).
+
+.NET 8 LTS support runs to Nov 2026, giving us roughly a year before the next runtime question. By then either Pi OS Bookworm is universal (.NET 10 viable) or we evaluate a different runtime story (NativeAOT, etc.).
+
+267 tests pass on net8 unchanged.
 
 ### A7. AGW for both directions *(done)*
 
