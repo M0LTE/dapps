@@ -49,13 +49,13 @@ Outbound: `Dappsv1SessionBackhaul` wraps `IDappsOutboundTransport` + `DappsProto
 
 `BackhaulMessage(Id, Destination, Salt, Ttl, Payload, Headers?)` is the bearer-neutral unit. Carries everything DAPPS callers need to forward or deliver; nothing bearer-specific. Fragmentation/reassembly (Phase F2) will sit between this unit and the bearer adapter, not at this layer.
 
-### A0.4. Datagram bearer as the forcing function *(UDP stand-in done; MeshCore deferred)*
+### A0.4. Datagram bearer as the forcing function *(UDP stand-in done)*
 
-The seam needed a non-stream bearer to validate the architecture before MeshCore lands. Implemented a UDP datagram backhaul (`UdpDatagramBackhaul` + `UdpDatagramListener`) plus a bearer-agnostic `Packetiser` and `BackhaulMessageCodec` in `dapps.client/Backhaul/Datagram/`. End-to-end tests on loopback exercise both single-fragment and multi-fragment messages with an artificially low MTU (64 bytes), proving the seam supports a fire-and-forget datagram bearer with DAPPS-owned fragmentation.
+The seam needed a non-stream bearer to validate the architecture before any real bearer with a small MTU landed. Implemented a UDP datagram backhaul (`UdpDatagramBackhaul` + `UdpDatagramListener`) plus a bearer-agnostic `Packetiser` and `BackhaulMessageCodec` in `dapps.client/Backhaul/Datagram/`. End-to-end tests on loopback exercise both single-fragment and multi-fragment messages with an artificially low MTU (64 bytes), proving the seam supports a fire-and-forget datagram bearer with DAPPS-owned fragmentation.
 
 `IDappsBackhaul.CanHandle(BackhaulRoute)` and per-route bearer hints (`BackhaulRoute.UdpEndpoint`, `DbNeighbour.UdpEndpoint`) let the OMM dispatch to the right bearer per neighbour without leaking bearer-specific code into queue/router logic.
 
-MeshCore-specific work (Companion-over-USB framing, KISS framing, neighbour discovery on a real mesh) is the next milestone here. The packetiser and codec carry over; only the wire-emit + wire-ingest layer is new.
+Real radio-bearer integrations (MeshCore Companion, MeshCore KISS, RHP UI, …) live in **Phase H**. The packetiser and codec carry over; each bearer just adds a wire-emit / wire-ingest layer.
 
 ## Phase A — make forwarding actually forward
 
@@ -98,12 +98,12 @@ Not PKI-grade by design (no TLS, OAuth, JWT, 2FA). For TLS, sysops front the RES
 
 The on-air protocol already has a hand-wavey "discovery" section in the README. AGW exposes the primitives (`'M'` / `'V'` for UI send, `'m'` for monitor). The transport interface in PR #4 is shaped for it but doesn't expose UI yet.
 
-MeshCore is relevant here in two separate ways:
+**MeshCore appears in two unrelated lanes** — keep them separate when reading anything below:
 
-1. as a possible bearer under the new backhaul seam (Phase A0)
-2. as a source of ideas for DAPPS's own route/discovery model
+1. *MeshCore as a bearer* — using a MeshCore radio to carry DAPPS traffic. That's an `IDappsBackhaul` implementation question and lives in **Phase H** (concrete bearer integrations).
+2. *MeshCore as a source of ideas for routing* — flood-then-learn, link-quality-weighted next-hop, etc. — applied to whatever bearer DAPPS happens to be on. That's **B5** below.
 
-The second one matters even if DAPPS never ships a MeshCore backend.
+B5 doesn't depend on H, and H doesn't gate B5. A future DAPPS deployment could ship one without the other and still be coherent.
 
 ### B1. Discovery seam *(done — channels are first-class)*
 
@@ -163,17 +163,26 @@ Internet routes exist to glue isolated RF islands together, not as a preferred p
 
 `LinkClassDefaultsTests` pins this ordering so a casually-tweaked default doesn't quietly invert the project's identity.
 
-### B5. Explore MeshCore-style route learning inside DAPPS
+### B5. Routing as a learned graph (flood-then-learn)
 
-MeshCore's model is worth studying explicitly while this work is still fluid:
+**Bearer-independent.** This is about how DAPPS *chooses* to send a message when it has no live discovery record for the destination — not about *what bearer* the message goes over. Whatever ships here works equally well over AGW UI frames, UDP multicast, an eventual MeshCore radio, anything else.
+
+The shape:
 
 - first delivery by bounded flood
-- learn a useful path from the successful exchange
+- learn a useful path (or next-hop) from the successful exchange
 - reuse that path for later deliveries
 - reset / decay stale paths when delivery fails
-- keep flooding bounded by policy
+- keep flooding bounded by policy (hop budget, frequency, per-destination)
 
-DAPPS should not cargo-cult MeshCore packet formats, but it should decide deliberately which of those ideas belong in a transport-agnostic DAPPS routing layer:
+Worth studying explicitly during this work — multiple traditions have something to teach:
+
+- **MeshCore** — flood-then-learn at the link layer; fluid topology
+- **AX.25 NET/ROM** — distance-vector route exchange; well-established in amateur packet
+- **BATMAN-adv** — link-quality-weighted next-hop selection on mesh Wi-Fi
+- **AODV / DSR** — on-demand path discovery in MANETs
+
+DAPPS should not cargo-cult any one of those packet formats. The decisions to make consciously:
 
 - learned whole paths vs. next-hop hints
 - route freshness and expiry
@@ -317,6 +326,26 @@ Weak preference: bump on any incompatible wire change. The prompt is the natural
 
 Mentioned in the original gist. Long-term: messages signed by the source node so the recipient can verify the origin chain hasn't been tampered with. Pointless without a ham-radio-friendly identity layer; defer indefinitely until that exists.
 
+## Phase H — concrete bearer integrations
+
+**Bearer-specific work, distinct from the routing decisions in Phase B.** These are about *what wire forms DAPPS speaks*; routing logic (how DAPPS picks where to send) is solved one layer up and is bearer-agnostic. Each item here is an `IDappsBackhaul` (and optionally `IDiscoveryBearer`) implementation slotting under the existing seams without changing core routing.
+
+### H1. MeshCore Companion-over-USB
+
+Use a MeshCore companion radio (e.g. Heltec / TTGO LoRa boards running the MeshCore companion firmware) as a bearer. The companion exposes a serial protocol over USB; DAPPS opens that serial port, sends companion datagrams carrying our `BackhaulMessage` payloads, and listens for inbound datagrams. Discovery beacon support if the companion firmware allows it; otherwise rely on Phase B5's flood-then-learn over this bearer instead of explicit beacons.
+
+### H2. MeshCore KISS-over-USB
+
+Same hardware as H1 but via the MeshCore KISS interface — raw frames rather than companion-level datagrams. Trades convenience for control. Same `BackhaulMessage` codec; same packetiser. Probably done after H1 once H1 has shaken out the wire-shape questions.
+
+### H3. RHP (Routed Host Protocol) bearer
+
+When BPQ adds RHP UI-frame support, port the AGW UI bearer over to RHP as a sibling. Today RHP doesn't expose UI frames in BPQ's implementation; the discovery seam is shaped to accept it as soon as it does.
+
+### H4. Other bearers as they show up
+
+Anything that can carry a bytestring with sane addressing fits under `IDappsBackhaul`. KISS-over-TCP, AX.25-over-Ethernet, custom radio-modem JSON-RPC, …. Listed here so they don't get muddled with Phase B routing work.
+
 ## Phase G — community + governance
 
 The README already says "multiple compatible implementations is healthy." Once the developer guide exists and there's a Python reference implementation:
@@ -339,10 +368,10 @@ Roughly:
 3. **C1 + C2 + C4** (docker image, config tooling, install docs) — gets the thing into one sysop's hands.
 4. **A4** (per-app auth) — *done*.
 5. **D1 + D2** (web UI inspection + exercise) — *MVP done*. SSE inbound feed + ihave terminal still pending.
-6. **B1–B4** (channels-first-class discovery + cost-based resolver) — *done*. **B5** (MeshCore-inspired flood-and-learn for delivery routes) remains.
-7. **A0.4** — UDP datagram stand-in *done*; first real alternate bearer (likely MeshCore Companion) when the seam is ready.
-8. **E1–E5** (developer guide + sample apps + Python ref impl) — unlocks third-party app development.
-9. **A3, C3, D3, D4, F1–F4** in parallel as polish.
+6. **B1–B4** (channels-first-class discovery + cost-based resolver) — *done*. **B5** (learned-graph routing inside DAPPS, bearer-agnostic) remains.
+7. **E1–E5** (developer guide + sample apps + Python ref impl) — unlocks third-party app development.
+8. **H** (concrete bearer integrations — MeshCore Companion, MeshCore KISS, RHP, …) on its own track, doesn't gate the routing or developer-guide work.
+9. **A3** — *done*. **C3, D3, D4, F1–F4** in parallel as polish.
 10. **G** when there's a community to govern.
 
 Phases A and C can ship as a single "v0.1.0 — runnable" release. Phase D as "v0.2.0 — operable". Phase E + B as "v1.0.0 — networked + developable".
