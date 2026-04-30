@@ -265,32 +265,31 @@ Likeliest-cheapest stack: server-rendered Razor or Blazor Server. Avoid SPA tool
 
 `docs/tutorial-hello-world.md` walks through `docs/examples/hello.py` — a Python app using paho-mqtt 2.x (MQTT 5) that subscribes to `dapps/in/hello`, replies with `hello, <name>!` on `dapps/out/hello/<sender>`, and acks via `dapps/ack/hello`. The tutorial covers reading the `dapps-id` / `dapps-source` / `dapps-ttl` user properties, idempotent reprocessing on redelivery, and the equivalent flow expressed as `curl` against the REST endpoints. Same tutorial in C# / Go / Node welcomed as community contributions once Python is the worked example.
 
-### E3. Reference
+### E3. Reference *(done)*
 
-- MQTT topic structure — already in README; lift into the developer guide and expand with examples per topic.
-- REST endpoint reference with `curl` examples.
-- The `dapps-id` / `dapps-source` user properties on inbound deliveries.
-- Idempotency contract.
-- Limits: payload size (current de-facto limit is the message-id collision space, ~268M unique combos, but practical limit is whatever fits in a few AX.25 frames per message).
+`docs/reference.md` is the full app-interface reference: every MQTT topic, every REST endpoint, every user property with type and semantics, the idempotency contract spelled out with code-shaped pseudocode, and a discussion of practical payload-size limits (bearer MTU, multi-part fragmentation status, id collision space). The README app-interface section links to it as the place to look once you know what `app@callsign` means.
 
-### E4. Sample app gallery
+### E4. Sample app gallery *(done)*
 
-Each one a 1-2 page write-up + working code:
-- Group chat (one app, multiple subscribers per node).
-- Sensor data publisher (pubs every N min from one node, subscribers on others).
-- Mailing-list / forum-style "post and view" application.
-- Two-way pager / messenger ("send to N0CALL with payload X").
+`docs/gallery.md` indexes three runnable examples that cover the major DAPPS-shaped patterns:
+- `docs/examples/chat.py` — group chat (one-to-many fan-out, symmetric peers, no central registry).
+- `docs/examples/sensor.py` — periodic publisher (no `on_message`, no acks, long TTL, supports `--once` for cron-style use).
+- `docs/examples/pager.py` — two-way messenger (long-running listener + one-shot sender modes sharing the same app slot).
 
-These exist partly to validate the API surface, partly to give early adopters something to copy from.
+Combined with the existing `hello.py` from E2, the gallery covers request/reply, many-to-many, one-shot submit, periodic submit, and mixed-mode shapes. Mailing-list / forum-style apps were considered but cut as borderline DAPPS-shape (more about server architecture than DAPPS surface) — defer to early adopters who actually need that pattern.
 
-### E5. Reference implementation in another language
+## Phase G — second-language reference implementation
 
-A second compatible implementation forces the spec to be precise. Python is the obvious second language (large amateur radio Python community, easy onboarding). Aim for:
-- A minimal `dapps-py` that implements the on-air protocol and the AGW transport.
-- Talks to the same `m0lte/linbpq` Docker image we use in CI.
-- Cross-implementation interop test in CI: `dapps.core` (C#) on one side, `dapps-py` on the other, message goes through.
+**Goal:** prove the spec is portable, not an accidental description of the C# implementation.
 
-This is the proof that the spec is portable rather than an accidental description of the C# implementation.
+A second compatible implementation forces the spec to be precise. Promoted out of Phase E because it's a multi-week engineering effort (new package, new CI lane, cross-implementation interop tests), not a developer-guide doc.
+
+Python is the obvious second language — large amateur-radio Python community, easy onboarding. Aim for:
+- A minimal `dapps-py` that implements the on-air protocol (DAPPSv1 codec + parser) and the AGW transport.
+- Talks to the same `m0lte/linbpq` Docker image we use in CI today.
+- Cross-implementation interop test in CI: `dapps.core` (C#) on one side, `dapps-py` on the other, message goes through end-to-end.
+
+The implementation does not need feature parity with `dapps.core` — it only needs to be *interop-correct*. Subset of MQTT/REST app interface (probably MQTT only), no dashboard, no auth, no persistence (in-memory queue is fine for an interop tester). The point is to surface ambiguities in the spec by forcing a second author to read it and implement it.
 
 ## Phase F — spec maturation
 
@@ -363,12 +362,12 @@ Roughly:
 4. **A4** (per-app auth) — *done*.
 5. **D1 + D2** (web UI inspection + exercise) — *MVP done*. SSE inbound feed + ihave terminal still pending.
 6. **B1–B4** (channels-first-class discovery + cost-based resolver) — *done*. **B5** (learned-graph routing inside DAPPS, bearer-agnostic) remains.
-7. **E1–E5** (developer guide + sample apps + Python ref impl) — unlocks third-party app development.
+7. **E1–E4** (concepts + tutorial + reference + sample-app gallery) — *done*. Developer guide is complete; third-party app development is unlocked.
 8. **H** (concrete bearer integrations — MeshCore Companion, MeshCore KISS, RHP, …) on its own track, doesn't gate the routing or developer-guide work.
 9. **A3** — *done*. **C3, D3, D4, F1–F4** in parallel as polish.
-10. **G** when there's a community to govern.
+10. **Phase G** (second-language reference impl) once the spec has been exercised by enough first-party apps that the ambiguities are likely to surface.
 
-Phases A and C can ship as a single "v0.1.0 — runnable" release. Phase D as "v0.2.0 — operable". Phase E + B as "v1.0.0 — networked + developable".
+Phases A and C can ship as a single "v0.1.0 — runnable" release. Phase D as "v0.2.0 — operable". Phase B + E as "v1.0.0 — networked + developable".
 
 ## Useful pointers for a fresh session
 

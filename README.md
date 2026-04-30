@@ -175,7 +175,7 @@ I see a hand-wavey model along the lines of:
 
 DAPPS exposes two parallel surfaces for local applications: an embedded MQTT broker (real-time pub/sub) and a REST API (POST + poll). Both share the same SQLite-backed queue and the same ack contract — pick whichever fits your app.
 
-> New to DAPPS? Start with the [concepts page](docs/concepts.md) for the model, then walk through the [Python hello-world tutorial](docs/tutorial-hello-world.md) for a working app end-to-end. The reference below assumes you already know what `app@callsign` means and how the queue works.
+> New to DAPPS? Start with the [concepts page](docs/concepts.md) for the model, then walk through the [Python hello-world tutorial](docs/tutorial-hello-world.md). For a complete API surface (every topic, every endpoint, every user property) see [the reference](docs/reference.md), and [the gallery](docs/gallery.md) has worked examples of common app shapes — group chat, sensor publisher, two-way pager.
 
 ### MQTT
 
