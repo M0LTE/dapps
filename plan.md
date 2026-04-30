@@ -141,9 +141,15 @@ Wire form: `DAPPS v1 callsign=M0LTE-9 hops=0 ttl=300`. KV style rather than posi
 
 Distance-vector for v1: beacons advertise self only. A peer reachable on three channels gets three rows; the resolver picks by `CostHint`.
 
-### B4. Routing decisions *(next)*
+### B4. Routing decisions *(done)*
 
-`OutboundMessageManager.ResolveNeighbour` currently consults `DbNeighbour` (manual) and `DbRouteHint` (manual fallback). Next step: merge `DbDiscoveredPeer` into the candidate set and pick by `CostHint`. Per-row `LinkClass` and `CostHint` are denormalized so the resolver doesn't need to join. Manual `DbNeighbour` rows still win when present (operator override), then learned peers in cost order.
+`OutboundMessageManager` now resolves a `BackhaulRoute` per pending message, in this precedence order:
+
+1. **Manual `DbNeighbour`** with matching base callsign — explicit operator override.
+2. **Fresh `DbDiscoveredPeer` rows** for that base callsign, freshness-filtered by `LastSeen + TtlSeconds`, sorted by `CostHint` then by hop count.
+3. **`DbRouteHint`** next-hop fallback — explicit "I know X is reachable via Y" when there's no live discovery record.
+
+Cost-based selection lets a node reachable on multiple channels prefer LAN multicast (cost 1) over VHF (5) over HF (10) automatically. Tie on cost breaks on hop count, then row order. The denormalised `LinkClass` + `CostHint` on each peer row means the resolver doesn't need to join `discoverychannels`.
 
 ### B5. Explore MeshCore-style route learning inside DAPPS
 
@@ -321,7 +327,7 @@ Roughly:
 3. **C1 + C2 + C4** (docker image, config tooling, install docs) — gets the thing into one sysop's hands.
 4. **A4** (per-app auth) — *done*.
 5. **D1 + D2** (web UI inspection + exercise) — *MVP done*. SSE inbound feed + ihave terminal still pending.
-6. **B1–B3** (beacon discovery seam, channels-as-first-class with LinkClass, AGW UI + UDP multicast bearers, daemon, dashboard surface) — *done*. **B4** (resolver consulting DbDiscoveredPeer with cost-based selection) is next; **B5** (MeshCore-inspired flood-and-learn) remains.
+6. **B1–B4** (channels-first-class discovery + cost-based resolver) — *done*. **B5** (MeshCore-inspired flood-and-learn for delivery routes) remains.
 7. **A0.4** — UDP datagram stand-in *done*; first real alternate bearer (likely MeshCore Companion) when the seam is ready.
 8. **E1–E5** (developer guide + sample apps + Python ref impl) — unlocks third-party app development.
 9. **A3, C3, D3, D4, F1–F4** in parallel as polish.

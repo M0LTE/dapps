@@ -1,6 +1,7 @@
 using System.Text;
 using AwesomeAssertions;
 using dapps.client.Backhaul;
+using dapps.client.Discovery;
 using dapps.core.Models;
 using dapps.core.Services;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -35,6 +36,7 @@ public sealed class OutboundMessageManagerTests : IAsyncLifetime
             c.CreateTable<DbMessage>();
             c.CreateTable<DbNeighbour>();
             c.CreateTable<DbRouteHint>();
+            c.CreateTable<DbDiscoveredPeer>();
             // A neighbour entry alone is enough to route messages to
             // app@N0DEST (post-A2 resolver matches base callsigns).
             c.Insert(new DbNeighbour { Callsign = "N0DEST", BpqPort = 0 });
@@ -193,6 +195,142 @@ public sealed class OutboundMessageManagerTests : IAsyncLifetime
         await manager.DoRun(TestContext.Current.CancellationToken);
 
         backhaul.Sent.Single().Route.BpqPort.Should().Be(3);
+    }
+
+    // ── B4: cost-based resolver across DbDiscoveredPeer ─────────────
+
+    [Fact]
+    public async Task DoRun_NoManualNeighbour_PrefersCheapestFreshDiscoveredPeer()
+    {
+        // Three rows for the same peer N0DEST heard on three channels.
+        // The cheapest fresh one wins regardless of insertion order.
+        // First, drop the seeded N0DEST manual neighbour so the
+        // resolver falls through to discovered peers.
+        using (var c = DbInfo.GetConnection())
+        {
+            c.Execute("delete from neighbours");
+            var now = DateTime.UtcNow;
+            c.Insert(new DbDiscoveredPeer
+            {
+                PeerKey = DbDiscoveredPeer.MakeKey("N0DEST", "agw", "5"),
+                Callsign = "N0DEST", Bearer = "agw", ChannelKey = "5",
+                LinkClass = LinkClass.Hf, CostHint = 10, BpqPort = 5,
+                TtlSeconds = 3600, LastSeen = now,
+            });
+            c.Insert(new DbDiscoveredPeer
+            {
+                PeerKey = DbDiscoveredPeer.MakeKey("N0DEST", "udp", "239.42.42.42:1881"),
+                Callsign = "N0DEST", Bearer = "udp", ChannelKey = "239.42.42.42:1881",
+                LinkClass = LinkClass.LanMulticast, CostHint = 1,
+                UdpEndpoint = "10.0.0.5:1881",
+                TtlSeconds = 600, LastSeen = now,
+            });
+            c.Insert(new DbDiscoveredPeer
+            {
+                PeerKey = DbDiscoveredPeer.MakeKey("N0DEST", "agw", "1"),
+                Callsign = "N0DEST", Bearer = "agw", ChannelKey = "1",
+                LinkClass = LinkClass.VhfUhfFm, CostHint = 5, BpqPort = 1,
+                TtlSeconds = 5400, LastSeen = now,
+            });
+        }
+        InsertMessage("cheapestwin", ttl: null, createdAt: DateTime.UtcNow);
+
+        await manager.DoRun(TestContext.Current.CancellationToken);
+
+        backhaul.Sent.Should().ContainSingle();
+        var route = backhaul.Sent.Single().Route;
+        route.UdpEndpoint.Should().Be("10.0.0.5:1881",
+            "LanMulticast (cost=1) should beat VHF (cost=5) and HF (cost=10)");
+    }
+
+    [Fact]
+    public async Task DoRun_StaleDiscoveredPeer_IgnoredEvenIfCheapest()
+    {
+        using (var c = DbInfo.GetConnection())
+        {
+            c.Execute("delete from neighbours");
+            var now = DateTime.UtcNow;
+            c.Insert(new DbDiscoveredPeer
+            {
+                PeerKey = DbDiscoveredPeer.MakeKey("N0DEST", "udp", "g1"),
+                Callsign = "N0DEST", Bearer = "udp", ChannelKey = "g1",
+                LinkClass = LinkClass.LanMulticast, CostHint = 1,
+                UdpEndpoint = "10.0.0.5:1881",
+                TtlSeconds = 60,
+                LastSeen = now.AddMinutes(-10), // 10 min ago, ttl 60s → stale
+            });
+            c.Insert(new DbDiscoveredPeer
+            {
+                PeerKey = DbDiscoveredPeer.MakeKey("N0DEST", "agw", "1"),
+                Callsign = "N0DEST", Bearer = "agw", ChannelKey = "1",
+                LinkClass = LinkClass.VhfUhfFm, CostHint = 5, BpqPort = 1,
+                TtlSeconds = 5400, LastSeen = now,
+            });
+        }
+        InsertMessage("staleignore", ttl: null, createdAt: DateTime.UtcNow);
+
+        await manager.DoRun(TestContext.Current.CancellationToken);
+
+        var route = backhaul.Sent.Single().Route;
+        route.BpqPort.Should().Be(1, "VHF channel was the only fresh option");
+        route.UdpEndpoint.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task DoRun_ManualNeighbourWinsOverCheaperDiscoveredPeer()
+    {
+        // Operator sets a manual neighbour entry. Resolver MUST honour
+        // that even if a cheaper discovered channel exists — it's an
+        // explicit override.
+        using (var c = DbInfo.GetConnection())
+        {
+            // Manual neighbour points at AGW BPQ port 0 (the seeded one).
+            c.Insert(new DbDiscoveredPeer
+            {
+                PeerKey = DbDiscoveredPeer.MakeKey("N0DEST", "udp", "g1"),
+                Callsign = "N0DEST", Bearer = "udp", ChannelKey = "g1",
+                LinkClass = LinkClass.LanMulticast, CostHint = 1,
+                UdpEndpoint = "10.0.0.5:1881",
+                TtlSeconds = 600, LastSeen = DateTime.UtcNow,
+            });
+        }
+        InsertMessage("manualwins", ttl: null, createdAt: DateTime.UtcNow);
+
+        await manager.DoRun(TestContext.Current.CancellationToken);
+
+        var route = backhaul.Sent.Single().Route;
+        route.UdpEndpoint.Should().BeNull("the manual neighbour entry has no UdpEndpoint set");
+        route.BpqPort.Should().Be(0, "the manual neighbour points at BPQ port 0");
+    }
+
+    [Fact]
+    public async Task DoRun_TiedCost_TieBreaksOnHops()
+    {
+        using (var c = DbInfo.GetConnection())
+        {
+            c.Execute("delete from neighbours");
+            var now = DateTime.UtcNow;
+            c.Insert(new DbDiscoveredPeer
+            {
+                PeerKey = DbDiscoveredPeer.MakeKey("N0DEST", "agw", "1"),
+                Callsign = "N0DEST", Bearer = "agw", ChannelKey = "1",
+                LinkClass = LinkClass.VhfUhfFm, CostHint = 5, Hops = 3,
+                BpqPort = 1, TtlSeconds = 5400, LastSeen = now,
+            });
+            c.Insert(new DbDiscoveredPeer
+            {
+                PeerKey = DbDiscoveredPeer.MakeKey("N0DEST", "agw", "2"),
+                Callsign = "N0DEST", Bearer = "agw", ChannelKey = "2",
+                LinkClass = LinkClass.VhfUhfFm, CostHint = 5, Hops = 0,
+                BpqPort = 2, TtlSeconds = 5400, LastSeen = now,
+            });
+        }
+        InsertMessage("tied", ttl: null, createdAt: DateTime.UtcNow);
+
+        await manager.DoRun(TestContext.Current.CancellationToken);
+
+        backhaul.Sent.Single().Route.BpqPort.Should().Be(2,
+            "tied costs break on hop count — direct neighbour beats 3-hop relay");
     }
 
     private static void InsertMessage(string id, int? ttl, DateTime createdAt)
