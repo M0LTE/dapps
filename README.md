@@ -274,6 +274,8 @@ DAPPS sits behind BPQ as an external application:
 
 Both directions need a few `bpq32.cfg` lines. Adjust the slot index and ports if you already have applications wired up.
 
+The inbound config uses the documented `C <port> HOST <slot>` form via `CMDPORT`. Older BPQ deployments sometimes use `APPLICATION ...,ATTACH <port> <host> <tcp_port>,...` instead — that form is **not** supported here and is not exercised by the integration tests; stick with the HOST form below.
+
 ```ini
 ; --- AGW emulator: needed for DAPPS outbound forwarding ---
 AGWPORT=8000
@@ -308,7 +310,7 @@ APPLICATION 1,DAPPS,C 2 HOST 1 S TRANS
 
 Replace `M0LTE-9` with your DAPPS callsign and `M0LTE` with your sysop callsign. Restart linbpq for the changes to take effect.
 
-If you're trying out two BPQs over AXIP-UDP for testing, see [`src/dapps/dapps.core.tests/Integration/TwoInstanceLinbpqFixture.cs`](src/dapps/dapps.core.tests/Integration/TwoInstanceLinbpqFixture.cs) for a worked example.
+If you're trying out two BPQs over AXIP-UDP for testing, see [`src/dapps/dapps.core.tests/Integration/TwoInstanceAttachFixture.cs`](src/dapps/dapps.core.tests/Integration/TwoInstanceAttachFixture.cs) for a worked example mirroring the config above.
 
 ### 2. Download the DAPPS binary
 
@@ -338,6 +340,7 @@ export DAPPS_NODE_HOST=127.0.0.1     # where BPQ is listening
 export DAPPS_AGW_PORT=8000           # BPQ AGWPORT
 export DAPPS_DEFAULT_BPQ_PORT=0      # 0-indexed BPQ port byte to use for outbound by default
 export DAPPS_MQTT_PORT=1883          # embedded MQTT broker port (for app subscribers)
+export DAPPS_BPQ_INBOUND_LISTENER_PORT=11000  # TCP port BPQ's CMDPORT slot dials (must match)
 
 ./dapps
 ```
