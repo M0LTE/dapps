@@ -79,20 +79,27 @@ Sysop-friendly model:
 
 `DappsProtocolClient` wraps every per-byte read with a 3-minute inactivity timeout (matches receiver-side T3-default). On expiry the read surfaces a `TimeoutException` rather than blocking forever; the forwarder loop catches and moves on. `AgwOutboundTransport.ConnectAsync` got the same treatment on the connect-confirm wait. Outer `CancellationToken` (from shutdown) takes precedence over the inactivity timer.
 
-### A6. BPQ APPLICATION+TCP-bridge inbound coverage *(done — issue #32)*
+### A7. AGW for both directions *(done)*
 
-The inbound path dapps actually uses in production — `RF user → BPQ L2 SABM → APPLICATION → ATTACH-style TCP bridge → BpqConnectionListener` — was previously covered only by manual RF testing and an in-process `FakeBpqAndDappsClient` that talked straight to `:11000` and bypassed BPQ entirely. The AGW E2E tests proved BPQ frame-layer correctness but not this bridge.
+Replaces the BPQ Apps Interface (HOST/CMDPORT TCP-bridge) inbound path with AGW dispatch. dapps now uses one BPQ surface — AGW — for both inbound and outbound, multiplexed over a single TCP connection.
 
-Two new test classes against a new `TwoInstanceAttachFixture`:
+Why: the BPQ HOST handler hard-codes the dial-out target as `127.0.0.1` (TelnetV6.c:2689), forcing dapps to either co-locate with BPQ or maintain an SSH reverse tunnel. AGW has no such constraint — dapps connects *out* to BPQ's `AGWPORT` from wherever it runs, so different hosts work with just a network route. Also avoids the Telnet driver's LF→CR rewriting in the app→user direction (a quirk that required dapps's protocol client to accept `\r` as a line terminator).
 
-- `BpqAttachBridgeTests` — focused tests of the bridge itself (no DAPPS in the loop). Pin: connection arrives, first line is `<calling-callsign>\r\n` (TelnetV6.c:5775), bytes flow bidirectionally, clean disconnect from the dapps-side socket propagates as an L2 disconnect through BPQ-B → AXIP → BPQ-A.
-- `InboundDeliveryViaBpqAttachTests` — full real-DAPPS-receiver E2E. Real `Dappsv1SessionBackhaul` sender → real BPQ-A → AXIP-UDP → real BPQ-B → APPLICATION+TCP bridge → real `BpqConnectionListener` + `InboundConnectionHandler` running in-process → message lands in `IBackhaulInbox` with correct id, payload, salt, destination, and source callsign. Combined with the existing forwarder-side coverage, this gives the "rock-solid, proven path of inbound and outbound connections" the issue was after.
+Implementation:
+- `MultiplexedAgwSessionStream` — duplex Stream over one logical AGW session when many sessions share a single AGW socket. Reads pull from a `Pipe` fed by the dispatcher; writes serialise into 'D' frames via a callback. `SignalRemoteDisconnect` closes the read pipe when 'd' arrives.
+- `AgwInboundService` (hosted) — connects to BPQ AGW, registers the dapps callsign with an 'X' frame, dispatches inbound 'C'/'D'/'d' frames to per-session streams, hands each new session to `InboundConnectionHandler`. Reconnects on socket loss.
+- `InboundConnectionHandler` is now bearer-neutral: takes `Stream` + `sourceCallsign` instead of `TcpClient` + read-first-line. Keeps the protocol logic isolated.
+- Removed: `BpqConnectionListener`, `InboundConnectionHandlerFactory`, `BpqInboundListenerPort` option (and the seed/round-trip in `DbStartup`/`Database`), `TwoInstanceAttachFixture`, `BpqAttachBridgeTests`, `InboundDeliveryViaBpqAttachTests`.
 
-Fixture uses the documented Apps-Interface form (`C 1 HOST 0 TRANS S` + `CMDPORT`) rather than the legacy `ATTACH <port> <host> <tcp_port>` form some production deployments use — the latter goes through a post-attach C-command injection path that returned "Error - Invalid Command" from the Telnet driver in this two-container setup; needs separate investigation. From dapps's POV the bridge surface is identical (BPQ writes `<call>\r\n` then bridges bytes either way), so the gap closes either way.
+Operator config change: the inbound `APPLICATION` line drops the `C N HOST K TRANS S` CMD field (now empty) — BPQ no longer runs a node command on inbound, just dispatches the L2 'C' frame to the registered AGW client. README updated.
 
-Two ergonomic improvements landed alongside:
-- `SystemOptions.BpqInboundListenerPort` (default 11000) makes the listener port configurable — tests pick a free port; sysops can move the port if needed.
-- `DappsProtocolClient.ReadInitialPromptAsync` and `ReadLineAsync` now accept any of `\n`, `\r`, or `\r\n` as line terminator. BPQ's Telnet driver rewrites LF→CR in the app→user direction (apps-interface.md), so strict `\n`-only matching would hang any time dapps was reached over the bridge.
+Tests: `MultiplexedAgwSessionStreamTests` (5 unit tests for the new stream), `AgwInboundDeliveryTests` (full real-DAPPS-receiver E2E reusing `TwoInstanceLinbpqFixture` — the AGW dispatch shape was already proven by `TwoInstanceAgwSmokeTests`, this adds dapps receiver behaviour on top). 267 tests pass.
+
+Bonus side-effects: outbound and inbound become byte-for-byte symmetric on the wire. Operationally simpler — one socket to BPQ, one config knob (`AGWPORT` + `AGWMASK`), one failure mode.
+
+### A6. BPQ APPLICATION+TCP-bridge inbound coverage *(superseded by A7)*
+
+Issue #32 closed by PR #33 with a HOST-form bridge fixture and E2E tests. Subsequently superseded when we moved to AGW-for-both (A7) — the Apps Interface code and tests were removed entirely. Keeping this entry for historical record: the work surfaced two real bugs (`DappsProtocolClient` didn't tolerate the BPQ Telnet driver's LF→CR rewriting; `BpqConnectionListener` leaked its OS socket on shutdown), the first of which transferred to the AGW path as a no-op (AGW frames are binary-transparent, no rewrites to defend against — though the line-tolerant `ReadLineAsync` is harmless to keep).
 
 ### A5. Outbound TTL on the app interface *(done)*
 

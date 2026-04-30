@@ -58,7 +58,6 @@ public class DbStartup(ILogger<DbStartup> logger) : IHostedService
         InsertIfNotPresent(options, "DefaultBpqPort", "0");
         InsertIfNotPresent(options, "Callsign", PlaceholderCallsign);
         InsertIfNotPresent(options, "MqttPort", "1883");
-        InsertIfNotPresent(options, "BpqInboundListenerPort", "11000");
         InsertIfNotPresent(options, "UdpListenPort", "0");
         InsertIfNotPresent(options, "AuthRequired", "false");
 

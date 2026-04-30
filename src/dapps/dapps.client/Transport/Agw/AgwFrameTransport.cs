@@ -4,7 +4,7 @@ namespace dapps.client.Transport.Agw;
 /// Reads and writes <see cref="AgwFrame"/>s over a duplex Stream. Writes are
 /// serialised so concurrent senders can't interleave.
 /// </summary>
-internal sealed class AgwFrameTransport(Stream stream)
+public sealed class AgwFrameTransport(Stream stream)
 {
     private readonly SemaphoreSlim writeLock = new(1, 1);
 

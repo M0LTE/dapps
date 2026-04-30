@@ -1,5 +1,4 @@
 ﻿using System.IO.Compression;
-using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using dapps.client;
@@ -8,9 +7,12 @@ using dapps.client.Backhaul;
 namespace dapps.core.Services;
 
 /// <summary>
-/// Receiver-side DAPPSv1 session reader. Bearer-specific (today the only
-/// receive bearer is "TCP socket where the first line is the connecting
-/// callsign", as set up by BPQ's app-pipe). Owns the
+/// Receiver-side DAPPSv1 session reader. Bearer-neutral: takes a
+/// duplex byte <see cref="Stream"/> already-connected to a peer and
+/// the peer's callsign already-determined (each bearer figures the
+/// callsign out its own way — AGW reads it off the inbound 'C' frame's
+/// CallFrom field; the legacy Apps-Interface bearer read it from the
+/// first line of the bridged TCP socket). Owns the
 /// `prompt` / `ihave` / `data` correlation and the on-the-wire ack
 /// contract. Once a payload is received and hash-validated, the
 /// completed message is handed off to <see cref="IBackhaulInbox"/> —
@@ -18,7 +20,8 @@ namespace dapps.core.Services;
 /// future forwarding decisions) live, decoupled from the bearer.
 /// </summary>
 public class InboundConnectionHandler(
-    TcpClient tcpClient,
+    Stream stream,
+    string sourceCallsign,
     ILoggerFactory loggerFactory,
     Database database,
     IBackhaulInbox inbox)
@@ -30,32 +33,14 @@ public class InboundConnectionHandler(
     // underlying link layer would on its own.
     private static readonly TimeSpan InactivityTimeout = TimeSpan.FromMinutes(3);
 
-    /// <summary>The callsign of the connecting station, sent by BPQ as the
-    /// first line of the TCP stream. Captured in <see cref="Handle"/> and
-    /// stamped onto every message saved during this connection.</summary>
-    private string sourceCallsign = "";
-
-    internal async Task Handle(CancellationToken stoppingToken)
+    public async Task Handle(CancellationToken stoppingToken)
     {
         try
         {
-            logger.LogInformation("Got connection from {0}, waiting for node to send callsign..", tcpClient.Client.RemoteEndPoint!.ToString());
-            var stream = tcpClient.GetStream();
+            logger.LogInformation("Inbound session from {0}", sourceCallsign);
 
-            try
-            {
-                sourceCallsign = (await Extensions.WithInactivityTimeout(
-                    t => stream.ReadLine(t), InactivityTimeout, stoppingToken)).Trim();
-            }
-            catch (OperationCanceledException) when (!stoppingToken.IsCancellationRequested)
-            {
-                logger.LogInformation("Inactivity timeout waiting for callsign, closing connection");
-                return;
-            }
-            logger.LogInformation("Connection is from callsign {0}", sourceCallsign);
-
-            await stream.WriteAsync(Encoding.UTF8.GetBytes("DAPPSv1>\n"));
-            await stream.FlushAsync();
+            await stream.WriteAsync(Encoding.UTF8.GetBytes("DAPPSv1>\n"), stoppingToken);
+            await stream.FlushAsync(stoppingToken);
 
             while (!stoppingToken.IsCancellationRequested)
             {
@@ -128,7 +113,7 @@ public class InboundConnectionHandler(
         }
         finally
         {
-            tcpClient.Dispose();
+            await stream.DisposeAsync();
         }
     }
 
@@ -177,7 +162,7 @@ public class InboundConnectionHandler(
         return null;
     }
 
-    private async Task HandleMessageOffer(NetworkStream stream, string command, CancellationToken stoppingToken)
+    private async Task HandleMessageOffer(Stream stream, string command, CancellationToken stoppingToken)
     {
         var result = IHaveValidator.Validate(command);
         if (!result.IsValid)
@@ -195,7 +180,7 @@ public class InboundConnectionHandler(
         await database.SaveOffer(offer);
     }
 
-    private async Task HandleData(NetworkStream stream, string id, CancellationToken stoppingToken)
+    private async Task HandleData(Stream stream, string id, CancellationToken stoppingToken)
     {
         var offer = await database.LoadOfferMetadata(id);
 

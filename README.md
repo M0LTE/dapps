@@ -267,61 +267,34 @@ DAPPS ships as a self-contained single-file binary; no .NET runtime install, no 
 
 ### 1. Configure BPQ for DAPPS
 
-DAPPS sits behind BPQ as an external application:
-
-- BPQ accepts an inbound connect to a DAPPS-owned callsign and pipes the session to DAPPS over a TCP socket (the linbpq "Apps Interface").
-- DAPPS originates outbound connects through BPQ over AGW.
-
-Both directions need a few `bpq32.cfg` lines. Adjust the slot index and ports if you already have applications wired up.
-
-The inbound config uses the documented `C <port> HOST <slot>` form via `CMDPORT`. Older BPQ deployments sometimes use `APPLICATION ...,ATTACH <port> <host> <tcp_port>,...` instead — that form is **not** supported here and is not exercised by the integration tests; stick with the HOST form below.
+DAPPS speaks AGW to BPQ for both inbound and outbound. One TCP connection to BPQ, all sessions multiplexed, no co-location requirement.
 
 ```ini
-; --- AGW emulator: needed for DAPPS outbound forwarding ---
+; --- AGW emulator: BPQ's standard "talk to me from external apps" surface ---
 AGWPORT=8000
 AGWSESSIONS=20
+; AGWMASK is a bitmask of APPLICATION slots an AGW client may register
+; against. 1 = slot 1; 0xFF = slots 1..8.
 AGWMASK=1
 
-; --- Apps Interface: needed for DAPPS to receive inbound connects ---
-PORT
- ID=Telnet
- DRIVER=Telnet
- CONFIG
- TCPPORT=8010
- HTTPPORT=8080
- ; CMDPORT defines a list of TCP slots the Telnet driver can forward
- ; sessions into. Slot 0 is reserved (sentinel); slot 1 here is DAPPS.
- ; Keep the leading 0 even if you have no other apps -- it's the
- ; "this slot is unconfigured" sentinel.
- CMDPORT 0 11000
- USER=test,test,M0LTE,,SYSOP
-ENDPORT
-
-; --- Wire the DAPPS callsign to the Apps Interface slot ---
+; --- Wire the DAPPS callsign to APPLICATION slot 1 ---
+; The CMD field is intentionally empty: with AGW, BPQ doesn't run a
+; node command on inbound — it just dispatches the inbound L2 'C'
+; frame to whoever has registered the callsign via an AGW 'X' frame.
+; The line is still required: without it, BPQ's L2 layer doesn't
+; accept frames addressed to the callsign and the AGW registration
+; is silently inert (linbpq apps-interface.md).
 APPLICATIONS=DAPPS
 APPL1CALL=M0LTE-9
 APPL1ALIAS=DAPPS
-; "C 2 HOST 1" routes a connect via BPQ port 2 (Telnet) to CMDPORT slot 1.
-; TRANS = binary-transparent -- DAPPS payloads are arbitrary bytes, the
-; default line discipline would mangle them. S = on app disconnect,
-; return the user to the node prompt rather than dropping the session.
-APPLICATION 1,DAPPS,C 2 HOST 1 S TRANS
+APPLICATION 1,DAPPS,,M0LTE-9,DAPPS,0
 ```
 
-Replace `M0LTE-9` with your DAPPS callsign and `M0LTE` with your sysop callsign. Restart linbpq for the changes to take effect.
+Replace `M0LTE-9` with your DAPPS callsign. Restart linbpq for the changes to take effect.
 
-#### Same-host constraint
+DAPPS connects to `AGWPORT` from wherever it runs. BPQ doesn't need to reach DAPPS — DAPPS is the AGW client. So **DAPPS and BPQ can live on different hosts** with nothing more than a network route between them; expose `AGWPORT` (firewall it appropriately) on the BPQ host and point DAPPS's `DAPPS_NODE_HOST` at it.
 
-BPQ's HOST-slot dispatcher hard-codes the dial-out target as `127.0.0.1` (TelnetV6.c:2689). DAPPS therefore has to be reachable on the BPQ host's loopback when an L2 connect arrives. The simple shape is **DAPPS and BPQ co-located on the same host** — that's the assumption baked into the example above.
-
-If you genuinely need DAPPS on a different machine from BPQ, tunnel rather than route around BPQ:
-
-- **SSH reverse tunnel** (recommended): on the DAPPS host, `ssh -N -R 11000:localhost:11000 user@bpq-host`. sshd binds the remote-side port to loopback by default — exactly where BPQ wants to reach it, and only there.
-- **socat / WireGuard / similar** on the BPQ host, terminating BPQ's loopback dial and relaying to your remote DAPPS.
-
-The legacy `APPLICATION ...,ATTACH <port> <host> <tcp_port>,...` form *does* take an explicit host argument, but reaching the dial requires `SecureTelnet=0` in the Telnet PORT config — which then permits any non-SYSOP L2 station to issue arbitrary `C <host> <port>` outward connects through BPQ. Don't.
-
-If you're trying out two BPQs over AXIP-UDP for testing, see [`src/dapps/dapps.core.tests/Integration/TwoInstanceAttachFixture.cs`](src/dapps/dapps.core.tests/Integration/TwoInstanceAttachFixture.cs) for a worked example mirroring the config above.
+If you're trying out two BPQs over AXIP-UDP for testing, see [`src/dapps/dapps.core.tests/Integration/TwoInstanceLinbpqFixture.cs`](src/dapps/dapps.core.tests/Integration/TwoInstanceLinbpqFixture.cs) for a worked example mirroring the config above.
 
 ### 2. Download the DAPPS binary
 
