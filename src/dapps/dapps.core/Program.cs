@@ -13,8 +13,7 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 builder.Services.AddControllers();
 builder.Services.AddRazorPages();
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddOpenApi();
 builder.Services.AddHostedService<DbStartup>();
 builder.Services.AddOptions<SystemOptions>().Configure<OptionsRepo, ILogger<SystemOptions>>(async (o, db, logger) =>
 {
@@ -85,10 +84,13 @@ builder.Services.AddLogging(logging =>
 });
 var app = builder.Build();
 
-app.UseSwagger();
-app.UseSwaggerUI();
-app.MapScalarApiReference(options => {
-    options.OpenApiRoutePattern = "../swagger/v1/swagger.json";
+// .NET 9+ ships native OpenAPI doc generation via Microsoft.AspNetCore.OpenApi.
+// MapOpenApi() serves the generated document at /openapi/v1.json by default;
+// Scalar reads it directly. SwaggerUI dropped — Scalar is the only viewer.
+app.MapOpenApi();
+app.MapScalarApiReference(options =>
+{
+    options.OpenApiRoutePattern = "/openapi/v1.json";
 });
 app.UseAuthorization();
 app.UseMiddleware<BearerAuthMiddleware>();
