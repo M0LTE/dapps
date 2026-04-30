@@ -100,7 +100,7 @@ public sealed class AgwOutboundTransport(string host, int port, ILoggerFactory l
                     {
                         logger.LogInformation("AGW: connect confirmed");
                         var sessionStream = new AgwSessionStream(framing, portByte, localCallsign, remoteCallsign, logger);
-                        return new AgwConnection(tcp, sessionStream);
+                        return new AgwConnection(tcp, sessionStream, framing, portByte, localCallsign, remoteCallsign, logger);
                     }
                 }
 
@@ -120,15 +120,37 @@ public sealed class AgwOutboundTransport(string host, int port, ILoggerFactory l
         }
     }
 
-    private sealed class AgwConnection(TcpClient tcp, Stream sessionStream) : IDappsConnection
+    private sealed class AgwConnection(
+        TcpClient tcp,
+        Stream sessionStream,
+        AgwFrameTransport framing,
+        byte portByte,
+        string localCallsign,
+        string remoteCallsign,
+        ILogger logger) : IDappsConnection
     {
         public Stream Stream => sessionStream;
 
-        public ValueTask DisposeAsync()
+        public async ValueTask DisposeAsync()
         {
+            // Send a 'd' (disconnect) frame so BPQ tears down the AX.25
+            // session immediately rather than waiting for the link's idle
+            // timeout. Without this, a follow-up connect from the same
+            // callsign pair within a few minutes collides with the stale
+            // half-up link — surfaced repeatedly in integration runs.
+            try
+            {
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+                await framing.WriteFrameAsync(
+                    new AgwFrame(portByte, 'd', 0, localCallsign, remoteCallsign, []),
+                    cts.Token);
+            }
+            catch (Exception ex)
+            {
+                logger.LogDebug(ex, "AGW: best-effort 'd' frame on dispose failed");
+            }
             sessionStream.Dispose();
             tcp.Dispose();
-            return ValueTask.CompletedTask;
         }
     }
 }

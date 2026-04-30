@@ -105,46 +105,39 @@ MeshCore is relevant here in two separate ways:
 
 The second one matters even if DAPPS never ships a MeshCore backend.
 
-### B1. Extend the transport interface
+### B1. Discovery seam *(done — different shape than originally sketched)*
 
-Add a parallel surface to `IDappsOutboundTransport`:
+The originally-sketched `IDappsUiTransport` was AGW-flavoured. After the A0 backhaul-seam work it made more sense to lift discovery to the same level — bearer-neutral. Implemented as:
 
 ```csharp
-public interface IDappsUiTransport
+public interface IDiscoveryBearer : IAsyncDisposable
 {
-    Task SendUiFrameAsync(string fromCall, byte[] payload, int bpqPort, CancellationToken ct);
-    IAsyncEnumerable<UiFrameReceived> MonitorUiFramesAsync(int bpqPort, CancellationToken ct);
+    string Name { get; }
+    Task StartAsync(CancellationToken ct);
+    Task AnnounceAsync(BeaconFrame beacon, CancellationToken ct);
+    IAsyncEnumerable<BeaconFrame> ListenAsync(CancellationToken ct);
 }
 ```
 
-`AgwOutboundTransport` (or a sibling `AgwUiTransport`) implements both via `'M'` send + `'m'` monitor on the existing AGW connection. RHP doesn't currently support UI in BPQ's implementation, so the RHP variant of this interface stays a stub until BPQ catches up.
+Two implementations: `AgwUiDiscoveryBearer` (AGW `'X'` register + `'m'` monitor + `'M'` send + parses `'U'` frames) and `UdpMulticastDiscoveryBearer` (UDP multicast group, useful for LAN dev/testing without a BPQ stack).
 
-### B2. Beacon protocol
+### B2. Beacon protocol *(done)*
 
-Beacon payload is a tiny text line, parseable by hand:
+Wire form: `DAPPS v1 callsign=M0LTE-9 hops=0 ttl=300`. KV style rather than positional so future fields slot in without breaking existing parsers. The `Bearer` field on `BeaconFrame` is stamped by the receiver from the channel a beacon arrived on — never carried on the wire (would let a misbehaving peer claim routes it doesn't have).
 
-```
-DAPPS v1 callsign hash hops ttl
-```
+Cadence: configurable `DiscoveryBeaconIntervalSeconds`, default 300s. Operators on shared RF channels should bump to 1800+ before enabling AGW discovery.
 
-Open question: should the beacon also advertise *known* peers (link-state-style), or only *self* (distance-vector-style)? Distance-vector matches AX.25 NET/ROM tradition and keeps payloads tiny. Recommend distance-vector for v1.
+Distance-vector for v1, as recommended in the original sketch — beacons advertise self only; future hop-count routing tracks paths by remembering which bearer the beacon arrived on.
 
-Beacon cadence: every N minutes (configurable; default 30 min so we don't pollute the channel).
+### B3. Discovery daemon *(done)*
 
-### B3. Discovery + routing daemon
+`DiscoveryService` is the hosted service. For each configured bearer it: starts the bearer, fires its own beacon on a timer, concurrently iterates the bearer's listen stream, upserts `DbDiscoveredPeer` rows. Sweeper drops rows whose `(now - LastSeen) > beacon.Ttl`.
 
-Background hosted service:
-- Sends our beacon on configured BPQ port(s) every N minutes.
-- Subscribes to UI monitor; parses received DAPPS beacons; updates a `DbDiscoveredPeer` table with `LastSeen`.
-- A new `RouteResolver` consults discovered peers + manual `DbNeighbour` entries.
-- Auto-aging of stale peers (drop if not seen for K beacon intervals).
+The dashboard surfaces discovered peers (callsign, bearer, hops, source endpoint, age, ttl) so a sysop can verify discovery in real time without log-grepping.
 
-### B4. Routing decisions
+### B4. Routing decisions *(deferred — DiscoveredPeer rows present, resolver doesn't consult them yet)*
 
-When `OutboundMessageManager` needs to forward a message:
-- Direct neighbour with that callsign → use it.
-- Neighbour with hops < some-budget that knows the destination via beacon hop-counts → use that path's first hop.
-- Otherwise → drop with "no route" + log + leave in DB until TTL expires.
+`OutboundMessageManager.ResolveNeighbour` currently consults `DbNeighbour` (manual) and `DbRouteHint` (manual fallback). Promoting `DbDiscoveredPeer` into the resolver is a small follow-up; the data is already in the DB and the seam is bearer-neutral, so the resolver just needs to merge sources and pick by hops.
 
 ### B5. Explore MeshCore-style route learning inside DAPPS
 
@@ -322,7 +315,7 @@ Roughly:
 3. **C1 + C2 + C4** (docker image, config tooling, install docs) — gets the thing into one sysop's hands.
 4. **A4** (per-app auth) — *done*.
 5. **D1 + D2** (web UI inspection + exercise) — *MVP done*. SSE inbound feed + ihave terminal still pending.
-6. **B1–B5** (beacon discovery + routing evolution, including MeshCore-inspired exploration) — graduates from manual neighbour config to a real network.
+6. **B1–B3** (beacon discovery seam, AGW UI + UDP multicast bearers, daemon, dashboard surface) — *done*. **B4** (resolver consulting DbDiscoveredPeer) and **B5** (MeshCore-inspired flood-and-learn) remain.
 7. **A0.4** — UDP datagram stand-in *done*; first real alternate bearer (likely MeshCore Companion) when the seam is ready.
 8. **E1–E5** (developer guide + sample apps + Python ref impl) — unlocks third-party app development.
 9. **A3, C3, D3, D4, F1–F4** in parallel as polish.

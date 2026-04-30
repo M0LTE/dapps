@@ -1,5 +1,6 @@
 using dapps.client.Backhaul;
 using dapps.client.Backhaul.Datagram;
+using dapps.client.Discovery;
 using dapps.client.Transport;
 using dapps.client.Transport.Agw;
 using dapps.core.Models;
@@ -27,12 +28,19 @@ builder.Services.AddOptions<SystemOptions>().Configure<OptionsRepo, ILogger<Syst
         options.SingleOrDefault(opt => opt.Option == "UdpListenPort")?.Value, out var udpPort) ? udpPort : 0;
     o.AuthRequired = bool.TryParse(
         options.SingleOrDefault(opt => opt.Option == "AuthRequired")?.Value, out var auth) && auth;
+    o.AgwDiscovery = bool.TryParse(
+        options.SingleOrDefault(opt => opt.Option == "AgwDiscovery")?.Value, out var agwDisc) && agwDisc;
+    o.MulticastGroup = options.SingleOrDefault(opt => opt.Option == "MulticastGroup")?.Value ?? "";
+    o.DiscoveryBeaconIntervalSeconds = int.TryParse(
+        options.SingleOrDefault(opt => opt.Option == "DiscoveryBeaconIntervalSeconds")?.Value,
+        out var beaconInt) ? beaconInt : 300;
 
     logger.LogInformation($"Callsign: {o.Callsign}");
     logger.LogInformation($"BPQ AGW: {o.NodeHost}:{o.AgwPort} (default port byte {o.DefaultBpqPort})");
     logger.LogInformation($"MQTT broker: localhost:{o.MqttPort}");
     logger.LogInformation($"UDP datagram listener: {(o.UdpListenPort > 0 ? $":{o.UdpListenPort}" : "disabled")}");
     logger.LogInformation($"App-interface auth required: {o.AuthRequired}");
+    logger.LogInformation($"Discovery: agw={o.AgwDiscovery}, multicast={(string.IsNullOrEmpty(o.MulticastGroup) ? "off" : o.MulticastGroup)}, interval={o.DiscoveryBeaconIntervalSeconds}s");
 });
 
 builder.Services.AddSingleton<InboundConnectionHandlerFactory>();
@@ -59,6 +67,13 @@ builder.Services.AddSingleton<IDappsBackhaul>(sp => sp.GetRequiredService<UdpDat
 builder.Services.AddSingleton<IDappsBackhaul, Dappsv1SessionBackhaul>();
 builder.Services.AddSingleton<IBackhaulInbox, DatabaseAndMqttInbox>();
 builder.Services.AddHostedService<UdpDatagramListener>();
+
+// DiscoveryService constructs its bearers itself in StartAsync (rather
+// than receiving them via IEnumerable<IDiscoveryBearer>), because the
+// bearer factory needs to dereference SystemOptions, which queries the
+// systemoptions table — which DbStartup hasn't created at the moment
+// the DI container materialises hosted services.
+builder.Services.AddHostedService<DiscoveryService>();
 builder.Services.AddLogging(logging =>
 {
     logging.AddSimpleConsole(options =>

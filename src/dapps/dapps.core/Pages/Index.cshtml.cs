@@ -31,6 +31,8 @@ public sealed class IndexModel(
     public int UndeliveredLocal { get; private set; }
     public IReadOnlyList<DbMessage> RecentMessages { get; private set; } = [];
 
+    public IReadOnlyList<DbDiscoveredPeer> DiscoveredPeers { get; private set; } = [];
+
     [BindProperty]
     public SendForm Send { get; set; } = new();
 
@@ -82,6 +84,7 @@ public sealed class IndexModel(
         PendingOutbound = await database.CountPendingOutbound();
         UndeliveredLocal = await database.CountUndeliveredLocal();
         RecentMessages = await database.GetRecentMessages(20);
+        DiscoveredPeers = await database.GetDiscoveredPeers();
 
         BpqAgwReachable = await ProbeTcp(Options.NodeHost, Options.AgwPort);
     }
