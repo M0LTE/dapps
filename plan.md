@@ -257,23 +257,13 @@ Likeliest-cheapest stack: server-rendered Razor or Blazor Server. Avoid SPA tool
 
 **Goal:** someone who's never seen DAPPS can read the guide, understand the model, and ship a working app in an afternoon.
 
-### E1. Concepts page
+### E1. Concepts page *(done)*
 
-- What DAPPS *is* and what it *isn't* (eventual delivery, not real-time; one-way fire-and-forget, not RPC).
-- The `app@callsign` destination model.
-- Content-addressed message ids and what idempotency means in practice.
-- Why DAPPS, not raw AX.25.
-- Why not packet mail.
+`docs/concepts.md` covers the eventual-delivery model, `app@callsign` destinations, content-addressed message ids and what idempotency looks like in practice, the TTL-as-residual-lifetime contract, and the "why DAPPS rather than raw AX.25 / packet mail" framing. Linked from the README's app-interface section.
 
-### E2. Tutorial: hello-world application
+### E2. Tutorial: hello-world application *(done)*
 
-Walk through a Python script that:
-1. Connects to local DAPPS over MQTT.
-2. Subscribes to `dapps/in/hello`.
-3. Publishes a message back via `dapps/out/hello/<dest>`.
-4. Acks via `dapps/ack/hello`.
-
-Same tutorial in C# / Go / Node (community contributions welcome) once the Python baseline is solid.
+`docs/tutorial-hello-world.md` walks through `docs/examples/hello.py` — a Python app using paho-mqtt 2.x (MQTT 5) that subscribes to `dapps/in/hello`, replies with `hello, <name>!` on `dapps/out/hello/<sender>`, and acks via `dapps/ack/hello`. The tutorial covers reading the `dapps-id` / `dapps-source` / `dapps-ttl` user properties, idempotent reprocessing on redelivery, and the equivalent flow expressed as `curl` against the REST endpoints. Same tutorial in C# / Go / Node welcomed as community contributions once Python is the worked example.
 
 ### E3. Reference
 
