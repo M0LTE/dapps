@@ -32,15 +32,6 @@ public class SystemOptions
     public int MqttPort { get; set; }
 
     /// <summary>
-    /// TCP port the BPQ inbound-connection listener binds on. BPQ's
-    /// `APPLICATION ... ATTACH <port> <host> <tcp_port>` directive dials
-    /// this port when a remote station connects to our APPL callsign;
-    /// production deployments leave this at the default of 11000.
-    /// Tests pick a free port and override.
-    /// </summary>
-    public int BpqInboundListenerPort { get; set; } = 11000;
-
-    /// <summary>
     /// UDP port the datagram-backhaul listener binds on. Default 0 =
     /// disabled. Plan A0.4: a stand-in datagram bearer, validating the
     /// backhaul seam against fragmentation / reassembly before MeshCore
