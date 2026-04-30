@@ -92,24 +92,82 @@ jobs:
             echo "Will publish $tag."
           fi
 
-  build:
+  # Linux builds run inside debian:bullseye-slim so the resulting
+  # binaries link against glibc 2.31 — the lowest-common-denominator
+  # for Pi OS / Raspbian 11 (the older 32-bit Pi case especially).
+  # Building on ubuntu-latest leaks newer glibc symbols (2.32–2.34)
+  # via transitive native deps (sqlite-net, libstdc++) and produces
+  # binaries that won't load on bullseye despite .NET 10's stated
+  # 2.31 baseline.
+  build-linux:
     needs: test
     if: needs.test.outputs.should_release == 'true'
     strategy:
       fail-fast: false
       matrix:
         include:
-          # Native runner per arch where GitHub provides one; cross-
-          # compile from x64 for the older Pi (linux-arm).
           - rid: linux-x64
             os: ubuntu-latest
-            ext: ''
           - rid: linux-arm64
             os: ubuntu-24.04-arm
-            ext: ''
           - rid: linux-arm
-            os: ubuntu-latest      # cross-compiled
-            ext: ''
+            os: ubuntu-latest      # cross-compiled from x64
+    runs-on: ${{ matrix.os }}
+    container: debian:bullseye-slim
+    steps:
+      - name: Install bullseye prerequisites
+        # bullseye-slim is a stripped image: setup-dotnet's install
+        # script needs curl + ca-certificates, .NET globalization needs
+        # libicu67, actions/checkout needs git.
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            curl ca-certificates git libicu67
+
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Publish self-contained single file
+        # PublishSingleFile bundles managed assemblies; the extra
+        # IncludeNativeLibrariesForSelfExtract flag pulls native deps
+        # (e.g. SQLite's libe_sqlite3.so) into the same exe so the
+        # operator drops one file on a server. Trimming is left off:
+        # ASP.NET Core + DI + JSON have enough reflection that trimming
+        # tends to break startup in subtle ways. Binary size is ~100MB
+        # — acceptable cost for "no runtime install needed".
+        run: |
+          dotnet publish src/dapps/dapps.core/dapps.core.csproj \
+            --configuration Release \
+            --runtime ${{ matrix.rid }} \
+            --self-contained true \
+            -p:PublishSingleFile=true \
+            -p:IncludeNativeLibrariesForSelfExtract=true \
+            -p:DebugType=embedded \
+            --output publish
+
+      - name: Stage release artifact
+        run: |
+          mkdir -p dist
+          cp publish/dapps.core "dist/dapps-${{ matrix.rid }}"
+          test -s "dist/dapps-${{ matrix.rid }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dapps-${{ matrix.rid }}
+          path: dist/dapps-${{ matrix.rid }}
+          if-no-files-found: error
+
+  build-native:
+    needs: test
+    if: needs.test.outputs.should_release == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
           - rid: win-x64
             os: windows-latest
             ext: '.exe'
@@ -126,13 +184,6 @@ jobs:
           dotnet-version: 10.0.x
 
       - name: Publish self-contained single file
-        # PublishSingleFile bundles managed assemblies; the extra
-        # IncludeNativeLibrariesForSelfExtract flag pulls native deps
-        # (e.g. SQLite's libe_sqlite3.so) into the same exe so the
-        # operator drops one file on a server. Trimming is left off:
-        # ASP.NET Core + DI + JSON have enough reflection that trimming
-        # tends to break startup in subtle ways. Binary size is ~100MB
-        # — acceptable cost for "no runtime install needed".
         shell: bash
         run: |
           dotnet publish src/dapps/dapps.core/dapps.core.csproj \
@@ -158,7 +209,7 @@ jobs:
           if-no-files-found: error
 
   release:
-    needs: [test, build]
+    needs: [test, build-linux, build-native]
     if: needs.test.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     steps:
