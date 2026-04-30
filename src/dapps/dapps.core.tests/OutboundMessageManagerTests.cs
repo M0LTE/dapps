@@ -202,78 +202,90 @@ public sealed class OutboundMessageManagerTests : IAsyncLifetime
     [Fact]
     public async Task DoRun_NoManualNeighbour_PrefersCheapestFreshDiscoveredPeer()
     {
-        // Three rows for the same peer N0DEST heard on three channels.
-        // The cheapest fresh one wins regardless of insertion order.
-        // First, drop the seeded N0DEST manual neighbour so the
-        // resolver falls through to discovered peers.
+        // Same peer N0DEST heard on three RF / IP channels at the
+        // LinkClassDefaults cost weights. With RF-first ordering,
+        // VHF (1) wins over HF (5) wins over Internet (10). Internet
+        // is intentionally last so the resolver doesn't pick a wired
+        // bridge over a perfectly good RF link.
         using (var c = DbInfo.GetConnection())
         {
             c.Execute("delete from neighbours");
             var now = DateTime.UtcNow;
             c.Insert(new DbDiscoveredPeer
             {
-                PeerKey = DbDiscoveredPeer.MakeKey("N0DEST", "agw", "5"),
-                Callsign = "N0DEST", Bearer = "agw", ChannelKey = "5",
-                LinkClass = LinkClass.Hf, CostHint = 10, BpqPort = 5,
-                TtlSeconds = 3600, LastSeen = now,
-            });
-            c.Insert(new DbDiscoveredPeer
-            {
-                PeerKey = DbDiscoveredPeer.MakeKey("N0DEST", "udp", "239.42.42.42:1881"),
-                Callsign = "N0DEST", Bearer = "udp", ChannelKey = "239.42.42.42:1881",
-                LinkClass = LinkClass.LanMulticast, CostHint = 1,
+                PeerKey = DbDiscoveredPeer.MakeKey("N0DEST", "udp", "ip-bridge"),
+                Callsign = "N0DEST", Bearer = "udp", ChannelKey = "ip-bridge",
+                LinkClass = LinkClass.InternetIp,
+                CostHint = LinkClassDefaults.CostHint(LinkClass.InternetIp),
                 UdpEndpoint = "10.0.0.5:1881",
-                TtlSeconds = 600, LastSeen = now,
+                TtlSeconds = 900, LastSeen = now,
             });
             c.Insert(new DbDiscoveredPeer
             {
                 PeerKey = DbDiscoveredPeer.MakeKey("N0DEST", "agw", "1"),
                 Callsign = "N0DEST", Bearer = "agw", ChannelKey = "1",
-                LinkClass = LinkClass.VhfUhfFm, CostHint = 5, BpqPort = 1,
-                TtlSeconds = 5400, LastSeen = now,
+                LinkClass = LinkClass.VhfUhfFm,
+                CostHint = LinkClassDefaults.CostHint(LinkClass.VhfUhfFm),
+                BpqPort = 1, TtlSeconds = 5400, LastSeen = now,
+            });
+            c.Insert(new DbDiscoveredPeer
+            {
+                PeerKey = DbDiscoveredPeer.MakeKey("N0DEST", "agw", "3"),
+                Callsign = "N0DEST", Bearer = "agw", ChannelKey = "3",
+                LinkClass = LinkClass.Hf,
+                CostHint = LinkClassDefaults.CostHint(LinkClass.Hf),
+                BpqPort = 3, TtlSeconds = 86400, LastSeen = now,
             });
         }
-        InsertMessage("cheapestwin", ttl: null, createdAt: DateTime.UtcNow);
+        InsertMessage("rffirst", ttl: null, createdAt: DateTime.UtcNow);
 
         await manager.DoRun(TestContext.Current.CancellationToken);
 
         backhaul.Sent.Should().ContainSingle();
         var route = backhaul.Sent.Single().Route;
-        route.UdpEndpoint.Should().Be("10.0.0.5:1881",
-            "LanMulticast (cost=1) should beat VHF (cost=5) and HF (cost=10)");
+        route.BpqPort.Should().Be(1,
+            "VHF/UHF FM (RF, line-of-sight) is the project's preferred class — should beat HF and the IP bridge");
+        route.UdpEndpoint.Should().BeNull("IP must not be picked when an RF route is fresh");
     }
 
     [Fact]
-    public async Task DoRun_StaleDiscoveredPeer_IgnoredEvenIfCheapest()
+    public async Task DoRun_StaleRfPeer_FallsBackToFreshInternetBridge()
     {
+        // Preferred RF channel has gone silent past its advertised TTL.
+        // The resolver must fall back to the next-fresh option even
+        // when that's an internet bridge — that's exactly why we keep
+        // IP routes as a last resort. RF first when available, IP when
+        // RF has dropped.
         using (var c = DbInfo.GetConnection())
         {
             c.Execute("delete from neighbours");
             var now = DateTime.UtcNow;
             c.Insert(new DbDiscoveredPeer
             {
-                PeerKey = DbDiscoveredPeer.MakeKey("N0DEST", "udp", "g1"),
-                Callsign = "N0DEST", Bearer = "udp", ChannelKey = "g1",
-                LinkClass = LinkClass.LanMulticast, CostHint = 1,
-                UdpEndpoint = "10.0.0.5:1881",
-                TtlSeconds = 60,
-                LastSeen = now.AddMinutes(-10), // 10 min ago, ttl 60s → stale
+                PeerKey = DbDiscoveredPeer.MakeKey("N0DEST", "agw", "1"),
+                Callsign = "N0DEST", Bearer = "agw", ChannelKey = "1",
+                LinkClass = LinkClass.VhfUhfFm,
+                CostHint = LinkClassDefaults.CostHint(LinkClass.VhfUhfFm),
+                BpqPort = 1, TtlSeconds = 60,
+                LastSeen = now.AddMinutes(-10), // ttl=60, last seen 10 min ago → stale
             });
             c.Insert(new DbDiscoveredPeer
             {
-                PeerKey = DbDiscoveredPeer.MakeKey("N0DEST", "agw", "1"),
-                Callsign = "N0DEST", Bearer = "agw", ChannelKey = "1",
-                LinkClass = LinkClass.VhfUhfFm, CostHint = 5, BpqPort = 1,
-                TtlSeconds = 5400, LastSeen = now,
+                PeerKey = DbDiscoveredPeer.MakeKey("N0DEST", "udp", "ip-bridge"),
+                Callsign = "N0DEST", Bearer = "udp", ChannelKey = "ip-bridge",
+                LinkClass = LinkClass.InternetIp,
+                CostHint = LinkClassDefaults.CostHint(LinkClass.InternetIp),
+                UdpEndpoint = "10.0.0.5:1881",
+                TtlSeconds = 900, LastSeen = now,
             });
         }
-        InsertMessage("staleignore", ttl: null, createdAt: DateTime.UtcNow);
+        InsertMessage("rfdropped", ttl: null, createdAt: DateTime.UtcNow);
 
         await manager.DoRun(TestContext.Current.CancellationToken);
 
         var route = backhaul.Sent.Single().Route;
-        route.BpqPort.Should().Be(1, "VHF channel was the only fresh option");
-        route.UdpEndpoint.Should().BeNull();
+        route.UdpEndpoint.Should().Be("10.0.0.5:1881",
+            "RF route is stale — internet fallback is the right answer here");
     }
 
     [Fact]
