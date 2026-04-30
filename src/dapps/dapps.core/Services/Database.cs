@@ -58,14 +58,20 @@ public class Database(ILogger<Database> logger, IOptionsMonitor<SystemOptions> o
     /// Persist a fresh outbound message submitted by a local app via the MQTT
     /// or REST app interface. Computes the message id from the payload + a
     /// salt; returns the id for the caller to log/echo back to the app.
+    ///
+    /// <paramref name="ttlSeconds"/> is the residual lifetime the app
+    /// requests for this message — propagates onto the outgoing
+    /// <c>ihave</c> as <c>ttl=N</c>. Null means "no expiry", which makes
+    /// the message persist in the queue indefinitely if it can't be
+    /// forwarded; apps that want guaranteed cleanup should set a value.
     /// </summary>
-    public async Task<string> SubmitOutboundMessage(string appName, string destCallsign, byte[] payload)
+    public async Task<string> SubmitOutboundMessage(string appName, string destCallsign, byte[] payload, int? ttlSeconds = null)
     {
         var salt = (long)(DateTime.UtcNow - DateTime.UnixEpoch).TotalMilliseconds;
         var id = DappsMessage.ComputeHash(payload, salt)[..7];
         var destination = $"{appName}@{destCallsign}";
         var ourCall = options.CurrentValue.Callsign;
-        await SaveMessage(id, payload, salt, destination, sourceCallsign: ourCall, "{}", ttl: null);
+        await SaveMessage(id, payload, salt, destination, sourceCallsign: ourCall, "{}", ttl: ttlSeconds);
         return id;
     }
 
