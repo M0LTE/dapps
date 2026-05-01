@@ -19,14 +19,14 @@ public class DashboardLogicTests
     public void MessageStatus_LocalUndelivered_PendingLocal()
     {
         var m = new DbMessage { Destination = "myapp@N0CALL", LocallyDelivered = false };
-        IndexModel.MessageStatus(m, "N0CALL").Should().Be("pending-local");
+        IndexModel.MessageStatus(m, "N0CALL").Label.Should().Be("pending local");
     }
 
     [Fact]
     public void MessageStatus_LocalDelivered_Delivered()
     {
         var m = new DbMessage { Destination = "myapp@N0CALL", LocallyDelivered = true };
-        IndexModel.MessageStatus(m, "N0CALL").Should().Be("delivered");
+        IndexModel.MessageStatus(m, "N0CALL").Label.Should().Be("delivered");
     }
 
     [Fact]
@@ -34,21 +34,21 @@ public class DashboardLogicTests
     {
         // "myapp@N0CALL-3" — same base callsign as us, different SSID.
         var m = new DbMessage { Destination = "myapp@N0CALL-3", LocallyDelivered = true };
-        IndexModel.MessageStatus(m, "N0CALL").Should().Be("delivered");
+        IndexModel.MessageStatus(m, "N0CALL").Label.Should().Be("delivered");
     }
 
     [Fact]
     public void MessageStatus_RemoteUnforwarded_PendingOut()
     {
         var m = new DbMessage { Destination = "myapp@N0DEST", Forwarded = false };
-        IndexModel.MessageStatus(m, "N0CALL").Should().Be("pending-out");
+        IndexModel.MessageStatus(m, "N0CALL").Label.Should().Be("pending");
     }
 
     [Fact]
     public void MessageStatus_RemoteForwarded_Forwarded()
     {
         var m = new DbMessage { Destination = "myapp@N0DEST", Forwarded = true };
-        IndexModel.MessageStatus(m, "N0CALL").Should().Be("forwarded");
+        IndexModel.MessageStatus(m, "N0CALL").Label.Should().Be("forwarded");
     }
 
     [Theory]

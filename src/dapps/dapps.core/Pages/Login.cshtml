@@ -5,32 +5,114 @@
     ViewData["Title"] = "Sign in — DAPPS";
 }
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
     <title>@ViewData["Title"]</title>
     <style>
-        body { font-family: system-ui, sans-serif; background: #1a1a1a; color: #e0e0e0;
-               display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
-        .card { background: #2a2a2a; padding: 2rem; border-radius: 8px; min-width: 320px;
-                box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
-        h1 { margin: 0 0 1.5rem 0; font-size: 1.4rem; }
-        label { display: block; margin-bottom: 0.5rem; }
-        input[type=password] { width: 100%; padding: 0.6rem; background: #1a1a1a;
-                               border: 1px solid #444; border-radius: 4px; color: #e0e0e0;
-                               box-sizing: border-box; font-size: 1rem; }
-        button { width: 100%; padding: 0.7rem; margin-top: 1rem; background: #4a90e2;
-                 color: white; border: 0; border-radius: 4px; font-size: 1rem;
-                 cursor: pointer; }
-        button:hover { background: #5aa0f2; }
-        .error { color: #f88; margin-top: 0.5rem; font-size: 0.9rem; }
-        .hint { color: #888; margin-top: 1rem; font-size: 0.85rem; }
+        :root {
+            --bg: #f8fafc;
+            --surface: #ffffff;
+            --border: #e2e8f0;
+            --border-strong: #cbd5e1;
+            --text: #0f172a;
+            --text-muted: #64748b;
+            --accent: #2563eb;
+            --accent-hover: #1d4ed8;
+            --err: #dc2626;
+            --err-soft: #fee2e2;
+        }
+        @@media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #0b1220;
+                --surface: #111827;
+                --border: #1f2937;
+                --border-strong: #334155;
+                --text: #e5e7eb;
+                --text-muted: #94a3b8;
+                --accent: #60a5fa;
+                --accent-hover: #93c5fd;
+                --err: #f87171;
+                --err-soft: #7f1d1d;
+            }
+        }
+        * { box-sizing: border-box; }
+        body {
+            font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+            background:
+                radial-gradient(circle at 0% 0%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 50%),
+                radial-gradient(circle at 100% 100%, color-mix(in srgb, var(--accent) 6%, transparent), transparent 50%),
+                var(--bg);
+            color: var(--text);
+            margin: 0; min-height: 100vh;
+            display: flex; align-items: center; justify-content: center;
+            -webkit-font-smoothing: antialiased;
+        }
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            padding: 2rem 2.25rem;
+            border-radius: 12px;
+            min-width: 340px;
+            box-shadow:
+                0 1px 3px rgba(0,0,0,0.05),
+                0 12px 32px rgba(0,0,0,0.08);
+        }
+        .brand {
+            display: flex; align-items: baseline; gap: 0.5rem;
+            font-weight: 600; font-size: 1.05rem;
+            color: var(--text);
+            margin-bottom: 0.25rem;
+        }
+        .brand .dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: #16a34a; align-self: center;
+            box-shadow: 0 0 0 3px color-mix(in srgb, #16a34a 25%, transparent);
+        }
+        h1 {
+            margin: 0 0 1.5rem 0; font-size: 1.4rem; font-weight: 600;
+            letter-spacing: -0.01em;
+        }
+        label {
+            display: block; margin-bottom: 0.4rem;
+            font-size: 0.78rem; font-weight: 600; text-transform: uppercase;
+            letter-spacing: 0.06em; color: var(--text-muted);
+        }
+        input[type=password] {
+            width: 100%; padding: 0.65rem 0.75rem;
+            background: var(--surface);
+            border: 1px solid var(--border-strong); border-radius: 6px;
+            color: var(--text); font-size: 1rem; font-family: inherit;
+        }
+        input[type=password]:focus {
+            outline: 2px solid var(--accent); outline-offset: -1px;
+            border-color: var(--accent);
+        }
+        button {
+            width: 100%; padding: 0.7rem; margin-top: 1rem;
+            background: var(--accent); color: white; border: 0;
+            border-radius: 6px; font-size: 1rem; font-weight: 600;
+            cursor: pointer; transition: background 120ms;
+            font-family: inherit;
+        }
+        button:hover { background: var(--accent-hover); }
+        .error {
+            color: var(--err); background: var(--err-soft);
+            margin-top: 0.75rem; padding: 0.5rem 0.7rem;
+            border-radius: 6px; font-size: 0.85rem;
+        }
+        .hint {
+            color: var(--text-muted); margin-top: 1.25rem;
+            font-size: 0.8rem; line-height: 1.5;
+        }
     </style>
 </head>
 <body>
     <div class="card">
-        <h1>DAPPS — Sign in</h1>
+        <div class="brand"><span class="dot"></span> DAPPS</div>
+        <h1>Sign in</h1>
         <form method="post">
             <label for="password">Sysop password</label>
             <input id="password" name="password" type="password" autofocus required />
@@ -40,7 +122,7 @@
                 <div class="error">@Model.Error</div>
             }
         </form>
-        <div class="hint">Cookie lasts 90 days, sliding. Browser-tab close keeps you signed in.</div>
+        <div class="hint">Cookie lasts 90 days, sliding. Closing the tab keeps you signed in.</div>
     </div>
 </body>
 </html>

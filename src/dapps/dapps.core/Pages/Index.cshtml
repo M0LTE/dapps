@@ -4,12 +4,20 @@
     ViewData["Title"] = $"DAPPS — {Model.Options.Callsign}";
 }
 
-<h1>DAPPS — @Model.Options.Callsign
+<header class="app-header">
+    <span class="brand">
+        <span class="dot"></span>
+        DAPPS
+        <span class="callsign">@Model.Options.Callsign</span>
+    </span>
+    <span class="spacer"></span>
     @if (User.Identity?.IsAuthenticated == true)
     {
         <a href="/Logout" class="signout">Sign out</a>
     }
-</h1>
+</header>
+
+<main>
 
 @if (Model.FlashOk is not null)
 {
@@ -24,39 +32,65 @@
 <div class="grid">
     <div class="card">
         <div class="label">Callsign</div>
-        <div class="value">@Model.Options.Callsign</div>
+        <div class="value mono">@Model.Options.Callsign</div>
+        <div class="caption">how this node identifies itself on the air</div>
     </div>
     <div class="card">
         <div class="label">BPQ AGW</div>
-        <div class="value">
-            @Model.Options.NodeHost:@Model.Options.AgwPort
-            @if (Model.BpqAgwReachable)
-            {
-                <span class="ok">●</span>
-            }
-            else
-            {
-                <span class="warn">●</span>
-            }
+        <div class="value mono">
+            <span>@Model.Options.NodeHost:@Model.Options.AgwPort</span>
+            <span class="dot @(Model.BpqAgwReachable ? "ok" : "warn")" title="@(Model.BpqAgwReachable ? "reachable" : "unreachable")"></span>
+        </div>
+        <div class="caption">
+            @(Model.BpqAgwReachable ? "TCP probe ok — BPQ accepting connections" : "TCP probe failed — start linbpq or check AGWPORT")
         </div>
     </div>
     <div class="card">
-        <div class="label">Default BPQ port</div>
-        <div class="value">@Model.Options.DefaultBpqPort</div>
+        <div class="label">Default outbound port</div>
+        <div class="value mono">AGW @Model.Options.DefaultBpqPort → BPQ @(Model.Options.DefaultBpqPort + 1)</div>
+        <div class="caption">port byte sent on outbound forwards when a neighbour has none set</div>
     </div>
     <div class="card">
         <div class="label">MQTT broker</div>
-        <div class="value">:@Model.Options.MqttPort</div>
+        <div class="value mono">localhost:@Model.Options.MqttPort</div>
+        <div class="caption">apps subscribe here for inbound messages (see <code>dapps/in/&lt;app&gt;</code>)</div>
     </div>
     <div class="card">
-        <div class="label">UDP listener</div>
+        <div class="label">UDP datagram listener</div>
         <div class="value">
-            @(Model.Options.UdpListenPort > 0 ? $":{Model.Options.UdpListenPort}" : "disabled")
+            @if (Model.Options.UdpListenPort > 0)
+            {
+                <span class="pill info">on :@Model.Options.UdpListenPort</span>
+            }
+            else
+            {
+                <span class="pill">disabled</span>
+            }
         </div>
+        <div class="caption">stand-in for MeshCore-style datagram backhaul; off in normal use</div>
     </div>
     <div class="card">
-        <div class="label">Auth required</div>
-        <div class="value">@(Model.Options.AuthRequired ? "yes" : "no")</div>
+        <div class="label">App-interface auth</div>
+        <div class="value">
+            @if (Model.Options.AuthRequired)
+            {
+                <span class="pill ok">tokens required</span>
+            }
+            else
+            {
+                <span class="pill warn">open</span>
+            }
+        </div>
+        <div class="caption">
+            @if (Model.Options.AuthRequired)
+            {
+                <span>MQTT/REST clients must present a per-app token</span>
+            }
+            else
+            {
+                <span>any MQTT/REST client on this host can act as any app — fine for loopback, set tokens for shared nodes</span>
+            }
+        </div>
     </div>
 </div>
 <details class="edit-block">
@@ -82,25 +116,157 @@
     <p class="muted">Existing session stays valid until logout or 90-day expiry — only future logins use the new password.</p>
 </details>
 
-<h2>Queue</h2>
+<h2>Queue at a glance</h2>
 <div class="grid">
     <div class="card">
         <div class="label">Total messages</div>
         <div class="value">@Model.TotalMessages</div>
+        <div class="caption">all rows in the messages table, ever</div>
     </div>
     <div class="card">
         <div class="label">Pending outbound</div>
         <div class="value">@Model.PendingOutbound</div>
+        <div class="caption">queued for forwarding to another node</div>
     </div>
     <div class="card">
         <div class="label">Undelivered local</div>
         <div class="value">@Model.UndeliveredLocal</div>
+        <div class="caption">arrived for an app on this node, not yet ack'd</div>
     </div>
     <div class="card">
         <div class="label">Neighbours</div>
         <div class="value">@Model.NeighbourCount</div>
+        <div class="caption">configured forwarding peers</div>
     </div>
 </div>
+
+<h2>Outbound queue <span id="outbound-count" class="pill @(Model.OutboundQueue.Count == 0 ? "" : "warn")">@Model.OutboundQueue.Count</span></h2>
+<p class="muted-inline">Messages waiting to be forwarded to another node. The forwarder loop wakes periodically, picks one, and sends it via the cheapest reachable bearer. <span class="muted">Auto-refreshes every 5s.</span></p>
+<table id="outbound-table">
+    <thead>
+        <tr>
+            <th>Id</th>
+            <th>Destination</th>
+            <th>From</th>
+            <th class="numeric">Bytes</th>
+            <th class="numeric">TTL</th>
+            <th>Age</th>
+        </tr>
+    </thead>
+    <tbody id="outbound-body">
+    @if (Model.OutboundQueue.Count == 0)
+    {
+        <tr><td colspan="6" class="muted" style="text-align:center;">No outbound forwards in flight.</td></tr>
+    }
+    else
+    {
+        @foreach (var m in Model.OutboundQueue)
+        {
+            <tr>
+                <td><code>@m.Id</code></td>
+                <td><code>@m.Destination</code></td>
+                <td><code>@m.SourceCallsign</code></td>
+                <td class="numeric">@m.Payload.Length</td>
+                <td class="numeric">@(m.Ttl?.ToString() ?? "—")</td>
+                <td class="muted">@IndexModel.Age(m.CreatedAt)</td>
+            </tr>
+        }
+    }
+    </tbody>
+</table>
+
+<h2>Local inbox <span id="inbox-count" class="pill @(Model.LocalInbox.Count == 0 ? "" : "info")">@Model.LocalInbox.Count</span></h2>
+<p class="muted-inline">Messages arrived for apps on this node, waiting for the app to ack via MQTT (<code>dapps/ack/&lt;app&gt;</code>) or REST.</p>
+<table id="inbox-table">
+    <thead>
+        <tr>
+            <th>Id</th>
+            <th>App</th>
+            <th>From</th>
+            <th class="numeric">Bytes</th>
+            <th class="numeric">TTL</th>
+            <th>Age</th>
+        </tr>
+    </thead>
+    <tbody id="inbox-body">
+    @if (Model.LocalInbox.Count == 0)
+    {
+        <tr><td colspan="6" class="muted" style="text-align:center;">No undelivered messages for local apps.</td></tr>
+    }
+    else
+    {
+        @foreach (var m in Model.LocalInbox)
+        {
+            var atIdx = m.Destination.IndexOf('@');
+            var app = atIdx > 0 ? m.Destination.Substring(0, atIdx) : m.Destination;
+            <tr>
+                <td><code>@m.Id</code></td>
+                <td><code>@app</code></td>
+                <td><code>@m.SourceCallsign</code></td>
+                <td class="numeric">@m.Payload.Length</td>
+                <td class="numeric">@(m.Ttl?.ToString() ?? "—")</td>
+                <td class="muted">@IndexModel.Age(m.CreatedAt)</td>
+            </tr>
+        }
+    }
+    </tbody>
+</table>
+
+<script>
+    // Poll /Events/queue every 5s and rerender just the two
+    // <tbody>s + the count pills. No full-page reload — keeps
+    // scroll position, open <details>, focus, etc.
+    (function () {
+        const fmtAge = (s) => {
+            if (s < 90) return `${s}s`;
+            const m = Math.floor(s / 60);
+            if (m < 90) return `${m}m`;
+            const h = Math.floor(s / 3600);
+            if (h < 36) return `${h}h`;
+            return `${Math.floor(s / 86400)}d`;
+        };
+        const escape = (s) => String(s).replace(/[&<>"']/g, c =>
+            ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        const render = (rows, cols) => {
+            if (!rows.length) {
+                return `<tr><td colspan="${cols.length}" class="muted" style="text-align:center;">empty</td></tr>`;
+            }
+            return rows.map(r => '<tr>' + cols.map(c => c(r)).join('') + '</tr>').join('');
+        };
+        const outboundCols = [
+            r => `<td><code>${escape(r.id)}</code></td>`,
+            r => `<td><code>${escape(r.destination)}</code></td>`,
+            r => `<td><code>${escape(r.sourceCallsign)}</code></td>`,
+            r => `<td class="numeric">${r.bytes}</td>`,
+            r => `<td class="numeric">${r.ttl ?? '—'}</td>`,
+            r => `<td class="muted">${fmtAge(r.ageSeconds)}</td>`,
+        ];
+        const inboxCols = [
+            r => `<td><code>${escape(r.id)}</code></td>`,
+            r => `<td><code>${escape(r.app)}</code></td>`,
+            r => `<td><code>${escape(r.sourceCallsign)}</code></td>`,
+            r => `<td class="numeric">${r.bytes}</td>`,
+            r => `<td class="numeric">${r.ttl ?? '—'}</td>`,
+            r => `<td class="muted">${fmtAge(r.ageSeconds)}</td>`,
+        ];
+        async function poll() {
+            try {
+                const res = await fetch('/Events/queue', { credentials: 'same-origin' });
+                if (!res.ok) return;
+                const d = await res.json();
+                document.getElementById('outbound-body').innerHTML = render(d.outbound, outboundCols);
+                document.getElementById('inbox-body').innerHTML = render(d.localInbox, inboxCols);
+                const oc = document.getElementById('outbound-count');
+                oc.textContent = d.outbound.length;
+                oc.className = 'pill' + (d.outbound.length ? ' warn' : '');
+                const ic = document.getElementById('inbox-count');
+                ic.textContent = d.localInbox.length;
+                ic.className = 'pill' + (d.localInbox.length ? ' info' : '');
+            } catch { /* swallow; try again next tick */ }
+        }
+        setInterval(poll, 5000);
+    })();
+</script>
 
 <h2>Neighbours</h2>
 @if (Model.Neighbours.Count == 0)
@@ -241,10 +407,10 @@ else
     </table>
 }
 
-<h2>Live inbound <span id="sse-status" class="muted">(connecting…)</span></h2>
+<h2>Live inbound <span id="sse-status" class="pill">connecting</span></h2>
 <p class="muted">
     Server-Sent Events feed of messages arriving at this node. Clears
-    on page reload — for persistent history see "Recent messages" below.
+    on page reload — the queue tables above carry the persistent state.
 </p>
 <table id="sse-table">
     <thead>
@@ -268,8 +434,15 @@ else
         const body = document.getElementById('sse-body');
         const empty = document.getElementById('sse-empty');
         const es = new EventSource('/Events/inbound');
-        es.onopen = () => { status.textContent = '(live)'; };
-        es.onerror = () => { status.textContent = '(reconnecting…)'; };
+        es.onopen = () => {
+            status.textContent = 'live';
+            status.className = 'pill ok';
+            status.innerHTML = '<span class="dot live"></span> live';
+        };
+        es.onerror = () => {
+            status.textContent = 'reconnecting';
+            status.className = 'pill warn';
+        };
         es.addEventListener('inbound', (e) => {
             const ev = JSON.parse(e.data);
             if (empty) empty.remove();
@@ -289,56 +462,26 @@ else
     })();
 </script>
 
-<h2>Recent messages</h2>
-@if (Model.RecentMessages.Count == 0)
-{
-    <p class="muted">No messages yet.</p>
-}
-else
-{
-    <table>
-        <thead>
-            <tr>
-                <th>Id</th>
-                <th>Destination</th>
-                <th>Source</th>
-                <th>Bytes</th>
-                <th>Status</th>
-                <th>TTL</th>
-                <th>Age</th>
-            </tr>
-        </thead>
-        <tbody>
-        @foreach (var m in Model.RecentMessages)
-        {
-            <tr>
-                <td><code>@m.Id</code></td>
-                <td>@m.Destination</td>
-                <td>@m.SourceCallsign</td>
-                <td class="numeric">@m.Payload.Length</td>
-                <td>@IndexModel.MessageStatus(m, Model.Options.Callsign)</td>
-                <td class="numeric">@(m.Ttl?.ToString() ?? "—")</td>
-                <td>@IndexModel.Age(m.CreatedAt)</td>
-            </tr>
-        }
-        </tbody>
-    </table>
-}
-
 <h2>Send a test message</h2>
-<p class="muted">
-    Posts an outbound message via <code>Database.SubmitOutboundMessage</code>, just
-    like an app would over MQTT or REST. Useful for verifying a node-to-node link.
+<p class="muted-inline">
+    Drops an outbound message into the queue exactly as an app would via MQTT or REST.
+    Useful for verifying a link to another node — give it the destination's <em>callsign</em>
+    and the destination must have a DAPPS instance running an app with the same name (or
+    just be willing to receive — apps don't need to exist for the message to land in the
+    inbox).
 </p>
 <form class="inline" method="post" asp-page-handler="Send">
-    <label for="send-app">App</label>
-    <input type="text" id="send-app" name="Send.App" value="@Model.Send.App" placeholder="myapp" required />
+    <label for="send-app">App name</label>
+    <input type="text" id="send-app" name="Send.App" value="@Model.Send.App" placeholder="chat" required />
+    <small class="muted">A short identifier — e.g. <code>chat</code>, <code>weather</code>, <code>ping</code>. Apps subscribe to <code>dapps/in/&lt;name&gt;</code> on their local broker.</small>
 
     <label for="send-dest">Destination callsign</label>
-    <input type="text" id="send-dest" name="Send.Destination" value="@Model.Send.Destination" placeholder="G7XYZ-9" required />
+    <input type="text" id="send-dest" name="Send.Destination" value="@Model.Send.Destination" placeholder="GB7RDG-4" required />
+    <small class="muted">Where the message is going. Full callsign with SSID. Must be reachable through a configured neighbour or via routing.</small>
 
-    <label for="send-payload">Payload (UTF-8 text)</label>
+    <label for="send-payload">Payload</label>
     <input type="text" id="send-payload" name="Send.Payload" value="@Model.Send.Payload" placeholder="hello world" required />
+    <small class="muted">Any UTF-8 text. DAPPS treats it as opaque bytes — apps decide what to do with it.</small>
 
     <button type="submit">Queue message</button>
 </form>
@@ -422,3 +565,5 @@ else
         }
     }
 </script>
+
+</main>
