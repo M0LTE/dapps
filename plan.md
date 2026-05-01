@@ -211,34 +211,21 @@ Internet routes exist to glue isolated RF islands together, not as a preferred p
 
 `LinkClassDefaultsTests` pins this ordering so a casually-tweaked default doesn't quietly invert the project's identity.
 
-### B5. Routing as a learned graph (flood-then-learn)
+### B5. Routing as a learned graph (flood-then-learn) *(done — PRs #51, #52, #53)*
 
-**Bearer-independent.** This is about how DAPPS *chooses* to send a message when it has no live discovery record for the destination — not about *what bearer* the message goes over. Whatever ships here works equally well over AGW UI frames, UDP multicast, an eventual MeshCore radio, anything else.
+Landed across three PRs: PR-A introduced the `IRoutingAlgorithm` seam (interface designed to fit MeshCore-style source routing later), PR-B added passive learning (every inbound message teaches reverse-direction routes via F1's `src=`), PR-C added bounded-flood fallback for cold-start. The decisions called out below were made consciously — see `docs/routing-prior-art.md` for the comparison.
 
-The shape:
+Resolution precedence (today): static (manual / discovered / hint) → learned (from passive observation) → bounded flood (cold-start). All three layered as decorators over `IRoutingAlgorithm`.
 
-- first delivery by bounded flood
-- learn a useful path (or next-hop) from the successful exchange
-- reuse that path for later deliveries
-- reset / decay stale paths when delivery fails
-- keep flooding bounded by policy (hop budget, frequency, per-destination)
+The decisions made:
 
-Worth studying explicitly during this work — multiple traditions have something to teach:
+- **learned whole paths vs. next-hop hints** — next-hop. Source routing was rejected for primary AX.25 deployments (path bytes per data packet expensive on slow links); kept the seam open via `RouteDecision.SourceRoute` which can land later if MeshCore-bearer integration (Phase H1) needs it.
+- **route freshness and expiry** — three failed forwards invalidate; success resets the counter; new observation with a different next-hop also resets (fresh path is fresh evidence of liveness).
+- **direct-vs-flood promotion** — static and learned ALWAYS win when available; flood is the last-resort fallback. Learned routes from a successful flood path become available the moment a reply traverses back, so floods diminish as the network warms.
+- **neighbour advertisements vs. route exchange** — neither. Routes are learned from data-message observations rather than dedicated control packets. Lower control-plane overhead at the cost of needing bidirectional traffic OR a flood to converge.
+- **what belongs in DAPPS core vs. bearer-specific** — all of the above is DAPPS-core / bearer-neutral. The wire-format additions (`src=`, `LinkSourceCallsign`, `FloodHopsRemaining`) live in `BackhaulMessage` / codec v4 and apply uniformly across AGW + UDP + future bearers.
 
-- **MeshCore** — flood-then-learn at the link layer; fluid topology
-- **AX.25 NET/ROM** — distance-vector route exchange; well-established in amateur packet
-- **BATMAN-adv** — link-quality-weighted next-hop selection on mesh Wi-Fi
-- **AODV / DSR** — on-demand path discovery in MANETs
-
-DAPPS should not cargo-cult any one of those packet formats. The decisions to make consciously:
-
-- learned whole paths vs. next-hop hints
-- route freshness and expiry
-- direct-vs-flood promotion
-- neighbour advertisements vs. route exchange
-- what belongs in DAPPS core vs. what stays bearer-specific
-
-If the answer ends up being "DAPPS learns next-hop reachability and leaves path details to the bearer," that is still a useful outcome — but it should be reached consciously.
+The result is closest to AODV in shape (RFC 3561) but with control-plane traffic stripped — passive learning replaces RREQ/RREP. NET/ROM and INP3 explicitly off the table per operator experience (see `docs/routing-prior-art.md`).
 
 ### B6. Active discovery — DAPPS goes asking
 
