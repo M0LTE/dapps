@@ -11,6 +11,14 @@ public class OptionsRepo
     internal async Task<ICollection<DbSystemOption>> GetOptions()
     {
         var connection = DbInfo.GetAsyncConnection();
+        // Defensive: make sure the table exists before querying. When
+        // the SystemOptions configurator fires during DI resolution it
+        // can race ahead of DbStartup's schema creation; CreateTable is
+        // idempotent (CREATE TABLE IF NOT EXISTS semantics) so this is
+        // free in the normal path and only matters on the cold-start
+        // race. Any rows DbStartup later inserts are still picked up by
+        // subsequent reads.
+        await connection.CreateTableAsync<DbSystemOption>();
         var rows = await connection.QueryAsync<DbSystemOption>("select * from systemoptions");
         return rows;
     }
