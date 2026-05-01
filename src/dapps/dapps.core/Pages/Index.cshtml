@@ -4,12 +4,20 @@
     ViewData["Title"] = $"DAPPS — {Model.Options.Callsign}";
 }
 
-<h1>DAPPS — @Model.Options.Callsign
+<header class="app-header">
+    <span class="brand">
+        <span class="dot"></span>
+        DAPPS
+        <span class="callsign">@Model.Options.Callsign</span>
+    </span>
+    <span class="spacer"></span>
     @if (User.Identity?.IsAuthenticated == true)
     {
         <a href="/Logout" class="signout">Sign out</a>
     }
-</h1>
+</header>
+
+<main>
 
 @if (Model.FlashOk is not null)
 {
@@ -24,39 +32,41 @@
 <div class="grid">
     <div class="card">
         <div class="label">Callsign</div>
-        <div class="value">@Model.Options.Callsign</div>
+        <div class="value mono">@Model.Options.Callsign</div>
     </div>
     <div class="card">
         <div class="label">BPQ AGW</div>
-        <div class="value">
+        <div class="value mono">
             @Model.Options.NodeHost:@Model.Options.AgwPort
-            @if (Model.BpqAgwReachable)
-            {
-                <span class="ok">●</span>
-            }
-            else
-            {
-                <span class="warn">●</span>
-            }
+            <span class="dot @(Model.BpqAgwReachable ? "ok" : "warn")"></span>
         </div>
     </div>
     <div class="card">
         <div class="label">Default BPQ port</div>
-        <div class="value">@Model.Options.DefaultBpqPort</div>
+        <div class="value mono">@Model.Options.DefaultBpqPort</div>
     </div>
     <div class="card">
         <div class="label">MQTT broker</div>
-        <div class="value">:@Model.Options.MqttPort</div>
+        <div class="value mono">:@Model.Options.MqttPort</div>
     </div>
     <div class="card">
         <div class="label">UDP listener</div>
-        <div class="value">
-            @(Model.Options.UdpListenPort > 0 ? $":{Model.Options.UdpListenPort}" : "disabled")
+        <div class="value mono">
+            @(Model.Options.UdpListenPort > 0 ? $":{Model.Options.UdpListenPort}" : "—")
         </div>
     </div>
     <div class="card">
-        <div class="label">Auth required</div>
-        <div class="value">@(Model.Options.AuthRequired ? "yes" : "no")</div>
+        <div class="label">App auth</div>
+        <div class="value">
+            @if (Model.Options.AuthRequired)
+            {
+                <span class="pill ok">required</span>
+            }
+            else
+            {
+                <span class="pill">open</span>
+            }
+        </div>
     </div>
 </div>
 <details class="edit-block">
@@ -241,7 +251,7 @@ else
     </table>
 }
 
-<h2>Live inbound <span id="sse-status" class="muted">(connecting…)</span></h2>
+<h2>Live inbound <span id="sse-status" class="pill">connecting</span></h2>
 <p class="muted">
     Server-Sent Events feed of messages arriving at this node. Clears
     on page reload — for persistent history see "Recent messages" below.
@@ -268,8 +278,15 @@ else
         const body = document.getElementById('sse-body');
         const empty = document.getElementById('sse-empty');
         const es = new EventSource('/Events/inbound');
-        es.onopen = () => { status.textContent = '(live)'; };
-        es.onerror = () => { status.textContent = '(reconnecting…)'; };
+        es.onopen = () => {
+            status.textContent = 'live';
+            status.className = 'pill ok';
+            status.innerHTML = '<span class="dot live"></span> live';
+        };
+        es.onerror = () => {
+            status.textContent = 'reconnecting';
+            status.className = 'pill warn';
+        };
         es.addEventListener('inbound', (e) => {
             const ev = JSON.parse(e.data);
             if (empty) empty.remove();
@@ -311,14 +328,15 @@ else
         <tbody>
         @foreach (var m in Model.RecentMessages)
         {
+            var status = IndexModel.MessageStatus(m, Model.Options.Callsign);
             <tr>
                 <td><code>@m.Id</code></td>
                 <td>@m.Destination</td>
                 <td>@m.SourceCallsign</td>
                 <td class="numeric">@m.Payload.Length</td>
-                <td>@IndexModel.MessageStatus(m, Model.Options.Callsign)</td>
+                <td><span class="pill @status.PillClass">@status.Label</span></td>
                 <td class="numeric">@(m.Ttl?.ToString() ?? "—")</td>
-                <td>@IndexModel.Age(m.CreatedAt)</td>
+                <td class="muted">@IndexModel.Age(m.CreatedAt)</td>
             </tr>
         }
         </tbody>
@@ -422,3 +440,5 @@ else
         }
     }
 </script>
+
+</main>

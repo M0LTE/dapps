@@ -115,15 +115,15 @@ public sealed class IndexModel(
         public string? Payload { get; set; }
     }
 
-    public static string MessageStatus(DbMessage m, string ourCallsign)
+    public static (string Label, string PillClass) MessageStatus(DbMessage m, string ourCallsign)
     {
         var local = ourCallsign.Split('-')[0];
         var dest = m.Destination.Split('@').Last().Split('-')[0];
         var isLocal = string.Equals(dest, local, StringComparison.OrdinalIgnoreCase);
-        if (isLocal && m.LocallyDelivered) return "delivered";
-        if (isLocal) return "pending-local";
-        if (m.Forwarded) return "forwarded";
-        return "pending-out";
+        if (isLocal && m.LocallyDelivered) return ("delivered", "ok");
+        if (isLocal) return ("pending local", "warn");
+        if (m.Forwarded) return ("forwarded", "info");
+        return ("pending", "");
     }
 
     public static string Age(DateTime createdAt)

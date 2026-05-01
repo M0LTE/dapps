@@ -6,71 +6,332 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
     <title>@title</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-               margin: 1.5rem; max-width: 1200px; line-height: 1.45; color: #222; }
-        h1 { margin-top: 0; font-size: 1.5rem; }
-        h2 { font-size: 1.1rem; border-bottom: 1px solid #ddd; padding-bottom: 0.25rem; margin-top: 1.5rem; }
-        nav { margin-bottom: 1rem; padding: 0.5rem 0; border-bottom: 1px solid #eee; }
-        nav a { margin-right: 1rem; color: #06c; text-decoration: none; }
-        nav a:hover { text-decoration: underline; }
-        table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
-        th, td { text-align: left; padding: 0.35rem 0.6rem; border-bottom: 1px solid #eee; }
-        th { background: #f6f6f6; font-weight: 600; }
-        td.numeric { text-align: right; font-variant-numeric: tabular-nums; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem; }
-        .card { background: #fafafa; border: 1px solid #e5e5e5; border-radius: 6px; padding: 0.75rem 1rem; }
-        .card .label { font-size: 0.8rem; color: #666; text-transform: uppercase; letter-spacing: 0.05em; }
-        .card .value { font-size: 1.25rem; font-weight: 500; margin-top: 0.25rem; font-variant-numeric: tabular-nums; }
-        .ok { color: #0a8043; }
-        .warn { color: #b54300; }
-        .muted { color: #888; }
-        form.inline { background: #fafafa; border: 1px solid #e5e5e5; border-radius: 6px;
-                      padding: 1rem; margin-top: 0.5rem; }
-        form.inline label { display: block; margin: 0.5rem 0 0.2rem; font-size: 0.85rem; color: #555; }
-        form.inline input[type=text] { width: 100%; max-width: 30rem; padding: 0.4rem 0.5rem;
-                                       border: 1px solid #ccc; border-radius: 4px; font: inherit; }
-        form.inline button { margin-top: 0.75rem; padding: 0.4rem 1rem;
-                             border: 1px solid #06c; background: #06c; color: white;
-                             border-radius: 4px; cursor: pointer; font: inherit; }
-        form.inline button:hover { background: #048; }
-        .ok-banner { background: #e7f5ec; border: 1px solid #b9e0c5; padding: 0.5rem 0.75rem;
-                     border-radius: 4px; margin: 0.5rem 0; font-size: 0.9rem; }
-        .err-banner { background: #fdecea; border: 1px solid #f5b3ad; padding: 0.5rem 0.75rem;
-                      border-radius: 4px; margin: 0.5rem 0; font-size: 0.9rem; }
-        code { background: #f0f0f0; padding: 0.05rem 0.3rem; border-radius: 3px; font-size: 0.9em; }
-        details.edit-block { margin: 0.5rem 0 1rem; padding: 0.4rem 0.6rem;
-                             background: #f8f8f8; border: 1px dashed #d0d0d0; border-radius: 4px; }
-        details.edit-block summary { cursor: pointer; font-size: 0.85rem; color: #555;
-                                     padding: 0.2rem 0; user-select: none; }
-        details.edit-block[open] { background: #fff; border-style: solid; padding: 0.6rem 0.8rem; }
-        form.edit-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-                         gap: 0.4rem 0.8rem; margin-top: 0.5rem; }
-        form.edit-form label { display: block; font-size: 0.85rem; color: #555; }
-        form.edit-form label.checkbox-label { font-size: 0.9rem; color: #222;
-                                              display: flex; align-items: center; gap: 0.4rem; }
+        :root {
+            --bg: #f8fafc;
+            --surface: #ffffff;
+            --surface-2: #f1f5f9;
+            --border: #e2e8f0;
+            --border-strong: #cbd5e1;
+            --text: #0f172a;
+            --text-muted: #64748b;
+            --text-dim: #94a3b8;
+            --accent: #2563eb;
+            --accent-hover: #1d4ed8;
+            --accent-soft: #dbeafe;
+            --ok: #16a34a;
+            --ok-soft: #dcfce7;
+            --warn: #d97706;
+            --warn-soft: #fef3c7;
+            --err: #dc2626;
+            --err-soft: #fee2e2;
+            --info: #0891b2;
+            --info-soft: #cffafe;
+            --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 1px rgba(15, 23, 42, 0.04);
+            --shadow: 0 4px 12px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+            --radius: 8px;
+            --radius-sm: 5px;
+            --font-ui: ui-sans-serif, system-ui, -apple-system, "Segoe UI Variable", "Segoe UI", Roboto, sans-serif;
+            --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+        }
+        @@media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #0b1220;
+                --surface: #111827;
+                --surface-2: #1e293b;
+                --border: #1f2937;
+                --border-strong: #334155;
+                --text: #e5e7eb;
+                --text-muted: #94a3b8;
+                --text-dim: #64748b;
+                --accent: #60a5fa;
+                --accent-hover: #93c5fd;
+                --accent-soft: #1e3a8a;
+                --ok: #4ade80;
+                --ok-soft: #14532d;
+                --warn: #fbbf24;
+                --warn-soft: #78350f;
+                --err: #f87171;
+                --err-soft: #7f1d1d;
+                --info: #22d3ee;
+                --info-soft: #155e75;
+                --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+                --shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+            }
+        }
+
+        * { box-sizing: border-box; }
+        html, body { margin: 0; padding: 0; }
+        body {
+            font-family: var(--font-ui);
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.5;
+            font-size: 14px;
+            -webkit-font-smoothing: antialiased;
+            min-height: 100vh;
+        }
+
+        /* ── Header ─────────────────────────────────────────────── */
+        .app-header {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 0.85rem 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            position: sticky; top: 0; z-index: 10;
+            backdrop-filter: saturate(160%) blur(8px);
+            background: color-mix(in srgb, var(--surface) 92%, transparent);
+        }
+        .app-header .brand {
+            display: flex; align-items: baseline; gap: 0.5rem;
+            font-weight: 600; font-size: 1.05rem; letter-spacing: -0.01em;
+        }
+        .app-header .brand .dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: var(--ok); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 25%, transparent);
+            display: inline-block; align-self: center;
+        }
+        .app-header .brand .callsign {
+            font-family: var(--font-mono); font-weight: 600;
+            color: var(--accent);
+            background: var(--accent-soft);
+            padding: 0.1rem 0.5rem; border-radius: var(--radius-sm);
+            font-size: 0.95rem;
+        }
+        .app-header .spacer { flex: 1; }
+        .app-header a {
+            color: var(--text-muted); text-decoration: none;
+            font-size: 0.85rem; padding: 0.3rem 0.65rem; border-radius: var(--radius-sm);
+        }
+        .app-header a:hover { color: var(--text); background: var(--surface-2); }
+
+        /* ── Page layout ────────────────────────────────────────── */
+        main { max-width: 1280px; margin: 0 auto; padding: 1.25rem 1.5rem 3rem; }
+
+        h1 { display: none; }   /* page title now lives in the header */
+        h2 {
+            font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em;
+            color: var(--text-muted); font-weight: 600;
+            margin: 1.75rem 0 0.65rem; padding: 0;
+            border: none;
+        }
+        h2:first-of-type { margin-top: 0.5rem; }
+        h2 .badge { font-size: 0.7rem; vertical-align: middle; }
+
+        /* ── KPI grid ───────────────────────────────────────────── */
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 0.75rem;
+        }
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 0.85rem 1rem;
+            box-shadow: var(--shadow-sm);
+            transition: box-shadow 120ms;
+        }
+        .card:hover { box-shadow: var(--shadow); }
+        .card .label {
+            font-size: 0.7rem; color: var(--text-muted);
+            text-transform: uppercase; letter-spacing: 0.07em; font-weight: 600;
+        }
+        .card .value {
+            font-size: 1.4rem; font-weight: 600;
+            margin-top: 0.3rem; font-variant-numeric: tabular-nums;
+            color: var(--text); letter-spacing: -0.01em;
+        }
+        .card .value .dot {
+            width: 8px; height: 8px; display: inline-block;
+            border-radius: 50%; margin-left: 0.35rem; vertical-align: middle;
+        }
+        .card .value.mono { font-family: var(--font-mono); font-size: 1.15rem; font-weight: 500; }
+
+        /* ── Tables ─────────────────────────────────────────────── */
+        table {
+            width: 100%; border-collapse: separate; border-spacing: 0;
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--radius); overflow: hidden;
+            box-shadow: var(--shadow-sm);
+            font-size: 0.875rem;
+        }
+        thead th {
+            background: var(--surface-2);
+            color: var(--text-muted);
+            font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em;
+            font-weight: 600; text-align: left;
+            padding: 0.55rem 0.85rem;
+            border-bottom: 1px solid var(--border);
+        }
+        tbody td {
+            padding: 0.5rem 0.85rem;
+            border-bottom: 1px solid var(--border);
+            vertical-align: middle;
+        }
+        tbody tr:last-child td { border-bottom: none; }
+        tbody tr:hover { background: color-mix(in srgb, var(--surface-2) 60%, transparent); }
+        td.numeric, th.numeric { text-align: right; font-variant-numeric: tabular-nums; }
+
+        /* ── Status pills / dots ───────────────────────────────── */
+        .pill {
+            display: inline-flex; align-items: center; gap: 0.3rem;
+            padding: 0.1rem 0.5rem; border-radius: 999px;
+            font-size: 0.72rem; font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.04em;
+            background: var(--surface-2); color: var(--text-muted);
+        }
+        .pill.ok { background: var(--ok-soft); color: var(--ok); }
+        .pill.warn { background: var(--warn-soft); color: var(--warn); }
+        .pill.err { background: var(--err-soft); color: var(--err); }
+        .pill.info { background: var(--info-soft); color: var(--info); }
+        .pill.accent { background: var(--accent-soft); color: var(--accent); }
+        .dot { width: 8px; height: 8px; display: inline-block; border-radius: 50%; }
+        .dot.ok { background: var(--ok); }
+        .dot.warn { background: var(--warn); }
+        .dot.err { background: var(--err); }
+        .dot.live {
+            background: var(--ok);
+            animation: pulse 1.8s ease-in-out infinite;
+        }
+        @@keyframes pulse {
+            0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ok) 60%, transparent); }
+            50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--ok) 0%, transparent); }
+        }
+
+        /* ── Banners ────────────────────────────────────────────── */
+        .ok-banner, .err-banner {
+            padding: 0.65rem 0.9rem; border-radius: var(--radius);
+            margin: 0 0 1rem; font-size: 0.875rem;
+            border: 1px solid transparent;
+        }
+        .ok-banner { background: var(--ok-soft); border-color: color-mix(in srgb, var(--ok) 25%, transparent); color: var(--ok); }
+        .err-banner { background: var(--err-soft); border-color: color-mix(in srgb, var(--err) 25%, transparent); color: var(--err); }
+
+        /* ── Code / mono ────────────────────────────────────────── */
+        code {
+            font-family: var(--font-mono); font-size: 0.85em;
+            background: var(--surface-2); color: var(--text);
+            padding: 0.08rem 0.35rem; border-radius: 4px;
+        }
+        td code { background: transparent; padding: 0; color: var(--accent); }
+        .muted { color: var(--text-muted); }
+
+        /* ── Forms (the inline send-test-message form) ─────────── */
+        form.inline {
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 1rem; margin-top: 0.5rem;
+            box-shadow: var(--shadow-sm);
+        }
+        form.inline label {
+            display: block; margin: 0.6rem 0 0.25rem;
+            font-size: 0.78rem; color: var(--text-muted); font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.05em;
+        }
+        form.inline input[type=text] {
+            width: 100%; max-width: 32rem; padding: 0.5rem 0.65rem;
+            border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+            font: inherit; background: var(--surface); color: var(--text);
+        }
+        form.inline input[type=text]:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: var(--accent); }
+        .btn, form.inline button, form.edit-form button {
+            display: inline-flex; align-items: center; gap: 0.4rem;
+            padding: 0.5rem 1rem; border: 1px solid var(--accent);
+            background: var(--accent); color: white;
+            border-radius: var(--radius-sm); cursor: pointer; font: inherit;
+            font-weight: 500; transition: background 120ms;
+        }
+        .btn:hover, form.inline button:hover, form.edit-form button:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+        form.inline button { margin-top: 0.85rem; }
+
+        /* ── Edit blocks (collapsible sections) ────────────────── */
+        details.edit-block {
+            margin: 0.75rem 0 0;
+            background: var(--surface); border: 1px solid var(--border);
+            border-radius: var(--radius); overflow: hidden;
+            box-shadow: var(--shadow-sm);
+        }
+        details.edit-block summary {
+            cursor: pointer; padding: 0.6rem 0.85rem;
+            font-size: 0.82rem; color: var(--text-muted); font-weight: 600;
+            user-select: none;
+            display: flex; align-items: center; gap: 0.4rem;
+        }
+        details.edit-block summary::before {
+            content: "+"; font-size: 1rem; line-height: 1;
+            color: var(--accent); width: 0.9rem; text-align: center;
+            transition: transform 120ms;
+        }
+        details.edit-block[open] summary::before { content: "−"; }
+        details.edit-block[open] summary {
+            border-bottom: 1px solid var(--border);
+            color: var(--text);
+        }
+        details.edit-block > *:not(summary) { padding: 0 0.85rem; }
+        details.edit-block > p:first-of-type { padding-top: 0.85rem; }
+        details.edit-block > form { padding-bottom: 0.85rem; }
+        details.edit-block p.muted {
+            font-size: 0.8rem; padding-bottom: 0.4rem; padding-top: 0.85rem;
+        }
+        form.edit-form {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 0.6rem 0.9rem; margin-top: 0.4rem;
+        }
+        form.edit-form label {
+            display: block; font-size: 0.72rem;
+            color: var(--text-muted); font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.05em;
+        }
+        form.edit-form label.checkbox-label {
+            text-transform: none; letter-spacing: 0; font-weight: 500;
+            color: var(--text); font-size: 0.85rem;
+            display: flex; align-items: center; gap: 0.5rem;
+        }
         form.edit-form input[type=text], form.edit-form input[type=password],
         form.edit-form input[type=number], form.edit-form select {
-            width: 100%; padding: 0.3rem 0.4rem; border: 1px solid #ccc;
-            border-radius: 3px; font: inherit; box-sizing: border-box;
+            width: 100%; margin-top: 0.25rem;
+            padding: 0.4rem 0.55rem;
+            border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+            font: inherit; box-sizing: border-box;
+            background: var(--surface); color: var(--text);
         }
-        form.edit-form button { grid-column: 1 / -1; justify-self: start;
-                                padding: 0.35rem 0.9rem; border: 1px solid #06c;
-                                background: #06c; color: white; border-radius: 3px;
-                                cursor: pointer; font: inherit; margin-top: 0.4rem; }
-        form.edit-form button:hover { background: #048; }
-        .link-btn { background: none; border: 0; color: #06c; cursor: pointer;
-                    text-decoration: underline; padding: 0; font: inherit; }
-        .link-btn:hover { color: #048; }
-        a.signout { float: right; font-size: 0.85rem; color: #06c; text-decoration: none; font-weight: normal; }
-        a.signout:hover { text-decoration: underline; }
+        form.edit-form input:focus, form.edit-form select:focus {
+            outline: 2px solid var(--accent); outline-offset: -1px; border-color: var(--accent);
+        }
+        form.edit-form button {
+            grid-column: 1 / -1; justify-self: start; margin-top: 0.5rem;
+        }
+
+        /* ── Inline link buttons (the "remove" actions) ────────── */
+        .link-btn {
+            background: none; border: 0; color: var(--accent); cursor: pointer;
+            padding: 0; font: inherit; font-size: 0.8rem;
+        }
+        .link-btn:hover { color: var(--accent-hover); text-decoration: underline; }
+
+        /* ── Sign-out link in header ───────────────────────────── */
+        a.signout { color: var(--text-muted); }
+
+        /* ── Empty-state messaging ─────────────────────────────── */
+        p.muted {
+            background: var(--surface); border: 1px dashed var(--border-strong);
+            padding: 1rem; border-radius: var(--radius); text-align: center;
+            font-size: 0.875rem;
+        }
+
+        /* ── Responsive niceties ───────────────────────────────── */
+        @@media (max-width: 720px) {
+            .app-header { padding: 0.7rem 1rem; flex-wrap: wrap; }
+            main { padding: 1rem; }
+            .grid { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+        }
     </style>
 </head>
 <body>
-    <nav>
-        <a href="/">Dashboard</a>
-    </nav>
     @RenderBody()
 </body>
 </html>
