@@ -46,6 +46,7 @@ public class DbStartup(ILogger<DbStartup> logger) : IHostedService
         db.CreateTable<DbDiscoveryChannel>();
         db.CreateTable<DbDroppedMessage>();
         db.CreateTable<DbLearnedRoute>();
+        db.CreateTable<DbFloodSeen>();
 
         var optionsTable = db.Table<DbSystemOption>().Table.TableName;
         var options = db.Query<DbSystemOption>($"select * from {optionsTable};");

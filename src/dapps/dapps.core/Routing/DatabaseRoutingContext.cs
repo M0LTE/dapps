@@ -46,4 +46,10 @@ public sealed class DatabaseRoutingContext(
 
     public Task<int> RecordLearnedRouteFailureAsync(string destinationBaseCallsign, int invalidationThreshold, CancellationToken ct)
         => database.RecordLearnedRouteFailureAsync(destinationBaseCallsign, invalidationThreshold);
+
+    public Task<bool> HasSeenFloodAsync(string messageId, string linkSourceCallsign, CancellationToken ct)
+        => database.HasSeenFloodAsync(messageId, linkSourceCallsign);
+
+    public Task RecordFloodSeenAsync(string messageId, string linkSourceCallsign, CancellationToken ct)
+        => database.RecordFloodSeenAsync(messageId, linkSourceCallsign, DateTime.UtcNow);
 }

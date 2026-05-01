@@ -10,16 +10,17 @@ namespace dapps.client.Backhaul.Datagram;
 /// doesn't fit. Stays in <c>dapps.client</c> so any bearer impl can
 /// reuse it without taking a dependency on the AGW path.
 ///
-/// Wire format (all integers little-endian). Version 3 (current) adds
-/// the <c>LinkSourceCallsign</c> field — the immediate sender's
-/// callsign, used by passive-learning routing over bearers that don't
-/// natively identify the sender (UDP). Version 2 added <c>Originator</c>
-/// (F1 end-to-end source tracking). Version 1 was the original.
-/// Decoder accepts all three; encoder writes v3.
+/// Wire format (all integers little-endian). Version 4 (current) adds
+/// the <c>FloodHopsRemaining</c> field for B5 bounded-flood
+/// cold-start. Version 3 added <c>LinkSourceCallsign</c> for
+/// passive-learning routing. Version 2 added <c>Originator</c> for F1
+/// end-to-end source tracking. Version 1 was the original. Decoder
+/// accepts all four; encoder writes v4.
 /// <code>
-///   [1]  version           = 3 (encoder); decoder also accepts 1, 2
+///   [1]  version           = 4 (encoder); decoder also accepts 1, 2, 3
 ///   [1]  flags             bit0=salt, bit1=ttl, bit2=headers,
-///                          bit3=originator (v2+), bit4=link-source (v3+)
+///                          bit3=originator (v2+), bit4=link-source (v3+),
+///                          bit5=flood-hops-remaining (v4+)
 ///   [7]  id (UTF-8 ASCII, 7-char hex from DappsMessage.ComputeHash)
 ///   [8]  salt              (only when flags bit0)
 ///   [4]  ttl seconds       (only when flags bit1)
@@ -29,6 +30,7 @@ namespace dapps.client.Backhaul.Datagram;
 ///   [O]  originator        (UTF-8, v2+)
 ///   [2]  link-source len   (only when flags bit4, v3+)
 ///   [L]  link-source       (UTF-8, v3+)
+///   [1]  flood-hops        (only when flags bit5, v4+)
 ///   [2]  headers count     (only when flags bit2)
 ///   per header:
 ///     [2] key len, [K] key (UTF-8), [2] value len, [V] value (UTF-8)
@@ -39,8 +41,8 @@ namespace dapps.client.Backhaul.Datagram;
 /// </summary>
 public static class BackhaulMessageCodec
 {
-    /// <summary>Version this encoder writes. Decoder accepts v1, v2, v3.</summary>
-    public const byte Version = 3;
+    /// <summary>Version this encoder writes. Decoder accepts v1, v2, v3, v4.</summary>
+    public const byte Version = 4;
     public const int IdLength = 7;
 
     [Flags]
@@ -50,8 +52,9 @@ public static class BackhaulMessageCodec
         HasSalt = 1 << 0,
         HasTtl = 1 << 1,
         HasHeaders = 1 << 2,
-        HasOriginator = 1 << 3,     // v2+
-        HasLinkSource = 1 << 4,     // v3+
+        HasOriginator = 1 << 3,         // v2+
+        HasLinkSource = 1 << 4,         // v3+
+        HasFloodHops = 1 << 5,          // v4+
     }
 
     public static byte[] Encode(BackhaulMessage message)
@@ -79,6 +82,7 @@ public static class BackhaulMessageCodec
         if (headerBytes.Length > 0) flags |= Flags.HasHeaders;
         if (origBytes.Length > 0) flags |= Flags.HasOriginator;
         if (linkBytes.Length > 0) flags |= Flags.HasLinkSource;
+        if (message.FloodHopsRemaining.HasValue) flags |= Flags.HasFloodHops;
 
         var size = 1 + 1 + IdLength
             + (message.Salt.HasValue ? 8 : 0)
@@ -86,6 +90,7 @@ public static class BackhaulMessageCodec
             + 2 + dstBytes.Length
             + (origBytes.Length > 0 ? 2 + origBytes.Length : 0)
             + (linkBytes.Length > 0 ? 2 + linkBytes.Length : 0)
+            + (message.FloodHopsRemaining.HasValue ? 1 : 0)
             + headerBytes.Length
             + 4 + message.Payload.Length;
 
@@ -130,6 +135,11 @@ public static class BackhaulMessageCodec
             offset += linkBytes.Length;
         }
 
+        if (message.FloodHopsRemaining.HasValue)
+        {
+            buffer[offset++] = message.FloodHopsRemaining.Value;
+        }
+
         headerBytes.CopyTo(buffer.AsSpan(offset));
         offset += headerBytes.Length;
 
@@ -149,13 +159,13 @@ public static class BackhaulMessageCodec
 
         var offset = 0;
         var version = buffer[offset++];
-        // Decoder accepts v1 (pre-F1), v2 (F1 originator), and v3 (B5
-        // link-source). Older versions never set the newer flag bits,
-        // so the decode path falls through naturally without per-version
-        // branching after this.
-        if (version is not (1 or 2) && version != Version)
+        // Decoder accepts v1 (pre-F1), v2 (F1 originator), v3 (B5
+        // link-source), and v4 (B5 flood-hops). Older versions never
+        // set the newer flag bits, so the decode path falls through
+        // naturally without per-version branching after this.
+        if (version is not (1 or 2 or 3) && version != Version)
         {
-            throw new InvalidDataException($"unsupported codec version {version}; expected 1, 2, or {Version}");
+            throw new InvalidDataException($"unsupported codec version {version}; expected 1, 2, 3, or {Version}");
         }
         var flags = (Flags)buffer[offset++];
 
@@ -199,6 +209,12 @@ public static class BackhaulMessageCodec
             offset += linkLen;
         }
 
+        byte? floodHops = null;
+        if ((flags & Flags.HasFloodHops) != 0)
+        {
+            floodHops = buffer[offset++];
+        }
+
         IReadOnlyDictionary<string, string>? headers = null;
         if ((flags & Flags.HasHeaders) != 0)
         {
@@ -224,7 +240,7 @@ public static class BackhaulMessageCodec
         offset += 4;
         var payload = buffer.Slice(offset, (int)payloadLen).ToArray();
 
-        return new BackhaulMessage(id, destination, salt, ttl, payload, headers, originator, linkSource);
+        return new BackhaulMessage(id, destination, salt, ttl, payload, headers, originator, linkSource, floodHops);
     }
 
     private static byte[] EncodeHeaders(IReadOnlyDictionary<string, string> headers)

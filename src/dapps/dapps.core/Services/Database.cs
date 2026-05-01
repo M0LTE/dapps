@@ -93,7 +93,7 @@ public class Database(ILogger<Database> logger, IOptionsMonitor<SystemOptions> o
         return data;
     }
 
-    internal async Task SaveMessage(string id, byte[] buffer, long? salt, string destination, string sourceCallsign, string additionalProperties, int? ttl, string originatorCallsign = "")
+    internal async Task SaveMessage(string id, byte[] buffer, long? salt, string destination, string sourceCallsign, string additionalProperties, int? ttl, string originatorCallsign = "", byte? floodHopsRemaining = null)
     {
         var connection = DbInfo.GetAsyncConnection();
 
@@ -116,6 +116,7 @@ public class Database(ILogger<Database> logger, IOptionsMonitor<SystemOptions> o
             AdditionalProperties = additionalProperties,
             Ttl = ttl,
             CreatedAt = DateTime.UtcNow,
+            FloodHopsRemaining = floodHopsRemaining,
         });
     }
 
@@ -484,6 +485,44 @@ public class Database(ILogger<Database> logger, IOptionsMonitor<SystemOptions> o
     {
         var connection = DbInfo.GetAsyncConnection();
         return await connection.QueryAsync<DbLearnedRoute>("select * from learnedroutes order by LastSeenAt desc");
+    }
+
+    // ── Flood deduplication (PR-C) ──────────────────────────────────
+
+    /// <summary>
+    /// Have we already processed a flood with this (id, link-source)
+    /// pair? Returns true if the row exists. The lookup is cheap
+    /// (primary-key-indexed); used on every inbound flooded message
+    /// to short-circuit duplicates before any expensive processing.
+    /// </summary>
+    internal async Task<bool> HasSeenFloodAsync(string messageId, string linkSourceCallsign)
+    {
+        var connection = DbInfo.GetAsyncConnection();
+        var key = DbFloodSeen.MakeKey(messageId, linkSourceCallsign);
+        var row = await connection.FindAsync<DbFloodSeen>(key);
+        return row is not null;
+    }
+
+    /// <summary>Idempotent record-this-flood. No-ops if the row
+    /// already exists.</summary>
+    internal async Task RecordFloodSeenAsync(string messageId, string linkSourceCallsign, DateTime now)
+    {
+        var connection = DbInfo.GetAsyncConnection();
+        var key = DbFloodSeen.MakeKey(messageId, linkSourceCallsign);
+        var existing = await connection.FindAsync<DbFloodSeen>(key);
+        if (existing is not null) return;
+        await connection.InsertAsync(new DbFloodSeen { Key = key, SeenAt = now });
+    }
+
+    /// <summary>Drop flood-seen rows older than <paramref name="cutoff"/>.
+    /// The dedup window must outlive the maximum expected flood
+    /// propagation time; everything older than that is just memory
+    /// pressure.</summary>
+    internal async Task<int> SweepFloodSeenAsync(DateTime cutoff)
+    {
+        var connection = DbInfo.GetAsyncConnection();
+        return await connection.ExecuteAsync(
+            "delete from flood_seen where SeenAt < ?", cutoff.Ticks);
     }
 
     internal async Task SaveSystemOptions(SystemOptions systemOptions)

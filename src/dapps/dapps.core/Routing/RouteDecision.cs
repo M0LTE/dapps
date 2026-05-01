@@ -46,4 +46,14 @@ public abstract record RouteDecision
     /// queue; the message will be retried on the next forwarder tick
     /// or expired by TTL.</summary>
     public sealed record Unreachable : RouteDecision;
+
+    /// <summary>Bounded flood — send to every listed neighbour with
+    /// <see cref="HopBudget"/> as the remaining hop count. The OMM
+    /// iterates <see cref="Routes"/> and stamps each outbound
+    /// <see cref="BackhaulMessage.FloodHopsRemaining"/> so receivers
+    /// know they're handling a flood (not a regular routed message)
+    /// and decrement appropriately. <see cref="HopBudget"/> of zero
+    /// means "this is the last hop; deliver to local apps if applicable
+    /// but do not re-flood."</summary>
+    public sealed record FloodToNeighbours(IReadOnlyList<BackhaulRoute> Routes, byte HopBudget) : RouteDecision;
 }

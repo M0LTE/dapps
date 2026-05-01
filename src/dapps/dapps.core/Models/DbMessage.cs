@@ -50,4 +50,16 @@ public class DbMessage
     /// or was submitted locally. Used with <see cref="Ttl"/> to compute
     /// residual lifetime on forward and to age out expired rows.</summary>
     public DateTime CreatedAt { get; init; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// B5 cold-start flood state: when set, this message is in
+    /// flood-propagation mode and the value is the remaining hop
+    /// budget. Each forwarding hop decrements before re-flooding;
+    /// the flood stops at zero. Null means this is a regular routed
+    /// message, not a flood. Persisted on the message row so a
+    /// flood mid-propagation survives a forwarder tick / process
+    /// restart — the next forwarder run picks it back up and
+    /// continues at the same hop budget.
+    /// </summary>
+    public byte? FloodHopsRemaining { get; init; }
 }
