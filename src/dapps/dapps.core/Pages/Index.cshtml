@@ -2,7 +2,6 @@
 @model IndexModel
 @{
     ViewData["Title"] = $"DAPPS — {Model.Options.Callsign}";
-    ViewData["RefreshSeconds"] = 5;
 }
 
 <header class="app-header">
@@ -141,26 +140,26 @@
     </div>
 </div>
 
-<h2>Outbound queue <span class="pill @(Model.OutboundQueue.Count == 0 ? "" : "warn")">@Model.OutboundQueue.Count</span></h2>
-<p class="muted-inline">Messages waiting to be forwarded to another node. The forwarder loop wakes periodically, picks one, and sends it via the cheapest reachable bearer.</p>
-@if (Model.OutboundQueue.Count == 0)
-{
-    <p class="muted">No outbound forwards in flight.</p>
-}
-else
-{
-    <table>
-        <thead>
-            <tr>
-                <th>Id</th>
-                <th>Destination</th>
-                <th>From</th>
-                <th class="numeric">Bytes</th>
-                <th class="numeric">TTL</th>
-                <th>Age</th>
-            </tr>
-        </thead>
-        <tbody>
+<h2>Outbound queue <span id="outbound-count" class="pill @(Model.OutboundQueue.Count == 0 ? "" : "warn")">@Model.OutboundQueue.Count</span></h2>
+<p class="muted-inline">Messages waiting to be forwarded to another node. The forwarder loop wakes periodically, picks one, and sends it via the cheapest reachable bearer. <span class="muted">Auto-refreshes every 5s.</span></p>
+<table id="outbound-table">
+    <thead>
+        <tr>
+            <th>Id</th>
+            <th>Destination</th>
+            <th>From</th>
+            <th class="numeric">Bytes</th>
+            <th class="numeric">TTL</th>
+            <th>Age</th>
+        </tr>
+    </thead>
+    <tbody id="outbound-body">
+    @if (Model.OutboundQueue.Count == 0)
+    {
+        <tr><td colspan="6" class="muted" style="text-align:center;">No outbound forwards in flight.</td></tr>
+    }
+    else
+    {
         @foreach (var m in Model.OutboundQueue)
         {
             <tr>
@@ -172,30 +171,30 @@ else
                 <td class="muted">@IndexModel.Age(m.CreatedAt)</td>
             </tr>
         }
-        </tbody>
-    </table>
-}
+    }
+    </tbody>
+</table>
 
-<h2>Local inbox <span class="pill @(Model.LocalInbox.Count == 0 ? "" : "info")">@Model.LocalInbox.Count</span></h2>
+<h2>Local inbox <span id="inbox-count" class="pill @(Model.LocalInbox.Count == 0 ? "" : "info")">@Model.LocalInbox.Count</span></h2>
 <p class="muted-inline">Messages arrived for apps on this node, waiting for the app to ack via MQTT (<code>dapps/ack/&lt;app&gt;</code>) or REST.</p>
-@if (Model.LocalInbox.Count == 0)
-{
-    <p class="muted">No undelivered messages for local apps.</p>
-}
-else
-{
-    <table>
-        <thead>
-            <tr>
-                <th>Id</th>
-                <th>App</th>
-                <th>From</th>
-                <th class="numeric">Bytes</th>
-                <th class="numeric">TTL</th>
-                <th>Age</th>
-            </tr>
-        </thead>
-        <tbody>
+<table id="inbox-table">
+    <thead>
+        <tr>
+            <th>Id</th>
+            <th>App</th>
+            <th>From</th>
+            <th class="numeric">Bytes</th>
+            <th class="numeric">TTL</th>
+            <th>Age</th>
+        </tr>
+    </thead>
+    <tbody id="inbox-body">
+    @if (Model.LocalInbox.Count == 0)
+    {
+        <tr><td colspan="6" class="muted" style="text-align:center;">No undelivered messages for local apps.</td></tr>
+    }
+    else
+    {
         @foreach (var m in Model.LocalInbox)
         {
             var atIdx = m.Destination.IndexOf('@');
@@ -209,9 +208,65 @@ else
                 <td class="muted">@IndexModel.Age(m.CreatedAt)</td>
             </tr>
         }
-        </tbody>
-    </table>
-}
+    }
+    </tbody>
+</table>
+
+<script>
+    // Poll /Events/queue every 5s and rerender just the two
+    // <tbody>s + the count pills. No full-page reload — keeps
+    // scroll position, open <details>, focus, etc.
+    (function () {
+        const fmtAge = (s) => {
+            if (s < 90) return `${s}s`;
+            const m = Math.floor(s / 60);
+            if (m < 90) return `${m}m`;
+            const h = Math.floor(s / 3600);
+            if (h < 36) return `${h}h`;
+            return `${Math.floor(s / 86400)}d`;
+        };
+        const escape = (s) => String(s).replace(/[&<>"']/g, c =>
+            ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        const render = (rows, cols) => {
+            if (!rows.length) {
+                return `<tr><td colspan="${cols.length}" class="muted" style="text-align:center;">empty</td></tr>`;
+            }
+            return rows.map(r => '<tr>' + cols.map(c => c(r)).join('') + '</tr>').join('');
+        };
+        const outboundCols = [
+            r => `<td><code>${escape(r.id)}</code></td>`,
+            r => `<td><code>${escape(r.destination)}</code></td>`,
+            r => `<td><code>${escape(r.sourceCallsign)}</code></td>`,
+            r => `<td class="numeric">${r.bytes}</td>`,
+            r => `<td class="numeric">${r.ttl ?? '—'}</td>`,
+            r => `<td class="muted">${fmtAge(r.ageSeconds)}</td>`,
+        ];
+        const inboxCols = [
+            r => `<td><code>${escape(r.id)}</code></td>`,
+            r => `<td><code>${escape(r.app)}</code></td>`,
+            r => `<td><code>${escape(r.sourceCallsign)}</code></td>`,
+            r => `<td class="numeric">${r.bytes}</td>`,
+            r => `<td class="numeric">${r.ttl ?? '—'}</td>`,
+            r => `<td class="muted">${fmtAge(r.ageSeconds)}</td>`,
+        ];
+        async function poll() {
+            try {
+                const res = await fetch('/Events/queue', { credentials: 'same-origin' });
+                if (!res.ok) return;
+                const d = await res.json();
+                document.getElementById('outbound-body').innerHTML = render(d.outbound, outboundCols);
+                document.getElementById('inbox-body').innerHTML = render(d.localInbox, inboxCols);
+                const oc = document.getElementById('outbound-count');
+                oc.textContent = d.outbound.length;
+                oc.className = 'pill' + (d.outbound.length ? ' warn' : '');
+                const ic = document.getElementById('inbox-count');
+                ic.textContent = d.localInbox.length;
+                ic.className = 'pill' + (d.localInbox.length ? ' info' : '');
+            } catch { /* swallow; try again next tick */ }
+        }
+        setInterval(poll, 5000);
+    })();
+</script>
 
 <h2>Neighbours</h2>
 @if (Model.Neighbours.Count == 0)
