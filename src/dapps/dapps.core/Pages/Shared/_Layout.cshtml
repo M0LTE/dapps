@@ -40,12 +40,36 @@
         .err-banner { background: #fdecea; border: 1px solid #f5b3ad; padding: 0.5rem 0.75rem;
                       border-radius: 4px; margin: 0.5rem 0; font-size: 0.9rem; }
         code { background: #f0f0f0; padding: 0.05rem 0.3rem; border-radius: 3px; font-size: 0.9em; }
+        details.edit-block { margin: 0.5rem 0 1rem; padding: 0.4rem 0.6rem;
+                             background: #f8f8f8; border: 1px dashed #d0d0d0; border-radius: 4px; }
+        details.edit-block summary { cursor: pointer; font-size: 0.85rem; color: #555;
+                                     padding: 0.2rem 0; user-select: none; }
+        details.edit-block[open] { background: #fff; border-style: solid; padding: 0.6rem 0.8rem; }
+        form.edit-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+                         gap: 0.4rem 0.8rem; margin-top: 0.5rem; }
+        form.edit-form label { display: block; font-size: 0.85rem; color: #555; }
+        form.edit-form label.checkbox-label { font-size: 0.9rem; color: #222;
+                                              display: flex; align-items: center; gap: 0.4rem; }
+        form.edit-form input[type=text], form.edit-form input[type=password],
+        form.edit-form input[type=number], form.edit-form select {
+            width: 100%; padding: 0.3rem 0.4rem; border: 1px solid #ccc;
+            border-radius: 3px; font: inherit; box-sizing: border-box;
+        }
+        form.edit-form button { grid-column: 1 / -1; justify-self: start;
+                                padding: 0.35rem 0.9rem; border: 1px solid #06c;
+                                background: #06c; color: white; border-radius: 3px;
+                                cursor: pointer; font: inherit; margin-top: 0.4rem; }
+        form.edit-form button:hover { background: #048; }
+        .link-btn { background: none; border: 0; color: #06c; cursor: pointer;
+                    text-decoration: underline; padding: 0; font: inherit; }
+        .link-btn:hover { color: #048; }
+        a.signout { float: right; font-size: 0.85rem; color: #06c; text-decoration: none; font-weight: normal; }
+        a.signout:hover { text-decoration: underline; }
     </style>
 </head>
 <body>
     <nav>
         <a href="/">Dashboard</a>
-        <a href="/scalar">API</a>
     </nav>
     @RenderBody()
 </body>
