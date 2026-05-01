@@ -295,6 +295,41 @@ Direction: native single-file binaries published as GitHub Release assets, not a
 
 README "Getting started" rewritten end-to-end for the native-binary distribution: prerequisites, the BPQ-side `bpq32.cfg` snippet (AGW + Apps Interface slot + APPLICATION line with `TRANS`), download/run instructions for each release artifact, env-var bootstrap, neighbour add/remove via REST, and a verification step that connects from a node prompt and sees the `DAPPSv1>` banner. Troubleshooting block covers the usual surprises (AGW config, callsign typos, BPQ port-byte indexing, `TRANS` flag missing). Backups + upgrade notes added.
 
+### C5. Self-update
+
+Manual `curl` + `install` + `systemctl restart` is workable for the operator running through the README, miserable for a deployed estate. Goal: keep the bar of "single static binary, drop it in `/opt`, run via systemd" but stop expecting the sysop to chase release notes by hand.
+
+Three phases by complexity / risk; ship in order, evaluate before moving on.
+
+#### C5.1 — Visibility
+Cheapest, highest-value-per-line. dapps polls `https://api.github.com/repos/M0LTE/dapps/releases/latest` on a slow cadence (a few hours, randomised offset) and surfaces "v0.X.Y available" with the changelog link in the dashboard. No moving parts that need root; sysop still runs the upgrade recipe. Just stops people running ancient builds because nobody told them.
+
+- New `UpdateChecker` hosted service, polls + caches latest release info.
+- Dashboard banner / "Update available" pill in the header.
+- Setting to opt out (some sysops will pin to a specific version on purpose).
+- All platforms (Linux / Windows / macOS) get this — it's just a polling loop and a UI string.
+
+#### C5.2 — Triggered update (Linux / systemd)
+Sysop clicks a dashboard button (or POSTs `/Config/update`); dapps signals a separate privileged `dapps-updater.service` to do the swap. dapps itself stays unprivileged.
+
+- Companion `dapps-updater.service` + `.timer` that runs as root, polls a "ready to update" signal file written by dapps in `/var/lib/dapps/`, downloads the binary, atomic-swaps `/opt/dapps/dapps` (keeping `/opt/dapps/dapps.previous` as a rollback), `systemctl restart dapps.service`. If the new binary fails to start within a window, the updater restores `.previous` and restarts again.
+- The companion ships in a `scripts/dapps-updater/` directory with its own systemd unit + a one-line install recipe in the README.
+- API: `GET /Update/status` (current version, latest available, last check), `POST /Update/apply` (writes the signal file → updater picks up next tick).
+
+#### C5.3 — Auto-update on a schedule
+Off by default. Operator opts in: "auto-update during quiet hours, randomised offset within a window."
+
+- Adds an `AutoUpdate=true` config option + a `QuietHours` window (default 02:00–05:00 local).
+- Updater runs in this window, checks, applies, restarts.
+- Skips if traffic was forwarded in the last N minutes (don't reboot mid-conversation).
+- Per-major-version pinning option ("auto-update within 0.x but not across 0→1") so a backwards-incompatible bump doesn't surprise people overnight.
+
+#### Out of scope for now
+
+- Binary signing / signature verification. GitHub Releases over HTTPS is the trust model today; signing is its own initiative (Sigstore? minisign? — separate decision).
+- Channels (stable / beta / dev). YAGNI until we have releases that warrant the distinction.
+- Cross-platform privileged-update (Windows service control / launchd). Linux/systemd first; Windows + macOS get C5.1 (visibility) and stay manual otherwise.
+
 ## Phase D — web management UI
 
 **Goal:** sysops who want a GUI to inspect state, exercise the system, and verify config can do so without leaving a browser.
@@ -436,7 +471,7 @@ Roughly:
 6. **B1–B4** (channels-first-class discovery + cost-based resolver) — *done*. **B5** (learned-graph routing inside DAPPS, bearer-agnostic) remains, then **B6** (active discovery — connected-mode probe-and-map + HF NVIS solicit) on top.
 7. **E1–E4** (concepts + tutorial + reference + sample-app gallery) — *done*. Developer guide is complete; third-party app development is unlocked.
 8. **H** (concrete bearer integrations — MeshCore Companion, MeshCore KISS, RHP, …) on its own track, doesn't gate the routing or developer-guide work.
-9. **A3** — *done*. **C3, D3, D4, F1–F4** in parallel as polish.
+9. **A3** — *done*. **C3, C5 (self-update), D3, D4, F1–F4** in parallel as polish — though C5.1 (update-availability banner) is cheap and unblocks the deployed-estate-staying-current concern, so worth pulling forward.
 10. **Phase G** (second-language reference impl) once the spec has been exercised by enough first-party apps that the ambiguities are likely to surface.
 
 Phases A and C can ship as a single "v0.1.0 — runnable" release. Phase D as "v0.2.0 — operable". Phase B + E as "v1.0.0 — networked + developable".
