@@ -33,8 +33,44 @@ public class OutboundMessageManager(
     private readonly IReadOnlyList<IDappsBackhaul> backhauls = backhauls.ToList();
     private readonly OperationalMetrics metrics = metrics ?? new OperationalMetrics();
 
+    /// <summary>
+    /// Mutex on <see cref="DoRun"/> so concurrent triggers
+    /// (background ticker + manual <c>POST /Message/dorun</c>, or two
+    /// manual POSTs in flight) don't race through the same pending
+    /// list and double-send. Calls that arrive while a run is
+    /// in-flight return immediately — whatever's pending will be
+    /// picked up on the next tick anyway.
+    /// </summary>
+    private readonly SemaphoreSlim runLock = new(1, 1);
+
+    /// <summary>
+    /// Internal counter incremented at the start of each *actually
+    /// executed* run (skipped contended calls don't bump it). Used by
+    /// the auto-forwarder integration test to verify the background
+    /// service is ticking; not exposed to operators.
+    /// </summary>
+    internal int RunCount;
+
     public async Task DoRun(CancellationToken stoppingToken = default)
     {
+        if (!await runLock.WaitAsync(0, stoppingToken))
+        {
+            logger.LogDebug("DoRun skipped: another run is already in flight");
+            return;
+        }
+        try
+        {
+            await DoRunCore(stoppingToken);
+        }
+        finally
+        {
+            runLock.Release();
+        }
+    }
+
+    private async Task DoRunCore(CancellationToken stoppingToken)
+    {
+        Interlocked.Increment(ref RunCount);
         logger.LogInformation("Starting a run");
 
         var optionsValue = options.CurrentValue;

@@ -220,16 +220,17 @@ trigger_run() {
     curl -fsS -o /dev/null -b "$cookie" -X POST "http://127.0.0.1:${HTTP_PORT[$n]}/Message/dorun" || true
 }
 
-# Drain queues by running every node's forwarder a few times. Multi-hop
-# messages need one round per hop, so 6 rounds covers paths of length
-# up to 5 with comfortable headroom.
+# Drain queues. With the auto-forwarder hosted service on a 5-second
+# tick, a 4-hop chain takes ~20s to drain on its own. To make the
+# canned exercises finish quickly, we manually kick every node every
+# second for 8 rounds — each round each relay forwards whatever just
+# arrived from the upstream kick. The DoRun mutex makes the kicks
+# benign even when they overlap the auto-forwarder's own tick.
 drain_queues() {
-    for _ in 1 2 3 4 5 6; do
-        for n in "${NODES[@]}"; do
-            trigger_run "$n" &
-        done
+    for _ in 1 2 3 4 5 6 7 8; do
+        for n in "${NODES[@]}"; do trigger_run "$n" & done
         wait
-        sleep 0.3
+        sleep 1
     done
 }
 

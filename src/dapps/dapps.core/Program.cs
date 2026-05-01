@@ -17,9 +17,13 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 builder.Services.AddRazorPages();
 builder.Services.AddHostedService<DbStartup>();
-builder.Services.AddOptions<SystemOptions>().Configure<OptionsRepo, ILogger<SystemOptions>>(async (o, db, logger) =>
+// Sync — Configure expects an Action, so an `async` lambda would
+// compile as async-void, fire-and-forget the GetOptions read, and
+// hand callers a SystemOptions instance with un-populated values.
+// Block here so the first resolution is deterministic.
+builder.Services.AddOptions<SystemOptions>().Configure<OptionsRepo, ILogger<SystemOptions>>((o, db, logger) =>
 {
-    var options = await db.GetOptions();
+    var options = db.GetOptions().GetAwaiter().GetResult();
     o.NodeHost = options.Single(o => o.Option == "NodeHost").Value;
     o.AgwPort = int.Parse(options.Single(o => o.Option == "AgwPort").Value);
     o.DefaultBpqPort = int.Parse(options.Single(o => o.Option == "DefaultBpqPort").Value);
@@ -72,6 +76,9 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         options.SlidingExpiration = true;
     });
 builder.Services.AddSingleton<OutboundMessageManager>();
+// Auto-forwarder: ticks DoRun on a short cadence so submitted messages
+// move without a manual /Message/dorun poke. Manual poke still works.
+builder.Services.AddHostedService<OutboundForwarderService>();
 builder.Services.AddSingleton<IDappsOutboundTransport>(sp =>
 {
     var opts = sp.GetRequiredService<IOptionsMonitor<SystemOptions>>().CurrentValue;
