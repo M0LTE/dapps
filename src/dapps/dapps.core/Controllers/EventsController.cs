@@ -23,7 +23,8 @@ public sealed class EventsController(
     InboundEventBus bus,
     Database database,
     IOptionsMonitor<SystemOptions> options,
-    OperationalMetrics metrics) : ControllerBase
+    OperationalMetrics metrics,
+    UpdateChecker updateChecker) : ControllerBase
 {
     /// <summary>
     /// Live operational counters + per-neighbour state + recent-event
@@ -31,6 +32,24 @@ public sealed class EventsController(
     /// </summary>
     [HttpGet("health")]
     public OperationalMetrics.Snapshot GetHealth() => metrics.Take();
+
+    /// <summary>
+    /// Running version + latest known release. The dashboard polls this
+    /// on a slow cadence and surfaces "v0.X.Y available" if the latest
+    /// is newer. Plan C5.1.
+    /// </summary>
+    [HttpGet("version")]
+    public VersionStatus GetVersion()
+    {
+        var latest = updateChecker.Latest;
+        return new VersionStatus(
+            Current: updateChecker.Current,
+            IsDevBuild: updateChecker.IsDevBuild,
+            Latest: latest?.Tag,
+            ReleaseUrl: latest?.Url,
+            IsAvailable: updateChecker.UpdateAvailable,
+            FetchedAt: latest?.FetchedAt);
+    }
 
     /// <summary>
     /// Recently dropped messages — TTL-expired, hash-mismatch, etc. —
@@ -150,6 +169,14 @@ public sealed record QueueSnapshot(
     int UndeliveredLocal,
     IReadOnlyList<QueueRow> Outbound,
     IReadOnlyList<QueueRow> LocalInbox);
+
+public sealed record VersionStatus(
+    string Current,
+    bool IsDevBuild,
+    string? Latest,
+    string? ReleaseUrl,
+    bool IsAvailable,
+    DateTime? FetchedAt);
 
 public sealed record DroppedMessageRow(
     string Id,
