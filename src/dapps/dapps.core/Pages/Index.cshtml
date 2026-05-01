@@ -59,6 +59,28 @@
         <div class="value">@(Model.Options.AuthRequired ? "yes" : "no")</div>
     </div>
 </div>
+<details class="edit-block">
+    <summary>Edit configuration</summary>
+    <p class="muted">Restart required for callsign, BPQ AGW host/port, MQTT port, UDP listener port to take effect.</p>
+    <form class="edit-form" onsubmit="dappsSaveConfig(event)">
+        <label>Callsign <input name="Callsign" value="@Model.Options.Callsign" required /></label>
+        <label>Node host <input name="NodeHost" value="@Model.Options.NodeHost" required /></label>
+        <label>AGW port <input name="AgwPort" type="number" min="1" max="65535" value="@Model.Options.AgwPort" required /></label>
+        <label>Default BPQ port <input name="DefaultBpqPort" type="number" min="0" max="255" value="@Model.Options.DefaultBpqPort" required /></label>
+        <label>MQTT port <input name="MqttPort" type="number" min="1" max="65535" value="@Model.Options.MqttPort" required /></label>
+        <label>UDP listener port (0 = disabled) <input name="UdpListenPort" type="number" min="0" max="65535" value="@Model.Options.UdpListenPort" required /></label>
+        <label class="checkbox-label"><input name="AuthRequired" type="checkbox" @(Model.Options.AuthRequired ? "checked" : "") /> App-interface auth required</label>
+        <button type="submit">Save</button>
+    </form>
+</details>
+<details class="edit-block">
+    <summary>Rotate admin password</summary>
+    <form class="edit-form" onsubmit="dappsRotatePassword(event)">
+        <label>New password <input name="password" type="password" required minlength="8" /></label>
+        <button type="submit">Set</button>
+    </form>
+    <p class="muted">Existing session stays valid until logout or 90-day expiry — only future logins use the new password.</p>
+</details>
 
 <h2>Queue</h2>
 <div class="grid">
@@ -83,7 +105,7 @@
 <h2>Neighbours</h2>
 @if (Model.Neighbours.Count == 0)
 {
-    <p class="muted">No neighbours configured. POST to <code>/Neighbours</code> to add one.</p>
+    <p class="muted">No neighbours configured.</p>
 }
 else
 {
@@ -93,6 +115,7 @@ else
                 <th>Callsign</th>
                 <th>BPQ port</th>
                 <th>UDP endpoint</th>
+                <th></th>
             </tr>
         </thead>
         <tbody>
@@ -102,16 +125,26 @@ else
                 <td>@n.Callsign</td>
                 <td class="numeric">@(n.BpqPort?.ToString() ?? "—")</td>
                 <td>@(n.UdpEndpoint ?? "—")</td>
+                <td><button class="link-btn" onclick="dappsDeleteNeighbour('@n.Callsign')">remove</button></td>
             </tr>
         }
         </tbody>
     </table>
 }
+<details class="edit-block">
+    <summary>Add neighbour</summary>
+    <form class="edit-form" onsubmit="dappsAddNeighbour(event)">
+        <label>Callsign <input name="callsign" required placeholder="GB7XYZ" /></label>
+        <label>BPQ port <input name="bpqPort" type="number" min="0" max="255" placeholder="0" /></label>
+        <label>UDP endpoint (optional) <input name="udpEndpoint" placeholder="host:port" /></label>
+        <button type="submit">Add / update</button>
+    </form>
+</details>
 
 <h2>Discovery channels</h2>
 @if (Model.DiscoveryChannels.Count == 0)
 {
-    <p class="muted">No discovery channels configured. POST to <code>/DiscoveryChannels</code> with <code>{"Bearer":"agw","ChannelKey":"1","LinkClass":"VhfUhfFm"}</code> (or <code>"udp"</code> + a multicast endpoint) to start beaconing.</p>
+    <p class="muted">No discovery channels configured.</p>
 }
 else
 {
@@ -125,6 +158,7 @@ else
                 <th>Beacon every</th>
                 <th>Advertised TTL</th>
                 <th>Enabled</th>
+                <th></th>
             </tr>
         </thead>
         <tbody>
@@ -138,11 +172,34 @@ else
                 <td class="numeric">@c.BeaconIntervalSeconds s</td>
                 <td class="numeric">@c.AdvertisedTtlSeconds s</td>
                 <td>@(c.Enabled ? "yes" : "no")</td>
+                <td><button class="link-btn" onclick="dappsDeleteChannel(@c.Id)">remove</button></td>
             </tr>
         }
         </tbody>
     </table>
 }
+<details class="edit-block">
+    <summary>Add discovery channel</summary>
+    <form class="edit-form" onsubmit="dappsAddChannel(event)">
+        <label>Bearer
+            <select name="bearer">
+                <option value="agw">agw</option>
+                <option value="udp">udp</option>
+            </select>
+        </label>
+        <label>Channel key <input name="channelKey" required placeholder="0 (BPQ port byte) or 239.0.0.1:54321" /></label>
+        <label>Link class
+            <select name="linkClass">
+                <option>VhfUhfFm</option>
+                <option>MeshCore</option>
+                <option>Hf</option>
+                <option>LanMulticast</option>
+                <option>InternetIp</option>
+            </select>
+        </label>
+        <button type="submit">Add / update</button>
+    </form>
+</details>
 
 <h2>Discovered peers</h2>
 @if (Model.DiscoveredPeers.Count == 0)
@@ -285,3 +342,83 @@ else
 
     <button type="submit">Queue message</button>
 </form>
+
+<script>
+    // Inline edit handlers for the configuration / neighbour / channel
+    // forms. Each posts JSON to the existing controllers and reloads on
+    // success — auth piggy-backs on the dapps.admin cookie the dashboard
+    // is already loaded under.
+    async function dappsPostJson(url, body, method) {
+        const res = await fetch(url, {
+            method: method || 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: body == null ? null : JSON.stringify(body),
+        });
+        if (!res.ok && res.status !== 204) {
+            const text = await res.text();
+            alert(`Request failed (${res.status}): ${text}`);
+            return false;
+        }
+        return true;
+    }
+
+    async function dappsSaveConfig(ev) {
+        ev.preventDefault();
+        const f = ev.target;
+        const body = {
+            Callsign: f.Callsign.value,
+            NodeHost: f.NodeHost.value,
+            AgwPort: parseInt(f.AgwPort.value, 10),
+            DefaultBpqPort: parseInt(f.DefaultBpqPort.value, 10),
+            MqttPort: parseInt(f.MqttPort.value, 10),
+            UdpListenPort: parseInt(f.UdpListenPort.value, 10),
+            AuthRequired: f.AuthRequired.checked,
+        };
+        if (await dappsPostJson('/Config', body)) location.reload();
+    }
+
+    async function dappsRotatePassword(ev) {
+        ev.preventDefault();
+        const pwd = ev.target.password.value;
+        if (await dappsPostJson('/Config/admin-password', { password: pwd })) {
+            ev.target.reset();
+            alert('Password updated.');
+        }
+    }
+
+    async function dappsAddNeighbour(ev) {
+        ev.preventDefault();
+        const f = ev.target;
+        const body = {
+            Callsign: f.callsign.value,
+            BpqPort: f.bpqPort.value === '' ? null : parseInt(f.bpqPort.value, 10),
+            UdpEndpoint: f.udpEndpoint.value || null,
+        };
+        if (await dappsPostJson('/Neighbours', body)) location.reload();
+    }
+
+    async function dappsDeleteNeighbour(callsign) {
+        if (!confirm(`Remove neighbour ${callsign}?`)) return;
+        if (await dappsPostJson('/Neighbours/' + encodeURIComponent(callsign), null, 'DELETE')) {
+            location.reload();
+        }
+    }
+
+    async function dappsAddChannel(ev) {
+        ev.preventDefault();
+        const f = ev.target;
+        const body = {
+            Bearer: f.bearer.value,
+            ChannelKey: f.channelKey.value,
+            LinkClass: f.linkClass.value,
+        };
+        if (await dappsPostJson('/DiscoveryChannels', body)) location.reload();
+    }
+
+    async function dappsDeleteChannel(id) {
+        if (!confirm(`Remove discovery channel ${id}?`)) return;
+        if (await dappsPostJson('/DiscoveryChannels/' + id, null, 'DELETE')) {
+            location.reload();
+        }
+    }
+</script>
