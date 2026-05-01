@@ -22,8 +22,16 @@ namespace dapps.core.Controllers;
 public sealed class EventsController(
     InboundEventBus bus,
     Database database,
-    IOptionsMonitor<SystemOptions> options) : ControllerBase
+    IOptionsMonitor<SystemOptions> options,
+    OperationalMetrics metrics) : ControllerBase
 {
+    /// <summary>
+    /// Live operational counters + per-neighbour state + recent-event
+    /// ring. Polled by the dashboard's Health panel.
+    /// </summary>
+    [HttpGet("health")]
+    public OperationalMetrics.Snapshot GetHealth() => metrics.Take();
+
     /// <summary>
     /// Snapshot of the two operational queues (outbound forwards
     /// pending; messages for local apps not yet ack'd) plus

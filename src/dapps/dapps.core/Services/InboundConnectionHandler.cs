@@ -24,9 +24,11 @@ public class InboundConnectionHandler(
     string sourceCallsign,
     ILoggerFactory loggerFactory,
     Database database,
-    IBackhaulInbox inbox)
+    IBackhaulInbox inbox,
+    OperationalMetrics? metrics = null)
 {
     private readonly ILogger logger = loggerFactory.CreateLogger<InboundConnectionHandler>();
+    private readonly OperationalMetrics metrics = metrics ?? new OperationalMetrics();
 
     // Inactivity timeout per spec — AX.25 T3 default is 3 min; matching that
     // keeps DAPPS sessions tearing down on roughly the same cadence as the
@@ -280,6 +282,7 @@ public class InboundConnectionHandler(
         else
         {
             logger.LogWarning("Hash does not match - payload corrupt");
+            metrics.RecordHashMismatch(id, sourceCallsign);
             await stream.WriteAsync(Encoding.UTF8.GetBytes("bad " + id + "\n"));
         }
     }

@@ -46,6 +46,7 @@ builder.Services.AddSingleton<OptionsRepo>();
 builder.Services.AddSingleton<AppTokenStore>();
 builder.Services.AddSingleton<AdminPasswordStore>();
 builder.Services.AddSingleton<InboundEventBus>();
+builder.Services.AddSingleton<OperationalMetrics>();
 
 // Cookie auth for the dashboard / admin endpoints. Long sliding
 // expiry (90 days) — this is a sysop's home node, the cookie's

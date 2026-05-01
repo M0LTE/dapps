@@ -26,10 +26,12 @@ public class OutboundMessageManager(
     Database database,
     ILoggerFactory loggerFactory,
     IOptionsMonitor<SystemOptions> options,
-    IEnumerable<IDappsBackhaul> backhauls)
+    IEnumerable<IDappsBackhaul> backhauls,
+    OperationalMetrics? metrics = null)
 {
     private readonly ILogger logger = loggerFactory.CreateLogger<OutboundMessageManager>();
     private readonly IReadOnlyList<IDappsBackhaul> backhauls = backhauls.ToList();
+    private readonly OperationalMetrics metrics = metrics ?? new OperationalMetrics();
 
     public async Task DoRun(CancellationToken stoppingToken = default)
     {
@@ -48,6 +50,7 @@ public class OutboundMessageManager(
                 logger.LogWarning("Dropping message {0} for {1}: ttl expired ({2}s queued, original ttl={3}s)",
                     message.Id, message.Destination,
                     (int)(DateTime.UtcNow - message.CreatedAt).TotalSeconds, message.Ttl);
+                metrics.RecordTtlExpired(message.Id, message.Destination);
                 await database.DeleteMessage(message.Id);
                 continue;
             }
@@ -56,6 +59,7 @@ public class OutboundMessageManager(
             if (route is null)
             {
                 logger.LogWarning("No route for {0}, leaving in queue", message.Id);
+                metrics.RecordNoRoute(message.Id, message.Destination);
                 continue;
             }
 
@@ -79,12 +83,14 @@ public class OutboundMessageManager(
             if (result.Accepted)
             {
                 logger.LogInformation("Remote end accepted message {0} (via {1})", message.Id, backhaul.GetType().Name);
+                metrics.RecordForwardSuccess(route.Callsign, message.Payload.Length);
                 await database.MarkMessageAsForwarded(message.Id);
             }
             else
             {
                 logger.LogError("Failed to forward message {0} to {1} via {2}: {3}",
                     message.Id, route.Callsign, backhaul.GetType().Name, result.Error);
+                metrics.RecordForwardFailure(route.Callsign, message.Payload.Length, result.Error);
             }
         }
     }

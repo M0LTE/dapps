@@ -37,11 +37,13 @@ public sealed class AgwInboundService(
     Database database,
     IBackhaulInbox inbox,
     ILoggerFactory loggerFactory,
-    ILogger<AgwInboundService> logger) : IHostedService
+    ILogger<AgwInboundService> logger,
+    OperationalMetrics? metrics = null) : IHostedService
 {
     private static readonly TimeSpan ReconnectBackoff = TimeSpan.FromSeconds(5);
 
     private readonly CancellationTokenSource stoppingTokenSource = new();
+    private readonly OperationalMetrics metrics = metrics ?? new OperationalMetrics();
     private Task? loopTask;
 
     public Task StartAsync(CancellationToken cancellationToken)
@@ -105,6 +107,7 @@ public sealed class AgwInboundService(
         // dispatched to.
         await framing.WriteFrameAsync(
             new AgwFrame(0, 'X', 0, localCall, "", []), ct);
+        metrics.RecordAgwReconnect();
 
         var sessions = new ConcurrentDictionary<SessionKey, MultiplexedAgwSessionStream>();
         try
@@ -177,6 +180,7 @@ public sealed class AgwInboundService(
         var local = frame.CallTo;
         var port = frame.Port;
         logger.LogInformation("AGW inbound: 'C' from {0} to {1} on port {2}", remote, local, port);
+        metrics.RecordInboundConnect(remote);
 
         // Some AGW emulators emit a "*** CONNECTED..." status string in
         // the 'C' payload; that's noise from dapps's POV and we just
@@ -204,7 +208,7 @@ public sealed class AgwInboundService(
         }
 
         var handler = new InboundConnectionHandler(
-            stream, sourceCallsign: remote, loggerFactory, database, inbox);
+            stream, sourceCallsign: remote, loggerFactory, database, inbox, metrics);
 
         _ = Task.Run(async () =>
         {
