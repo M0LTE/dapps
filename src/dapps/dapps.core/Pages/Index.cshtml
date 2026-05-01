@@ -116,6 +116,148 @@
     <p class="muted">Existing session stays valid until logout or 90-day expiry — only future logins use the new password.</p>
 </details>
 
+<h2>Health</h2>
+<p class="muted-inline">Process-lifetime counters + per-neighbour link state + a ring of recent forwarder / AGW / inbound-validation events. Resets on restart.</p>
+<div class="grid">
+    <div class="card">
+        <div class="label">Forward attempts</div>
+        <div class="value"><span id="m-forward-attempts">—</span></div>
+        <div class="caption"><span id="m-forward-success">—</span> ok / <span id="m-forward-failure">—</span> failed</div>
+    </div>
+    <div class="card">
+        <div class="label">TTL drops</div>
+        <div class="value"><span id="m-ttl">—</span></div>
+        <div class="caption">messages whose residual TTL hit zero in our queue</div>
+    </div>
+    <div class="card">
+        <div class="label">No-route skips</div>
+        <div class="value"><span id="m-noroute">—</span></div>
+        <div class="caption">no neighbour / discovered peer / route-hint matched</div>
+    </div>
+    <div class="card">
+        <div class="label">AGW reconnects</div>
+        <div class="value"><span id="m-agw-reconnects">—</span></div>
+        <div class="caption" id="m-agw-last">never</div>
+    </div>
+    <div class="card">
+        <div class="label">Inbound L2 connects</div>
+        <div class="value"><span id="m-inbound">—</span></div>
+        <div class="caption">'C' frames dispatched to us by BPQ</div>
+    </div>
+    <div class="card">
+        <div class="label">Hash mismatches</div>
+        <div class="value"><span id="m-hash">—</span></div>
+        <div class="caption">received payload whose sha1 didn't match the offered id</div>
+    </div>
+</div>
+
+<h3 class="subhead">Per-neighbour link state</h3>
+<table id="neigh-health-table">
+    <thead>
+        <tr>
+            <th>Callsign</th>
+            <th class="numeric">OK</th>
+            <th class="numeric">Failed</th>
+            <th>Last success</th>
+            <th>Last failure</th>
+            <th>Last error</th>
+        </tr>
+    </thead>
+    <tbody id="neigh-health-body">
+        <tr><td colspan="6" class="muted" style="text-align:center;">No forwarding activity yet.</td></tr>
+    </tbody>
+</table>
+
+<h3 class="subhead">Recent activity</h3>
+<table id="recent-events-table">
+    <thead>
+        <tr>
+            <th>Time (UTC)</th>
+            <th>Kind</th>
+            <th>Detail</th>
+        </tr>
+    </thead>
+    <tbody id="recent-events-body">
+        <tr><td colspan="3" class="muted" style="text-align:center;">No events yet.</td></tr>
+    </tbody>
+</table>
+
+<script>
+    // Poll /Events/health every 5s; re-render counters, neighbour
+    // table, and recent-events ring. Same DOM-swap pattern as the
+    // queue tables — no full-page reload.
+    (function () {
+        const fmtAt = (iso) => iso ? new Date(iso).toISOString().replace('T', ' ').substring(0, 19) : '—';
+        const fmtAgo = (iso) => {
+            if (!iso) return '—';
+            const s = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+            if (s < 90) return `${s}s ago`;
+            const m = Math.floor(s / 60);
+            if (m < 90) return `${m}m ago`;
+            const h = Math.floor(s / 3600);
+            if (h < 36) return `${h}h ago`;
+            return `${Math.floor(s / 86400)}d ago`;
+        };
+        const escape = (s) => String(s ?? '').replace(/[&<>"']/g, c =>
+            ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        const setText = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+
+        async function poll() {
+            try {
+                const res = await fetch('/Events/health', { credentials: 'same-origin' });
+                if (!res.ok) return;
+                const d = await res.json();
+                setText('m-forward-attempts', d.forwardAttempts);
+                setText('m-forward-success', d.forwardSuccess);
+                setText('m-forward-failure', d.forwardFailure);
+                setText('m-ttl', d.ttlExpiredDrops);
+                setText('m-noroute', d.noRouteSkips);
+                setText('m-agw-reconnects', d.agwReconnects);
+                setText('m-agw-last', d.agwLastReconnectAt ? `last ${fmtAgo(d.agwLastReconnectAt)}` : 'never');
+                setText('m-inbound', d.inboundConnects);
+                setText('m-hash', d.hashMismatches);
+
+                const nbody = document.getElementById('neigh-health-body');
+                if (!d.neighbours.length) {
+                    nbody.innerHTML = '<tr><td colspan="6" class="muted" style="text-align:center;">No forwarding activity yet.</td></tr>';
+                } else {
+                    nbody.innerHTML = d.neighbours.map(n =>
+                        `<tr>` +
+                        `<td><code>${escape(n.callsign)}</code></td>` +
+                        `<td class="numeric">${n.successCount}</td>` +
+                        `<td class="numeric">${n.failureCount}</td>` +
+                        `<td class="muted">${fmtAgo(n.lastSuccessAt)}</td>` +
+                        `<td class="muted">${fmtAgo(n.lastFailureAt)}</td>` +
+                        `<td class="muted">${escape(n.lastError ?? '—')}</td>` +
+                        `</tr>`
+                    ).join('');
+                }
+
+                const ebody = document.getElementById('recent-events-body');
+                if (!d.recentEvents.length) {
+                    ebody.innerHTML = '<tr><td colspan="3" class="muted" style="text-align:center;">No events yet.</td></tr>';
+                } else {
+                    ebody.innerHTML = d.recentEvents.map(e =>
+                        `<tr>` +
+                        `<td><code>${fmtAt(e.at).substring(11, 19)}</code></td>` +
+                        `<td><span class="pill ${kindClass(e.kind)}">${escape(e.kind)}</span></td>` +
+                        `<td class="muted">${escape(e.summary)}</td>` +
+                        `</tr>`
+                    ).join('');
+                }
+            } catch { /* try again next tick */ }
+        }
+        function kindClass(k) {
+            if (k.endsWith('.ok')) return 'ok';
+            if (k.endsWith('.fail') || k.endsWith('.mismatch') || k.endsWith('.expired') || k.endsWith('.none')) return 'warn';
+            if (k.startsWith('agw.')) return 'info';
+            return '';
+        }
+        poll();
+        setInterval(poll, 5000);
+    })();
+</script>
+
 <h2>Queue at a glance</h2>
 <div class="grid">
     <div class="card">
