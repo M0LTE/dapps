@@ -263,7 +263,7 @@ You'll need:
 - A licensed callsign with an unused SSID for DAPPS to live under (e.g. `M0LTE-9`).
 - A Linux, macOS, or Windows host that can reach BPQ's `AGWPORT` over TCP. Same machine is the simplest case but not required.
 
-DAPPS ships as a self-contained single-file binary; no .NET runtime install, no Docker required.
+DAPPS ships as a self-contained single-file binary; no .NET runtime install, no Docker required. The Linux binaries are built against the .NET 8 LTS baseline (glibc 2.23+), so they run on Raspberry Pi OS 11 (Bullseye) and newer, Debian 11+, Ubuntu 18.04+ — anything modern enough to be in active use.
 
 ### 1. Configure BPQ for DAPPS
 
@@ -274,15 +274,22 @@ DAPPS speaks AGW to BPQ for both inbound and outbound. One TCP connection to BPQ
 AGWPORT=8000
 AGWSESSIONS=20
 ; AGWMASK is a bitmask of APPLICATION slots an AGW client may register
-; against. 1 = slot 1; 0xFF = slots 1..8.
-AGWMASK=1
+; against. Bit N enables slot N+1: 0x01 = slot 1, 0x02 = slot 2,
+; 0x04 = slot 3, 0x08 = slot 4, 0x10 = slot 5, 0xFF = slots 1..8.
+; If you're going to put DAPPS in slot 5, AGWMASK must include 0x10.
+; The simplest thing is 0xFF — permissive within the first 8 slots.
+AGWMASK=0xFF
 
-; --- Wire the DAPPS callsign to APPLICATION slot 1 ---
-; The CMD field is intentionally empty: with AGW, BPQ doesn't run a
-; node command on inbound — it just dispatches the inbound L2 'C'
-; frame to whoever has registered the callsign via an AGW 'X' frame.
-; The line is still required: without it, BPQ's L2 layer doesn't
-; accept frames addressed to the callsign and the AGW registration
+; --- Wire the DAPPS callsign to an APPLICATION slot ---
+; Pick a slot number that isn't already in use by another APPLICATION
+; line in your config. (Existing nodes often have BBS, CHAT, etc. on
+; slots 1 and 2.)
+;
+; The CMD field (between DAPPS and the callsign) is intentionally empty:
+; with AGW, BPQ doesn't run a node command on inbound — it just dispatches
+; the inbound L2 'C' frame to whoever has registered the callsign via an
+; AGW 'X' frame. The line is still required: without it, BPQ's L2 layer
+; doesn't accept frames addressed to the callsign and the AGW registration
 ; is silently inert (linbpq apps-interface.md).
 APPLICATIONS=DAPPS
 APPL1CALL=M0LTE-9
@@ -290,7 +297,7 @@ APPL1ALIAS=DAPPS
 APPLICATION 1,DAPPS,,M0LTE-9,DAPPS,0
 ```
 
-Replace `M0LTE-9` with your DAPPS callsign. Restart linbpq for the changes to take effect.
+Replace `M0LTE-9` with your DAPPS callsign. **If `AGWPORT=8000` clashes with something else on the host** (it's a popular default — webmail, etc.), pick another free port; `AGWPORT=8002` is what gb7rdg-node uses for example. Restart linbpq for the changes to take effect.
 
 DAPPS connects to `AGWPORT` from wherever it runs. BPQ doesn't need to reach DAPPS — DAPPS is the AGW client. So **DAPPS and BPQ can live on different hosts** with nothing more than a network route between them; expose `AGWPORT` (firewall it appropriately) on the BPQ host and point DAPPS's `DAPPS_NODE_HOST` at it.
 
@@ -322,14 +329,20 @@ DAPPS reads its first-time configuration from environment variables; on subseque
 ```sh
 export DAPPS_CALLSIGN=M0LTE-9
 export DAPPS_NODE_HOST=127.0.0.1     # where BPQ is listening
-export DAPPS_AGW_PORT=8000           # BPQ AGWPORT
-export DAPPS_DEFAULT_BPQ_PORT=0      # 0-indexed BPQ port byte to use for outbound by default
+export DAPPS_AGW_PORT=8000           # match BPQ's AGWPORT
+export DAPPS_DEFAULT_BPQ_PORT=0      # 0-indexed BPQ port byte for outbound (BPQ port 1)
 export DAPPS_MQTT_PORT=1883          # embedded MQTT broker port (for app subscribers)
+export DAPPS_ADMIN_PASSWORD=...      # dashboard sysop password (optional; if unset, dashboard is open)
+
+# Where the HTTP API binds. Default is localhost:5000 — override to expose on the LAN.
+export ASPNETCORE_URLS=http://127.0.0.1:5000
 
 ./dapps
 ```
 
 DAPPS refuses to start with the placeholder `N0CALL` value — set `DAPPS_CALLSIGN` to a real callsign before the first run, or POST to `/Config` after it.
+
+`DAPPS_ADMIN_PASSWORD` is what locks the dashboard and admin endpoints (`/Config`, `/Neighbours`, `/AppTokens`). It's only consulted on first start — once the password hash lands in `dapps.db`, the env var is ignored. **Set it before exposing the dashboard off `127.0.0.1`** (the default bind is loopback). Rotate later via `POST /Config/admin-password` or the dashboard's own form.
 
 You should see startup logs ending with something like:
 
@@ -339,17 +352,15 @@ MQTT broker: localhost:1883
 Now listening on: http://localhost:5000
 ```
 
-Browse to <http://localhost:5000/> for the dashboard (queue depths, neighbour list, discovered peers, recent messages, send-test-message form).
+Browse to <http://localhost:5000/> for the dashboard (queue panels, neighbour list, discovered peers, live inbound feed, send-test-message form, edit-config sections). Sign in with whatever you set `DAPPS_ADMIN_PASSWORD` to.
 
-To bind the HTTP API on a different host/port, set `ASPNETCORE_URLS` before launch — e.g. `ASPNETCORE_URLS=http://0.0.0.0:8080`.
+To bind the HTTP API on a different interface or port, set `ASPNETCORE_URLS` before launch — e.g. `ASPNETCORE_URLS=http://0.0.0.0:5000` to make the dashboard reachable from elsewhere on the LAN, or `http://0.0.0.0:8080` to move ports.
 
-App-interface auth is opt-in: by default the MQTT broker and `/AppApi/*` endpoints accept anyone reachable on those ports (fine for single-host loopback, not for shared nodes). To enable enforcement:
+App-interface auth (separate from the dashboard's admin password — it gates `/AppApi/*` and the MQTT broker for *applications*) is opt-in. By default any app on the host can act as any app name; to require per-app tokens:
 
 1. Mint a token for each app: `curl -X POST http://localhost:5000/AppTokens -H 'content-type: application/json' -d '{"App":"myapp"}'` — capture the returned `token` (it's only shown once).
 2. POST `{"AuthRequired":true, ...}` to `/Config` (or set `DAPPS_AUTH_REQUIRED=true` before first start).
 3. Restart. MQTT clients now CONNECT with `username=app` + `password=token`; REST clients send `Authorization: Bearer <token>` on `/AppApi/*`. Topic / endpoint scope is enforced — an app authenticated as `myapp` can only act on its own slot.
-
-The admin surfaces (`/Config`, `/Neighbours`, `/AppTokens`) remain unauthenticated — bind them to loopback or front them with a reverse proxy.
 
 ### 4. Add a neighbour
 
@@ -379,13 +390,131 @@ DAPPSv1>
 
 Type `info` for help, `q` to quit.
 
+### 6. Run as a system service
+
+The shell-based start above is fine for kicking the tyres. For a real deployment you want DAPPS coming up at boot, surviving crashes, logging to journald, with its files in conventional places. Here's the layout that's been validated end-to-end on Raspberry Pi OS — adapt for your distro / sysv init system as needed.
+
+**File layout:**
+
+| Path | What it is |
+|---|---|
+| `/opt/dapps/dapps` | the binary, root-owned, mode 755 |
+| `/etc/dapps.env` | env-var bootstrap (callsign, ports, admin password). Mode 640, group `dapps` |
+| `/var/lib/dapps/` | working directory; `dapps.db` lands here. Owned by the `dapps` user, mode 750 |
+| `/etc/systemd/system/dapps.service` | the unit file (below) |
+
+**Create the user, directories, and download the binary** (one-time, as root):
+
+```sh
+sudo useradd --system --shell /usr/sbin/nologin --home-dir /var/lib/dapps --no-create-home dapps
+sudo mkdir -p /opt/dapps /var/lib/dapps
+sudo chown dapps:dapps /var/lib/dapps && sudo chmod 750 /var/lib/dapps
+
+# Replace `linux-arm` with the RID for your platform.
+sudo curl -L --fail \
+    -o /opt/dapps/dapps \
+    https://github.com/M0LTE/dapps/releases/latest/download/dapps-linux-arm
+sudo chmod 755 /opt/dapps/dapps
+```
+
+**Write `/etc/dapps.env`:**
+
+```sh
+# /etc/dapps.env — sourced by the dapps systemd unit.
+DAPPS_CALLSIGN=M0LTE-9
+DAPPS_NODE_HOST=127.0.0.1
+DAPPS_AGW_PORT=8000
+DAPPS_DEFAULT_BPQ_PORT=0
+DAPPS_MQTT_PORT=1883
+DAPPS_ADMIN_PASSWORD=change-me-something-long
+```
+
+After first start the values land in `dapps.db`; the env vars are ignored on subsequent starts. Keep `/etc/dapps.env` around anyway — it's the operator's record of the bootstrap values.
+
+```sh
+sudo install -m 640 -o root -g dapps /dev/stdin /etc/dapps.env <<EOF
+... (paste the above, edit values) ...
+EOF
+```
+
+**Write `/etc/systemd/system/dapps.service`:**
+
+```ini
+[Unit]
+Description=DAPPS - Distributed Asynchronous Packet Pub-Sub
+Documentation=https://github.com/M0LTE/dapps
+After=network.target linbpq.service
+Wants=linbpq.service
+
+[Service]
+Type=simple
+User=dapps
+Group=dapps
+EnvironmentFile=/etc/dapps.env
+WorkingDirectory=/var/lib/dapps
+ExecStart=/opt/dapps/dapps
+Restart=on-failure
+RestartSec=5
+
+# Bind the HTTP listener — loopback by default. Change to
+# http://0.0.0.0:5000 to expose the dashboard on the LAN
+# (DO set DAPPS_ADMIN_PASSWORD before doing that).
+Environment=ASPNETCORE_URLS=http://127.0.0.1:5000
+
+# Hardening — DAPPS only needs its binary, its DB, and TCP.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/dapps
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=true
+LockPersonality=true
+RestrictRealtime=true
+
+[Install]
+WantedBy=multi-user.target
+```
+
+**Enable + start:**
+
+```sh
+sudo systemctl daemon-reload
+sudo systemctl enable --now dapps.service
+sudo systemctl status dapps.service
+sudo journalctl -u dapps.service -f       # live logs
+```
+
+A correct startup looks like the same lines you saw in §3 — `BPQ AGW: ...`, `MQTT broker: ...`, `Now listening on: ...` — followed by the AGW dispatcher reporting it's connected.
+
+**Upgrades** are a binary swap:
+
+```sh
+sudo curl -L --fail \
+    -o /opt/dapps/dapps.new \
+    https://github.com/M0LTE/dapps/releases/latest/download/dapps-linux-arm
+sudo install -o root -g root -m 755 /opt/dapps/dapps.new /opt/dapps/dapps
+sudo rm /opt/dapps/dapps.new
+sudo systemctl restart dapps.service
+```
+
+The DB schema auto-migrates on next start; existing rows are preserved.
+
 ## Troubleshooting
 
-- **`Callsign is not configured`** at startup → set `DAPPS_CALLSIGN` env var or POST `/Config` and restart.
+- **`Callsign is not configured`** at startup → set `DAPPS_CALLSIGN` env var (or `/etc/dapps.env`) and restart, or POST to `/Config`.
 - **`Did not see DAPPSv1> prompt`** when forwarding → the remote DAPPS isn't reachable through BPQ. Check the neighbour's BPQ-side `APPLICATION` line and that it's running.
-- **`AGW register ... failed`** in the logs → BPQ isn't accepting the registration. Check `AGWMASK=1` and that the AGW port is reachable from where DAPPS is running.
-- **Inbound L2 connects to DAPPS's callsign hit the node prompt instead of being dispatched** → check that `bpq32.cfg` has the `APPLICATION 1,DAPPS,,...` line for that callsign. Without it, BPQ treats the inbound as a regular node session and the AGW `'X'` registration is silently inert.
-- **Port byte indexing surprises** → AGW port indices are 0-based; BPQ port numbers in `bpq32.cfg` are 1-based. AGW port 0 = BPQ port 1.
+- **`AGW register ... failed`** in the logs → BPQ isn't accepting the registration. Check `AGWMASK` covers the slot you used (e.g. slot 5 needs `0x10`; `0xFF` is permissive within the first 8) and that the AGW port is reachable from where DAPPS is running.
+- **`linbpq` started but isn't listening on `AGWPORT`** (no entry on `ss -tlnp | grep AGWPORT`) → silently lost a port-bind race against another service. Pick a different `AGWPORT` (8002, 8004, etc.) in `bpq32.cfg`, set `DAPPS_AGW_PORT` to match, restart both. Default 8000 is popular and often taken.
+- **Inbound L2 connects to DAPPS's callsign hit the node prompt instead of being dispatched** → check that `bpq32.cfg` has the `APPLICATION N,DAPPS,,<call>,DAPPS,0` line for that callsign. Without it, BPQ treats the inbound as a regular node session and the AGW `'X'` registration is silently inert.
+- **`APPLICATION` slot collision** → if you already have BBS / CHAT / etc. on slots 1–4, put DAPPS on a free slot (5+) and adjust `AGWMASK` accordingly. Slots are 1-indexed; the line is `APPLICATION <slot>,DAPPS,...`.
+- **Port byte indexing surprises** → AGW port bytes are 0-based; BPQ port numbers in `bpq32.cfg` are 1-based. AGW port byte 0 = BPQ port 1.
+- **Pre-existing `/lib/.../libstdc++.so.6: version GLIBCXX_3.4.29 not found` or similar** → you're on a glibc older than the .NET 8 baseline (2.23). Pi OS 11 / Bookworm / Bullseye are all fine; older systems aren't supported.
+- **Dashboard says `connecting…` forever on the Live inbound feed** → the SSE connection isn't getting through. If you're behind a reverse proxy, make sure it doesn't buffer `text/event-stream` (`X-Accel-Buffering: no` is set server-side; nginx may still need `proxy_buffering off`).
 
 ## Backups
 
