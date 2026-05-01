@@ -31,6 +31,10 @@ What's missing to call this complete is the parts that turn a single-node demo i
 
 - **#5** — Switch integration tests from raw `Process` to Testcontainers. Today the `LinbpqIntegrationFixture` shells `docker run` directly; should be on Testcontainers.NET like the rest of the .NET integration-test world. Cleanup, no feature impact.
 
+- **No automatic forwarder loop.** `OutboundMessageManager.DoRun` is only triggered by an explicit POST to `/Message/dorun`. Means a node can have a queue of messages with valid routes that just sit there until the operator pokes the API. Surfaced during F1 simulator work — the script has to drain queues by hand after every send. Real fix: a hosted `OutboundForwarderService` ticking on a short period, plus opportunistic kicks on `SubmitOutboundMessage` and on inbox deliveries with non-local destinations. Belongs early in Phase A polish. Not yet filed.
+
+- **`UdpMulticastDiscoveryBearer` multi-channel-per-port leakage.** When one process subscribes to multiple discovery channels that share a UDP port (which is what happens when channel-keys differ only in multicast group address — the natural simulator topology), all the per-channel `recv` sockets bind `0.0.0.0:port` with `SO_REUSEADDR`, and Linux's REUSEADDR + multicast filtering edge cases let packets leak across groups within the process. Confirmed by toggling distinct-vs-shared ports on the simulator: with shared ports, every node's `discoveredpeers` table has bogus entries scraped from every channel; with distinct ports, only the correct adjacencies are learned. Real fix: bind each `recv` socket to the multicast group address itself (`endpoint.Address:endpoint.Port`) rather than `IPAddress.Any`, or allocate one socket per channel-key tuple in a way that doesn't share a kernel port. Plan B5 work will surface this again — fix it before. Not yet filed.
+
 ## Phase A0 — insert the backhaul seam before transport choices harden
 
 **Goal:** DAPPS core talks in terms of forwarding durable DAPPS units to neighbours, not in terms of opening a stream and speaking one specific session protocol.
@@ -481,6 +485,8 @@ Doesn't validate:
 - RF-specific behaviour: half-duplex, contention, lossy paths, AX.25 connect/disconnect quirks. For loss/jitter realism, layer `tc netem` on `lo`. AGW-bearer behaviour still needs a real BPQ in the loop.
 
 Implementation cost is low — the UDP datagram bearer (A0.4) and discovery channels are already in place. Mostly a matter of a `scripts/sim-multihop.sh` that spins up three configured instances, plus a short README section so a contributor can reproduce. Worth doing as the *first* concrete validation harness for F1 or B5, before either lands.
+
+**Status:** landed in PR #47 alongside F1. Six-node mesh (one branching relay; path lengths 1–4; an off-spine route that never touches A or B), driven by five canned exercises that exercise longest path, reverse longest path, off-spine, fan-out, and concurrent cross-traffic. Verifies F1 end-to-end at every receiver. Two real bugs surfaced during the build: one filed under "Open tasks" above (multicast bearer multi-channel-per-port leakage — channels in the simulator now use distinct ports per group as a workaround); the other is the missing automatic-forwarder-loop, also filed there (the simulator has to drain by hand after every send).
 
 ## Suggested ordering
 

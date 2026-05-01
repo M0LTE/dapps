@@ -9,18 +9,18 @@
 #
 # Topology
 #
-#       A ─── B ─── C ─── D                          (1, 2, 3 hops from A)
-#                   │
-#                   └─── E ─── F                     (3 hops, then 4 from A)
+#       A ──G1── B ──G2── C ──G3── D                 (1, 2, 3 hops from A)
+#                         │
+#                         G4
+#                         │
+#                         E ──G5── F                 (3 hops, then 4 from A)
 #
-# Each link is unicast UDP between adjacent nodes; each node has a
-# manual neighbour entry for its direct UDP-reachable peers. Pre-B5,
-# route-hints chain hops for distant destinations (A→F walks A→B→C→E→F
-# one hop at a time as each relay's resolver picks the next-hop hint).
-# Discovery channels are intentionally NOT configured — multicast on
-# WSL2 leaks across loopback and pollutes routing; once B5 ships and
-# beacon transport is loopback-friendly the channels come back to also
-# exercise discovery.
+# Multicast groups G1..G5 stand in for distinct RF "broadcast domains";
+# each adjacent pair shares a group so beacons reach exactly the right
+# peers. Forwarding still goes unicast UDP via the per-node neighbour
+# table (the same way RF works: broadcast discovery, point-to-point
+# forward). Pre-B5 (learned-graph routing) the route-hints encode the
+# multi-hop chains; B5 will replace them with learned routes.
 #
 # Usage:
 #   scripts/sim-multihop.sh           # build, start, configure, send-tests
@@ -47,16 +47,28 @@ declare -A UDP_PORT=(  [A]=50071 [B]=50072 [C]=50073 [D]=50074 [E]=50075 [F]=500
 declare -A AGW_PORT=(  [A]=18001 [B]=18002 [C]=18003 [D]=18004 [E]=18005 [F]=18006 )   # closed; AGW probe will fail, harmless
 declare -A CALLSIGN=(  [A]=G0SIA-1 [B]=G0SIB-1 [C]=G0SIC-1 [D]=G0SID-1 [E]=G0SIE-1 [F]=G0SIF-1 )
 
-# Discovery channels were originally seeded here (G1..G5 standing in for
-# RF "broadcast domains") but multicast on WSL2 leaks across loopback
-# interfaces — every node ends up discovering every other on every
-# channel, with bogus UdpEndpoints scraped from ephemeral source ports.
-# That bypassed our explicit route-hints and dropped traffic into closed
-# ports. Routing decisions in this simulator are purely route-hint
-# driven; once Phase B5 (learned-graph routing) lands and beacons get
-# refactored to be loopback-friendly, this block can come back to also
-# exercise the discovery side.
-declare -A CHANNELS=( [A]="" [B]="" [C]="" [D]="" [E]="" [F]="" )
+# Discovery channels — UDP multicast groups standing in for distinct
+# RF "broadcast domains". Each group MUST use its own port: when
+# UdpMulticastDiscoveryBearer subscribes a recv socket per channel it
+# binds 0.0.0.0:port and joins the group; multiple recv sockets sharing
+# a port (e.g. node B subscribed to G1 and G2 both on port 54321)
+# triggers Linux's REUSEADDR + multicast filtering edge cases and
+# packets leak across groups within the process. Until that's fixed in
+# the bearer (see plan.md Phase B), distinct ports are the way to keep
+# the simulator's discovery clean.
+G1="239.0.7.1:54321"
+G2="239.0.7.2:54322"
+G3="239.0.7.3:54323"
+G4="239.0.7.4:54324"
+G5="239.0.7.5:54325"
+declare -A CHANNELS=(
+    [A]="$G1"
+    [B]="$G1 $G2"
+    [C]="$G2 $G3 $G4"
+    [D]="$G3"
+    [E]="$G4 $G5"
+    [F]="$G5"
+)
 
 # Direct neighbours — entries are space-separated "<letter>" lookups
 # into the rest of the tables. Resolves to the matching callsign + UDP
@@ -337,8 +349,9 @@ cmd_status() {
         local pid; pid=$(cat "$d/pid" 2>/dev/null || echo -)
         local alive=no
         kill -0 "$pid" 2>/dev/null && alive=yes
-        printf "  %s  pid=%-6s alive=%s  http=:%s  udp=:%s\n" \
-            "${CALLSIGN[$n]}" "$pid" "$alive" "${HTTP_PORT[$n]}" "${UDP_PORT[$n]}"
+        printf "  %s  pid=%-6s alive=%s  http=:%s  udp=:%s  channels=%s\n" \
+            "${CALLSIGN[$n]}" "$pid" "$alive" "${HTTP_PORT[$n]}" "${UDP_PORT[$n]}" \
+            "$(echo "${CHANNELS[$n]:-(none)}" | tr ' ' ',')"
     done
 }
 
