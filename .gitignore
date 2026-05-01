@@ -178,6 +178,11 @@ DocProject/Help/html
 
 # Click-Once directory
 publish/
+publish-dev/
+
+# Local SQLite DBs from running dapps from a working directory
+dapps.db
+dapps.db-*
 
 # Publish Web Output
 *.[Pp]ublish.xml

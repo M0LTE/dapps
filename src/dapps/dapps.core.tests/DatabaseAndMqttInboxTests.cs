@@ -54,8 +54,8 @@ public sealed class DatabaseAndMqttInboxTests : IAsyncLifetime
         var tokens = new AppTokenStore(NullLogger<AppTokenStore>.Instance);
         broker = new MqttBrokerService(
             NullLogger<MqttBrokerService>.Instance, optionsMonitor, database, tokens);
-        inbox = new DatabaseAndMqttInbox(database, broker, optionsMonitor,
-            NullLogger<DatabaseAndMqttInbox>.Instance);
+        inbox = new DatabaseAndMqttInbox(database, broker, new InboundEventBus(),
+            optionsMonitor, NullLogger<DatabaseAndMqttInbox>.Instance);
 
         await broker.StartAsync(CancellationToken.None);
     }

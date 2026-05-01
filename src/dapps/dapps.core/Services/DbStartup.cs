@@ -62,9 +62,35 @@ public class DbStartup(ILogger<DbStartup> logger) : IHostedService
         InsertIfNotPresent(options, "AuthRequired", "false");
 
         ValidateRequiredConfig();
+        SeedAdminPasswordFromEnv(options);
 
         logger.LogInformation("DB schema refreshed");
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Bootstrap path for the dashboard's admin password: if no
+    /// password hash row exists yet AND <c>DAPPS_ADMIN_PASSWORD</c> is
+    /// set in the environment, hash and store it. Subsequent starts
+    /// see the row, ignore the env var.
+    /// </summary>
+    private void SeedAdminPasswordFromEnv(List<DbSystemOption> options)
+    {
+        var alreadyConfigured = options.Any(o =>
+            string.Equals(o.Option, "AdminPasswordHash", StringComparison.OrdinalIgnoreCase));
+        if (alreadyConfigured) return;
+
+        var pwd = Environment.GetEnvironmentVariable("DAPPS_ADMIN_PASSWORD");
+        if (string.IsNullOrEmpty(pwd)) return;
+
+        // PBKDF2 hash + 16-byte salt, mirrors AdminPasswordStore.
+        var salt = System.Security.Cryptography.RandomNumberGenerator.GetBytes(16);
+        var hash = System.Security.Cryptography.Rfc2898DeriveBytes.Pbkdf2(
+            System.Text.Encoding.UTF8.GetBytes(pwd), salt, 100_000,
+            System.Security.Cryptography.HashAlgorithmName.SHA256, 32);
+        db.Insert(new DbSystemOption { Option = "AdminPasswordHash", Value = Convert.ToHexString(hash) });
+        db.Insert(new DbSystemOption { Option = "AdminPasswordSalt", Value = Convert.ToHexString(salt) });
+        logger.LogInformation("Seeded admin password from DAPPS_ADMIN_PASSWORD");
     }
 
     private void InsertIfNotPresent(List<DbSystemOption> options, string key, string defaultValue)

@@ -120,7 +120,7 @@ public sealed class RemainingControllersTests : IAsyncLifetime
             c.Insert(new DbSystemOption { Option = "DefaultBpqPort", Value = "2" });
             c.Insert(new DbSystemOption { Option = "MqttPort", Value = "1884" });
         }
-        var ctrl = new ConfigController(database);
+        var ctrl = new ConfigController(database, new AdminPasswordStore(NullLogger<AdminPasswordStore>.Instance));
 
         var got = await ctrl.Get();
 
@@ -134,7 +134,7 @@ public sealed class RemainingControllersTests : IAsyncLifetime
     [Fact]
     public async Task ConfigController_PostPersistsAndGetRoundtrips()
     {
-        var ctrl = new ConfigController(database);
+        var ctrl = new ConfigController(database, new AdminPasswordStore(NullLogger<AdminPasswordStore>.Instance));
 
         var post = await ctrl.Post(new SystemOptions
         {

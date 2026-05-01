@@ -4,7 +4,12 @@
     ViewData["Title"] = $"DAPPS — {Model.Options.Callsign}";
 }
 
-<h1>DAPPS — @Model.Options.Callsign</h1>
+<h1>DAPPS — @Model.Options.Callsign
+    @if (User.Identity?.IsAuthenticated == true)
+    {
+        <a href="/Logout" class="signout">Sign out</a>
+    }
+</h1>
 
 @if (Model.FlashOk is not null)
 {
@@ -178,6 +183,54 @@ else
         </tbody>
     </table>
 }
+
+<h2>Live inbound <span id="sse-status" class="muted">(connecting…)</span></h2>
+<p class="muted">
+    Server-Sent Events feed of messages arriving at this node. Clears
+    on page reload — for persistent history see "Recent messages" below.
+</p>
+<table id="sse-table">
+    <thead>
+        <tr>
+            <th>Time (UTC)</th>
+            <th>Id</th>
+            <th>Source</th>
+            <th>Destination</th>
+            <th>Bytes</th>
+            <th>TTL</th>
+        </tr>
+    </thead>
+    <tbody id="sse-body">
+        <tr id="sse-empty"><td colspan="6" class="muted">Waiting for inbound traffic…</td></tr>
+    </tbody>
+</table>
+
+<script>
+    (function () {
+        const status = document.getElementById('sse-status');
+        const body = document.getElementById('sse-body');
+        const empty = document.getElementById('sse-empty');
+        const es = new EventSource('/Events/inbound');
+        es.onopen = () => { status.textContent = '(live)'; };
+        es.onerror = () => { status.textContent = '(reconnecting…)'; };
+        es.addEventListener('inbound', (e) => {
+            const ev = JSON.parse(e.data);
+            if (empty) empty.remove();
+            const row = document.createElement('tr');
+            const ts = new Date(ev.receivedAt).toISOString().substring(11, 19);
+            row.innerHTML =
+                `<td><code>${ts}</code></td>` +
+                `<td><code>${ev.id}</code></td>` +
+                `<td>${ev.sourceCallsign}</td>` +
+                `<td>${ev.destination}</td>` +
+                `<td class="numeric">${ev.payloadLength}</td>` +
+                `<td class="numeric">${ev.ttl ?? '—'}</td>`;
+            body.insertBefore(row, body.firstChild);
+            // Keep at most 50 rows so the page doesn't grow unbounded.
+            while (body.children.length > 50) body.removeChild(body.lastChild);
+        });
+    })();
+</script>
 
 <h2>Recent messages</h2>
 @if (Model.RecentMessages.Count == 0)
