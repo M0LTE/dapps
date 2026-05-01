@@ -72,8 +72,10 @@ public sealed class OutboundForwarderServiceTests : IAsyncLifetime
     public async Task DoRun_SkipsWhenAlreadyInFlight()
     {
         // Queue a message + neighbour so DoRun has work. The slow
-        // backhaul holds each send for 200ms — long enough to launch
-        // a second concurrent DoRun and observe the skip.
+        // backhaul blocks deterministically on a TCS until we tell it
+        // to release — so the first DoRun is guaranteed to be holding
+        // the mutex when the second concurrent call arrives, no
+        // sleep-and-pray timing.
         using (var c = DbInfo.GetConnection())
         {
             c.Insert(new DbNeighbour { Callsign = "G0DEST-1", UdpEndpoint = "127.0.0.1:65535" });
@@ -83,12 +85,22 @@ public sealed class OutboundForwarderServiceTests : IAsyncLifetime
             additionalProperties: "{}", ttl: 600);
 
         var first = outbound.DoRun(TestContext.Current.CancellationToken);
-        // Give the first call time to acquire the mutex but not finish
-        // (slow backhaul will hold it 200ms).
-        await Task.Delay(20, TestContext.Current.CancellationToken);
-        var second = outbound.DoRun(TestContext.Current.CancellationToken);
 
-        await Task.WhenAll(first, second);
+        // Wait until the backhaul confirms it's in the middle of a
+        // Send — at that point the first DoRun definitely holds the
+        // mutex.
+        await slowBackhaul.SendStarted.Task.WaitAsync(TimeSpan.FromSeconds(5),
+            TestContext.Current.CancellationToken);
+
+        var second = outbound.DoRun(TestContext.Current.CancellationToken);
+        // The second DoRun should observe the held mutex and return
+        // (without waiting). It completes before the first does.
+        await second.WaitAsync(TimeSpan.FromSeconds(2),
+            TestContext.Current.CancellationToken);
+
+        // Now release the first.
+        slowBackhaul.Release.SetResult();
+        await first;
 
         outbound.RunCount.Should().Be(1,
             "the second concurrent DoRun must skip rather than racing through the queue");
@@ -99,26 +111,27 @@ public sealed class OutboundForwarderServiceTests : IAsyncLifetime
     [Fact]
     public async Task ForwarderService_TicksDoRun_OnItsLoop()
     {
-        // A real BackgroundService run would tick every 5s and wait 3s
-        // before the first run — too slow for unit tests. The test
-        // takes the actual service and just gives it long enough to
-        // get past the startup delay + one tick. Empty queue means
-        // each DoRun is fast.
+        // Use the test-only constructor with sub-second timings — the
+        // production cadence (3s startup grace + 5s tick) makes this
+        // test brittle on CI under load. With 50ms intervals and a 5s
+        // deadline there's headroom for ~100 ticks before we declare
+        // the service broken.
         var sp = new ServiceCollection()
             .AddSingleton(outbound)
             .BuildServiceProvider();
-        var service = new OutboundForwarderService(sp, NullLogger<OutboundForwarderService>.Instance);
+        var service = new OutboundForwarderService(
+            sp,
+            NullLogger<OutboundForwarderService>.Instance,
+            tickInterval: TimeSpan.FromMilliseconds(50),
+            startupDelay: TimeSpan.FromMilliseconds(50));
         using var cts = new CancellationTokenSource();
 
-        var startTask = service.StartAsync(cts.Token);
-        await startTask;
+        await service.StartAsync(cts.Token);
 
-        // Poll until RunCount bumps. StartupDelay is 3s; allow up to 6s
-        // before declaring the service broken.
-        var deadline = DateTime.UtcNow.AddSeconds(6);
+        var deadline = DateTime.UtcNow.AddSeconds(5);
         while (outbound.RunCount == 0 && DateTime.UtcNow < deadline)
         {
-            await Task.Delay(100, TestContext.Current.CancellationToken);
+            await Task.Delay(20, TestContext.Current.CancellationToken);
         }
 
         await service.StopAsync(cts.Token);
@@ -127,11 +140,17 @@ public sealed class OutboundForwarderServiceTests : IAsyncLifetime
             "the hosted service must invoke DoRun on its tick — that's its only job");
     }
 
-    /// <summary>Backhaul that records every Send and stalls each one
-    /// briefly so concurrent DoRun calls have time to overlap.</summary>
+    /// <summary>Backhaul that signals when each Send begins and waits
+    /// for an explicit release before completing. Lets concurrent-
+    /// DoRun tests synchronise on the lock-held state without timing
+    /// guesses.</summary>
     private sealed class SlowBackhaul : IDappsBackhaul
     {
         public int SendCount;
+        public TaskCompletionSource SendStarted { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Release { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         public bool CanHandle(BackhaulRoute route) => route.UdpEndpoint is not null;
 
@@ -142,7 +161,8 @@ public sealed class OutboundForwarderServiceTests : IAsyncLifetime
             CancellationToken ct)
         {
             Interlocked.Increment(ref SendCount);
-            await Task.Delay(200, ct);
+            SendStarted.TrySetResult();
+            await Release.Task.WaitAsync(ct);
             return BackhaulSendResult.Ok();
         }
     }

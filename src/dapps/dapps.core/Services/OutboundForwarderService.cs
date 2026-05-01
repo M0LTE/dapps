@@ -20,10 +20,32 @@ namespace dapps.core.Services;
 /// queue. Useful for "kick now" semantics when an operator wants the
 /// next tick to happen *now*.
 /// </summary>
-public sealed class OutboundForwarderService(
-    IServiceProvider services,
-    ILogger<OutboundForwarderService> logger) : BackgroundService
+public sealed class OutboundForwarderService : BackgroundService
 {
+    private readonly IServiceProvider services;
+    private readonly ILogger<OutboundForwarderService> logger;
+    private readonly TimeSpan tickInterval;
+    private readonly TimeSpan startupDelay;
+
+    public OutboundForwarderService(
+        IServiceProvider services,
+        ILogger<OutboundForwarderService> logger)
+        : this(services, logger, TickInterval, StartupDelay) { }
+
+    /// <summary>Test-only ctor: shorten the timings so unit tests don't have
+    /// to sit through the production-defaults 3s + 5s intervals.</summary>
+    internal OutboundForwarderService(
+        IServiceProvider services,
+        ILogger<OutboundForwarderService> logger,
+        TimeSpan tickInterval,
+        TimeSpan startupDelay)
+    {
+        this.services = services;
+        this.logger = logger;
+        this.tickInterval = tickInterval;
+        this.startupDelay = startupDelay;
+    }
+
     // Resolve OutboundMessageManager lazily on first tick, NOT in
     // the ctor. Eager construction would chain through to the
     // IDappsOutboundTransport factory, which reads SystemOptions
@@ -44,7 +66,7 @@ public sealed class OutboundForwarderService(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        try { await Task.Delay(StartupDelay, stoppingToken); }
+        try { await Task.Delay(startupDelay, stoppingToken); }
         catch (OperationCanceledException) { return; }
 
         var outbound = services.GetRequiredService<OutboundMessageManager>();
@@ -69,7 +91,7 @@ public sealed class OutboundForwarderService(
                 logger.LogError(ex, "Forwarder tick failed; will retry on next interval");
             }
 
-            try { await Task.Delay(TickInterval, stoppingToken); }
+            try { await Task.Delay(tickInterval, stoppingToken); }
             catch (OperationCanceledException) { return; }
         }
     }
