@@ -460,6 +460,28 @@ Probably also worth a public conversation about whether DAPPS sits under OARC (t
 
 Resolved during the toolchain refresh: tests use **AwesomeAssertions** (MIT-licensed community fork of FluentAssertions, drop-in API-compatible). FluentAssertions 8.x's switch to a paid Xceed licence isn't a concern. No further action.
 
+## Cross-cutting: local multi-hop simulator
+
+A dev-machine testbed for routing + forwarding work, in the absence of an RF test network. Maps **multicast group ≈ RF broadcast domain**: each group is a population of nodes that hear each other, and a node subscribed to multiple groups stands in for one within RF range of multiple disjoint populations.
+
+Minimum topology — three `dapps.core` instances on the same host (different ports + DB paths):
+
+- **A** — discovery channel `udp` `239.0.0.1:54321`
+- **B** — discovery channels `udp` `239.0.0.1:54321` *and* `udp` `239.0.0.2:54321` (the relay)
+- **C** — discovery channel `udp` `239.0.0.2:54321`
+
+A's beacons reach B but not C; C's beacons reach B but not A; B is heard by both. For A→C to work, B must forward — which is exactly the multi-hop behaviour we want to exercise. Discovery already uses multicast (Phase B); message forwarding stays unicast to the discovered peer, which is also how RF works (broadcast discovery, point-to-point forward).
+
+Validates:
+- **F1** end-to-end source tracking — receiver at C sees originator A, not link-source B.
+- **B5** flood-then-learn over a non-trivial graph — paths form and decay as channels go up/down.
+- General routing / forwarding / TTL behaviour without burning RF time.
+
+Doesn't validate:
+- RF-specific behaviour: half-duplex, contention, lossy paths, AX.25 connect/disconnect quirks. For loss/jitter realism, layer `tc netem` on `lo`. AGW-bearer behaviour still needs a real BPQ in the loop.
+
+Implementation cost is low — the UDP datagram bearer (A0.4) and discovery channels are already in place. Mostly a matter of a `scripts/sim-multihop.sh` that spins up three configured instances, plus a short README section so a contributor can reproduce. Worth doing as the *first* concrete validation harness for F1 or B5, before either lands.
+
 ## Suggested ordering
 
 Roughly:
