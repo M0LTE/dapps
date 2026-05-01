@@ -63,12 +63,20 @@ public class OutboundMessageManager(
                 continue;
             }
 
+            // F1: preserve the originating callsign verbatim across re-forwards.
+            // Empty means we don't know — outbound omits src= rather than lying
+            // (e.g. claiming the link source is the originator).
+            var originator = string.IsNullOrEmpty(message.OriginatorCallsign)
+                ? null
+                : message.OriginatorCallsign;
+
             var bm = new BackhaulMessage(
                 Id: message.Id,
                 Destination: message.Destination,
                 Salt: message.Salt,
                 Ttl: residualTtl,
-                Payload: message.Payload);
+                Payload: message.Payload,
+                Originator: originator);
 
             var backhaul = this.backhauls.FirstOrDefault(b => b.CanHandle(route));
             if (backhaul is null)

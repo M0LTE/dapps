@@ -10,15 +10,19 @@ namespace dapps.client.Backhaul.Datagram;
 /// doesn't fit. Stays in <c>dapps.client</c> so any bearer impl can
 /// reuse it without taking a dependency on the AGW path.
 ///
-/// Wire format (all integers little-endian):
+/// Wire format (all integers little-endian). Version 2 (current) adds
+/// the <c>src=</c> originator field for F1 end-to-end source tracking;
+/// version 1 messages still decode (Originator is always null).
 /// <code>
-///   [1]  version           = 1
-///   [1]  flags             bit0=salt, bit1=ttl, bit2=headers
+///   [1]  version           = 2 (encoder); decoder also accepts 1
+///   [1]  flags             bit0=salt, bit1=ttl, bit2=headers, bit3=originator (v2+)
 ///   [7]  id (UTF-8 ASCII, 7-char hex from DappsMessage.ComputeHash)
 ///   [8]  salt              (only when flags bit0)
 ///   [4]  ttl seconds       (only when flags bit1)
 ///   [2]  destination len
 ///   [N]  destination       (UTF-8)
+///   [2]  originator len    (only when flags bit3, v2+)
+///   [O]  originator        (UTF-8, v2+)
 ///   [2]  headers count     (only when flags bit2)
 ///   per header:
 ///     [2] key len, [K] key (UTF-8), [2] value len, [V] value (UTF-8)
@@ -29,7 +33,8 @@ namespace dapps.client.Backhaul.Datagram;
 /// </summary>
 public static class BackhaulMessageCodec
 {
-    public const byte Version = 1;
+    /// <summary>Version this encoder writes. Decoder accepts both v1 and v2.</summary>
+    public const byte Version = 2;
     public const int IdLength = 7;
 
     [Flags]
@@ -39,6 +44,7 @@ public static class BackhaulMessageCodec
         HasSalt = 1 << 0,
         HasTtl = 1 << 1,
         HasHeaders = 1 << 2,
+        HasOriginator = 1 << 3,     // v2+
     }
 
     public static byte[] Encode(BackhaulMessage message)
@@ -50,6 +56,9 @@ public static class BackhaulMessageCodec
 
         var idBytes = Encoding.ASCII.GetBytes(message.Id);
         var dstBytes = Encoding.UTF8.GetBytes(message.Destination);
+        var origBytes = string.IsNullOrEmpty(message.Originator)
+            ? []
+            : Encoding.UTF8.GetBytes(message.Originator!);
         var headerBytes = message.Headers is { Count: > 0 }
             ? EncodeHeaders(message.Headers)
             : [];
@@ -58,11 +67,13 @@ public static class BackhaulMessageCodec
         if (message.Salt.HasValue) flags |= Flags.HasSalt;
         if (message.Ttl.HasValue) flags |= Flags.HasTtl;
         if (headerBytes.Length > 0) flags |= Flags.HasHeaders;
+        if (origBytes.Length > 0) flags |= Flags.HasOriginator;
 
         var size = 1 + 1 + IdLength
             + (message.Salt.HasValue ? 8 : 0)
             + (message.Ttl.HasValue ? 4 : 0)
             + 2 + dstBytes.Length
+            + (origBytes.Length > 0 ? 2 + origBytes.Length : 0)
             + headerBytes.Length
             + 4 + message.Payload.Length;
 
@@ -91,6 +102,14 @@ public static class BackhaulMessageCodec
         dstBytes.CopyTo(buffer.AsSpan(offset));
         offset += dstBytes.Length;
 
+        if (origBytes.Length > 0)
+        {
+            BinaryPrimitives.WriteUInt16LittleEndian(buffer.AsSpan(offset, 2), (ushort)origBytes.Length);
+            offset += 2;
+            origBytes.CopyTo(buffer.AsSpan(offset));
+            offset += origBytes.Length;
+        }
+
         headerBytes.CopyTo(buffer.AsSpan(offset));
         offset += headerBytes.Length;
 
@@ -110,9 +129,12 @@ public static class BackhaulMessageCodec
 
         var offset = 0;
         var version = buffer[offset++];
-        if (version != Version)
+        // Decoder accepts both v1 (pre-F1) and v2 (current). v1 messages
+        // never set the originator-flag bit, so the decode path falls
+        // through naturally without per-version branching after this.
+        if (version != 1 && version != Version)
         {
-            throw new InvalidDataException($"unsupported codec version {version}; expected {Version}");
+            throw new InvalidDataException($"unsupported codec version {version}; expected 1 or {Version}");
         }
         var flags = (Flags)buffer[offset++];
 
@@ -137,6 +159,15 @@ public static class BackhaulMessageCodec
         offset += 2;
         var destination = Encoding.UTF8.GetString(buffer.Slice(offset, dstLen));
         offset += dstLen;
+
+        string? originator = null;
+        if ((flags & Flags.HasOriginator) != 0)
+        {
+            var origLen = BinaryPrimitives.ReadUInt16LittleEndian(buffer.Slice(offset, 2));
+            offset += 2;
+            originator = Encoding.UTF8.GetString(buffer.Slice(offset, origLen));
+            offset += origLen;
+        }
 
         IReadOnlyDictionary<string, string>? headers = null;
         if ((flags & Flags.HasHeaders) != 0)
@@ -163,7 +194,7 @@ public static class BackhaulMessageCodec
         offset += 4;
         var payload = buffer.Slice(offset, (int)payloadLen).ToArray();
 
-        return new BackhaulMessage(id, destination, salt, ttl, payload, headers);
+        return new BackhaulMessage(id, destination, salt, ttl, payload, headers, originator);
     }
 
     private static byte[] EncodeHeaders(IReadOnlyDictionary<string, string> headers)

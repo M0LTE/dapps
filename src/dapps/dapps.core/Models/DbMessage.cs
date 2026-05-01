@@ -20,6 +20,16 @@ public class DbMessage
     /// </summary>
     public string SourceCallsign { get; init; } = "";
 
+    /// <summary>
+    /// F1 end-to-end source tracking: the *originating* callsign, parsed
+    /// from the inbound <c>ihave</c>'s <c>src=</c> field. Empty when the
+    /// sender pre-dates F1 — in that case the originator is unknown
+    /// (could be the link source on a single hop, or any upstream hop on
+    /// a relay path). For a locally submitted message this is our own
+    /// callsign. Preserved verbatim across re-forwards.
+    /// </summary>
+    public string OriginatorCallsign { get; init; } = "";
+
     public string AdditionalProperties { get; init; } = "";
 
     /// <summary>True once OutboundMessageManager has handed this off to a

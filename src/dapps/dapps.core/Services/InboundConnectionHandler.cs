@@ -273,7 +273,8 @@ public class InboundConnectionHandler(
                 Salt: offer.Salt,
                 Ttl: offer.Ttl,
                 Payload: buffer,
-                Headers: headers);
+                Headers: headers,
+                Originator: string.IsNullOrEmpty(offer.OriginatorCallsign) ? null : offer.OriginatorCallsign);
 
             await inbox.DeliverAsync(backhaulMessage, sourceCallsign, stoppingToken);
             await database.DeleteOffer(id);

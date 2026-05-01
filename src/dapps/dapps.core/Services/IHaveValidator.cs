@@ -18,7 +18,8 @@ public sealed record IHaveOffer(
     int? CompressedLength,
     string Destination,
     int? Ttl,                               // residual lifetime in seconds, null = unset
-    Dictionary<string, string> AdditionalHeaders);
+    Dictionary<string, string> AdditionalHeaders,
+    string? Originator = null);             // src= — originating callsign (F1), null when sender pre-dates F1
 
 public sealed record OfferValidationResult
 {
@@ -46,7 +47,7 @@ public static class IHaveValidator
     private const int ChkValueLength = 4;
 
     private static readonly HashSet<string> ReservedKeys = new(StringComparer.Ordinal)
-        { "len", "fmt", "s", "clen", "dst", "chk", "ttl" };
+        { "len", "fmt", "s", "clen", "dst", "chk", "ttl", "src" };
 
     public static OfferValidationResult Validate(string ihaveCommand)
     {
@@ -129,7 +130,17 @@ public static class IHaveValidator
             .Where(kv => !ReservedKeys.Contains(kv.Key))
             .ToDictionary(kv => kv.Key, kv => kv.Value);
 
-        return OfferValidationResult.Success(new IHaveOffer(id, len, fmt, salt, clen, dst, ttl, headers));
+        // src=<callsign> — F1 end-to-end source tracking. Optional;
+        // when absent the originator is unknown (could be the link
+        // source on a single-hop send, or any upstream hop on a
+        // pre-F1 relay path). Empty string is treated as absent.
+        string? originator = null;
+        if (kvps.TryGetValue("src", out var srcVal) && !string.IsNullOrEmpty(srcVal))
+        {
+            originator = srcVal;
+        }
+
+        return OfferValidationResult.Success(new IHaveOffer(id, len, fmt, salt, clen, dst, ttl, headers, originator));
     }
 
     /// <summary>

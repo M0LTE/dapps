@@ -83,7 +83,8 @@ public class DappsProtocolClient(Stream stream, ILoggerFactory loggerFactory)
         string destination,
         int length,
         CancellationToken ct,
-        int? ttl = null)
+        int? ttl = null,
+        string? originator = null)
     {
         if (format != DappsMessage.MessageFormat.Plain)
         {
@@ -98,6 +99,13 @@ public class DappsProtocolClient(Stream stream, ILoggerFactory loggerFactory)
         if (ttl.HasValue)
         {
             sb.Append($" ttl={ttl.Value}");
+        }
+        // F1 end-to-end source tracking. Emitted only when set — pre-F1
+        // local submissions (or relayed messages with no upstream src=)
+        // omit it so the receiver knows the originator is unknown.
+        if (!string.IsNullOrEmpty(originator))
+        {
+            sb.Append($" src={originator}");
         }
         sb.Append('\n');
 
