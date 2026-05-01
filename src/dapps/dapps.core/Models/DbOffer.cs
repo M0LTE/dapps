@@ -13,6 +13,12 @@ internal sealed class DbOffer
     public long? Salt { get; init; }
     public int? CompressedLength { get; init; }
     public string Destination { get; init; } = "";
+
+    /// <summary>F1 end-to-end source tracking: <c>src=</c> from the
+    /// <c>ihave</c> line, or empty if not supplied. Carried forward into
+    /// the <c>DbMessage</c> row when the payload arrives.</summary>
+    public string OriginatorCallsign { get; init; } = "";
+
     public string AdditionalProperties { get; set; } = "{}";
 
     /// <summary>Residual ttl in seconds from the offer line, or null if not

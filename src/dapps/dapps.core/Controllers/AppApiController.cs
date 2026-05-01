@@ -45,7 +45,8 @@ public class AppApiController(Database database) : ControllerBase
         var now = DateTime.UtcNow;
         return Ok(pending.Select(m => new InboundMessage(
             m.Id, m.SourceCallsign, m.Payload,
-            TtlMath.Residual(m.Ttl, m.CreatedAt, now))).ToList());
+            TtlMath.Residual(m.Ttl, m.CreatedAt, now),
+            string.IsNullOrEmpty(m.OriginatorCallsign) ? null : m.OriginatorCallsign)).ToList());
     }
 
     /// <summary>
@@ -77,5 +78,10 @@ public sealed record OutboundResponse(string Id);
 /// One pending inbound message. <see cref="Ttl"/> is the residual
 /// lifetime in seconds at the moment of the GET (initial TTL minus
 /// dwell time on this node); null when the message has no TTL.
+/// <see cref="OriginatorCallsign"/> is the F1 end-to-end source — the
+/// callsign that *originated* the message — or null if the upstream
+/// chain didn't tell us. Distinct from <see cref="SourceCallsign"/>
+/// (link source). Apps should fall back to <c>SourceCallsign</c> when
+/// <c>OriginatorCallsign</c> is null.
 /// </summary>
-public sealed record InboundMessage(string Id, string SourceCallsign, byte[] Payload, int? Ttl = null);
+public sealed record InboundMessage(string Id, string SourceCallsign, byte[] Payload, int? Ttl = null, string? OriginatorCallsign = null);

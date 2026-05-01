@@ -30,6 +30,8 @@ public sealed class DatabaseAndMqttInbox(
             ? "{}"
             : JsonSerializer.Serialize(message.Headers);
 
+        var originator = message.Originator ?? "";
+
         await database.SaveMessage(
             message.Id,
             message.Payload,
@@ -37,7 +39,8 @@ public sealed class DatabaseAndMqttInbox(
             message.Destination,
             sourceCallsign,
             headersJson,
-            message.Ttl);
+            message.Ttl,
+            originatorCallsign: originator);
 
         if (DestinationParser.IsLocal(message.Destination, options.CurrentValue.Callsign))
         {
@@ -48,6 +51,7 @@ public sealed class DatabaseAndMqttInbox(
                 Salt = message.Salt,
                 Destination = message.Destination,
                 SourceCallsign = sourceCallsign,
+                OriginatorCallsign = originator,
                 AdditionalProperties = headersJson,
                 Ttl = message.Ttl,
             };

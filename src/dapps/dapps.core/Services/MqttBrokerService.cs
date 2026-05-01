@@ -92,6 +92,15 @@ public sealed class MqttBrokerService(
         {
             builder = builder.WithUserProperty("dapps-source", message.SourceCallsign);
         }
+        // F1 end-to-end source tracking: dapps-origin = originating
+        // callsign when the upstream chain told us. Distinct from
+        // dapps-source (link source / last hop). Omitted when unknown
+        // — apps should fall back to dapps-source if dapps-origin is
+        // absent.
+        if (!string.IsNullOrEmpty(message.OriginatorCallsign))
+        {
+            builder = builder.WithUserProperty("dapps-origin", message.OriginatorCallsign);
+        }
         if (message.Ttl is { } ttl)
         {
             // Residual TTL the originator advertised (or what's left of

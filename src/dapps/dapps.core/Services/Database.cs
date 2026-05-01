@@ -71,7 +71,10 @@ public class Database(ILogger<Database> logger, IOptionsMonitor<SystemOptions> o
         var id = DappsMessage.ComputeHash(payload, salt)[..7];
         var destination = $"{appName}@{destCallsign}";
         var ourCall = options.CurrentValue.Callsign;
-        await SaveMessage(id, payload, salt, destination, sourceCallsign: ourCall, "{}", ttl: ttlSeconds);
+        // Local submission: we are both the link-source AND the
+        // originator. Recorded explicitly so re-forwards downstream
+        // surface us in the receiver's dapps-origin user property.
+        await SaveMessage(id, payload, salt, destination, sourceCallsign: ourCall, "{}", ttl: ttlSeconds, originatorCallsign: ourCall);
         return id;
     }
 
@@ -82,7 +85,7 @@ public class Database(ILogger<Database> logger, IOptionsMonitor<SystemOptions> o
         return data;
     }
 
-    internal async Task SaveMessage(string id, byte[] buffer, long? salt, string destination, string sourceCallsign, string additionalProperties, int? ttl)
+    internal async Task SaveMessage(string id, byte[] buffer, long? salt, string destination, string sourceCallsign, string additionalProperties, int? ttl, string originatorCallsign = "")
     {
         var connection = DbInfo.GetAsyncConnection();
 
@@ -101,6 +104,7 @@ public class Database(ILogger<Database> logger, IOptionsMonitor<SystemOptions> o
             Payload = buffer,
             Destination = destination,
             SourceCallsign = sourceCallsign,
+            OriginatorCallsign = originatorCallsign,
             AdditionalProperties = additionalProperties,
             Ttl = ttl,
             CreatedAt = DateTime.UtcNow,
@@ -126,6 +130,7 @@ public class Database(ILogger<Database> logger, IOptionsMonitor<SystemOptions> o
             Salt = offer.Salt,
             CompressedLength = offer.CompressedLength,
             Destination = offer.Destination,
+            OriginatorCallsign = offer.Originator ?? "",
             AdditionalProperties = JsonSerializer.Serialize(offer.AdditionalHeaders),
             Ttl = offer.Ttl,
             CreatedAt = DateTime.UtcNow,

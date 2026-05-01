@@ -18,4 +18,5 @@ public sealed record BackhaulMessage(
     long? Salt,
     int? Ttl,
     byte[] Payload,
-    IReadOnlyDictionary<string, string>? Headers = null);
+    IReadOnlyDictionary<string, string>? Headers = null,
+    string? Originator = null);
