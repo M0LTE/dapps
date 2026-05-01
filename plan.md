@@ -235,6 +235,39 @@ DAPPS should not cargo-cult any one of those packet formats. The decisions to ma
 
 If the answer ends up being "DAPPS learns next-hop reachability and leaves path details to the bearer," that is still a useful outcome — but it should be reached consciously.
 
+### B6. Active discovery — DAPPS goes asking
+
+B1-B4 are passive discovery (beacon, listen). B5 is the routing graph on top. B6 is the third mode: DAPPS proactively explores the network on a slow cadence, building topology that beacons can't see (peers behind a hop, peers on a propagation path that's open right now).
+
+Two sub-mechanisms, distinct because they target different propagation realities:
+
+#### B6.1 — Connected-mode probe-and-map
+
+Automate what a curious sysop does manually. Pick a known peer; connect at L2; at the remote's node prompt try the conventional alias (`DAPPS` — already what the README example uses). If it connects to a DAPPSv1 prompt, that node's mapped. While we're there, ask for its neighbour table (new `who` / `peers` command on the DAPPSv1 protocol, or just look at the destination addresses we've seen it forward to). Pick a different random path each run.
+
+Implementation notes:
+- **Cadence**: overnight by default (configurable); on-demand button on the dashboard. Low-rate, randomised delay between probes — this uses other operators' airtime and their L4 stack.
+- **Politeness**: per-neighbour opt-out ("don't probe me through here"). Skip during local-time daytime hours by default if neighbour metadata indicates it. Hard cap on probes per night.
+- **Convention**: "DAPPS lives here" = an `APPLICATION` line whose alias is `DAPPS` (typing `DAPPS` at the node prompt connects to the local DAPPSv1 instance). Already what we recommend; document it as the discoverability hook.
+- **Storage**: new `DbProbedNode` table parallel to `DbDiscoveredPeer`. Fields: callsign, has-dapps, last-probed-at, last-reachable-via (the path we used when we last found them), last-error. Different from `DbDiscoveredPeer` (which is "I heard their beacon on this channel") — this is "I successfully reached them via this connected-mode path."
+- **Feeds B5**: probed-node data is exactly what B5's routing graph wants. Order suggests B5 lands first; B6.1 lands once there's a graph to populate.
+
+#### B6.2 — HF NVIS solicit-and-listen
+
+UI-frame discovery's missing twin. Beacons say "I'm here." A solicit says "anyone there?" — broadcast on the configured discovery channel, then listen for a bounded window for replies. Especially useful on 40m NVIS HF where the propagation footprint is shifting and broadcast-shaped: tonight's reachable peers aren't yesterday's, and beacons that happened to TX while propagation was closed don't reach anyone.
+
+Builds on the B1 bearer/channel concept — would be a new channel mode parallel to "beacon" (which is "scheduled outbound broadcasts") rather than a separate bearer. Operator turns it on per-channel: the AGW UI bearer can do solicits on HF channels but doesn't have to on VHF (where beacons + line-of-sight do the job adequately).
+
+Implementation notes:
+- **Frame format**: a UI frame with a known discriminator ("DAPPS-SOLICIT" or similar) — receivers reply with their normal beacon. Keeps reply path identical to passive discovery; just gives nudges.
+- **Cadence**: opt-in per channel. HF channels say "yes, solicit"; VHF channels say "no, beacons are enough."
+- **Receive window**: bounded ("listen for replies for N seconds, then move on"). Receivers pick a random delay 0-N before replying so the channel doesn't get hammered with simultaneous responses.
+- **Storage**: replies populate the existing `DbDiscoveredPeer` table — a peer heard via solicit-reply is no different from a peer heard via beacon. The solicit just made it more likely we'd hear them at all.
+
+#### Sequencing
+
+B6.1 wants B5 (the routing graph). B6.2 is mostly orthogonal — could land after B5 too but doesn't strictly need it. Both are bigger engineering investments than the polish items in C3/D-anything; B5 → B6.1 → B6.2 is the natural order if we tackle this whole sub-phase.
+
 ## Phase C — deployable, runnable for sysops
 
 **Goal:** a sysop downloads a single binary for their platform from a GitHub Release, drops it next to a `dapps.db`, and it Just Works.
@@ -400,7 +433,7 @@ Roughly:
 3. **C1 + C2 + C4** (docker image, config tooling, install docs) — gets the thing into one sysop's hands.
 4. **A4** (per-app auth) — *done*.
 5. **D1 + D2** (web UI inspection + exercise) — *MVP done*. SSE inbound feed + ihave terminal still pending.
-6. **B1–B4** (channels-first-class discovery + cost-based resolver) — *done*. **B5** (learned-graph routing inside DAPPS, bearer-agnostic) remains.
+6. **B1–B4** (channels-first-class discovery + cost-based resolver) — *done*. **B5** (learned-graph routing inside DAPPS, bearer-agnostic) remains, then **B6** (active discovery — connected-mode probe-and-map + HF NVIS solicit) on top.
 7. **E1–E4** (concepts + tutorial + reference + sample-app gallery) — *done*. Developer guide is complete; third-party app development is unlocked.
 8. **H** (concrete bearer integrations — MeshCore Companion, MeshCore KISS, RHP, …) on its own track, doesn't gate the routing or developer-guide work.
 9. **A3** — *done*. **C3, D3, D4, F1–F4** in parallel as polish.
