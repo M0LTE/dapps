@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using dapps.client.Backhaul;
 using dapps.core.Models;
+using dapps.core.Routing;
 using dapps.core.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -53,11 +54,14 @@ public sealed class OutboundForwarderServiceTests : IAsyncLifetime
         var options = new TestOptionsMonitor<SystemOptions>(new SystemOptions { Callsign = "G0TEST-1" });
         database = new Database(NullLogger<Database>.Instance, options);
         slowBackhaul = new SlowBackhaul();
+        var routingContext = new DatabaseRoutingContext(database, options);
+        var routingAlgorithm = new StaticRoutingAlgorithm(NullLogger<StaticRoutingAlgorithm>.Instance);
         outbound = new OutboundMessageManager(
             database,
             new NullLoggerFactory(),
             options,
-            new IDappsBackhaul[] { slowBackhaul });
+            new IDappsBackhaul[] { slowBackhaul },
+            routingAlgorithm, routingContext);
         return ValueTask.CompletedTask;
     }
 

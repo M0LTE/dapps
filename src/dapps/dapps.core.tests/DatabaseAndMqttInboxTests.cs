@@ -4,6 +4,7 @@ using System.Text;
 using AwesomeAssertions;
 using dapps.client.Backhaul;
 using dapps.core.Models;
+using dapps.core.Routing;
 using dapps.core.Services;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -55,8 +56,10 @@ public sealed class DatabaseAndMqttInboxTests : IAsyncLifetime
         var tokens = new AppTokenStore(NullLogger<AppTokenStore>.Instance);
         broker = new MqttBrokerService(
             NullLogger<MqttBrokerService>.Instance, optionsMonitor, database, tokens);
+        var routingContext = new DatabaseRoutingContext(database, optionsMonitor);
+        var routingAlgorithm = new StaticRoutingAlgorithm(NullLogger<StaticRoutingAlgorithm>.Instance);
         inbox = new DatabaseAndMqttInbox(database, broker, new InboundEventBus(),
-            optionsMonitor, NullLogger<DatabaseAndMqttInbox>.Instance);
+            optionsMonitor, routingAlgorithm, routingContext, NullLogger<DatabaseAndMqttInbox>.Instance);
 
         await broker.StartAsync(CancellationToken.None);
     }

@@ -3,6 +3,7 @@ using AwesomeAssertions;
 using dapps.client.Backhaul;
 using dapps.client.Discovery;
 using dapps.core.Models;
+using dapps.core.Routing;
 using dapps.core.Services;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -50,7 +51,9 @@ public sealed class OutboundMessageManagerTests : IAsyncLifetime
         });
         database = new Database(NullLogger<Database>.Instance, optionsMonitor);
         backhaul = new FakeBackhaul();
-        manager = new OutboundMessageManager(database, NullLoggerFactory.Instance, optionsMonitor, [backhaul]);
+        var routingContext = new DatabaseRoutingContext(database, optionsMonitor);
+        var routingAlgorithm = new StaticRoutingAlgorithm(NullLogger<StaticRoutingAlgorithm>.Instance);
+        manager = new OutboundMessageManager(database, NullLoggerFactory.Instance, optionsMonitor, [backhaul], routingAlgorithm, routingContext);
 
         return ValueTask.CompletedTask;
     }

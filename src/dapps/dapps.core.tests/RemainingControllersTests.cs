@@ -2,6 +2,7 @@ using System.Text;
 using AwesomeAssertions;
 using dapps.core.Controllers;
 using dapps.core.Models;
+using dapps.core.Routing;
 using dapps.core.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -159,7 +160,9 @@ public sealed class RemainingControllersTests : IAsyncLifetime
         // OutboundMessageManager isn't exercised here — just the
         // direct-write path in MessageController.
         var transport = new ThrowingTransport();
-        var omm = new OutboundMessageManager(database, NullLoggerFactory.Instance, optionsMonitor, [transport]);
+        var routingContext = new DatabaseRoutingContext(database, optionsMonitor);
+        var routingAlgorithm = new StaticRoutingAlgorithm(NullLogger<StaticRoutingAlgorithm>.Instance);
+        var omm = new OutboundMessageManager(database, NullLoggerFactory.Instance, optionsMonitor, [transport], routingAlgorithm, routingContext);
         var ctrl = new MessageController(database, NullLogger<MessageController>.Instance, omm);
 
         var result = await ctrl.Post(new DappsMessageModel

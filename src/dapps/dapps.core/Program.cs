@@ -4,6 +4,7 @@ using dapps.client.Discovery;
 using dapps.client.Transport;
 using dapps.client.Transport.Agw;
 using dapps.core.Models;
+using dapps.core.Routing;
 using dapps.core.Services;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.Extensions.Options;
@@ -76,6 +77,13 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         options.SlidingExpiration = true;
     });
 builder.Services.AddSingleton<OutboundMessageManager>();
+// B5 routing seam — IRoutingAlgorithm is the strategy, IRoutingContext
+// is the slice of node state it reads. StaticRoutingAlgorithm is the
+// default and matches today's manual-neighbour / discovered-peer /
+// route-hint precedence. PR-B will add PassiveLearningAlgorithm; PR-C
+// adds bounded-flood fallback.
+builder.Services.AddSingleton<IRoutingContext, DatabaseRoutingContext>();
+builder.Services.AddSingleton<IRoutingAlgorithm, StaticRoutingAlgorithm>();
 // Auto-forwarder: ticks DoRun on a short cadence so submitted messages
 // move without a manual /Message/dorun poke. Manual poke still works.
 builder.Services.AddHostedService<OutboundForwarderService>();

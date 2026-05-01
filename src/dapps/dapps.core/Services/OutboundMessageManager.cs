@@ -1,32 +1,30 @@
 using dapps.client.Backhaul;
-using dapps.client.Discovery;
 using dapps.core.Models;
+using dapps.core.Routing;
 using Microsoft.Extensions.Options;
 
 namespace dapps.core.Services;
 
 /// <summary>
 /// Pulls pending outbound messages from the queue, computes residual
-/// TTL, resolves a route for each, and hands them to a matching
-/// <see cref="IDappsBackhaul"/> for delivery. Owns queue/router
-/// concerns — does not know about streams, AGW frames, or session
-/// protocols; those live behind the backhaul seam (Plan A0).
+/// TTL, asks the configured <see cref="IRoutingAlgorithm"/> for a
+/// route, and hands each message to a matching <see cref="IDappsBackhaul"/>
+/// for delivery. Owns queue / dispatch concerns; routing strategy
+/// itself lives behind <see cref="IRoutingAlgorithm"/> (B5 seam) so
+/// algorithms (static, passive-learning, AODV-flood, NET-ROM-style,
+/// MeshCore-style, …) can be swapped without touching this code.
 ///
-/// Plan B4 routing precedence (first match wins):
-///   1. Manual <see cref="DbNeighbour"/> with matching base callsign
-///      — explicit operator override.
-///   2. Fresh <see cref="DbDiscoveredPeer"/> rows for that base
-///      callsign, sorted by <c>CostHint</c> ascending — pick the
-///      cheapest channel the peer's been heard on.
-///   3. Hand-maintained <see cref="DbRouteHint"/> next-hop fallback.
-///   4. None of the above → leave the message in queue until its
-///      ttl expires, log "no route".
+/// The forward-outcome and inbound observation hooks are also routed
+/// through the algorithm so it can update its internal state (learned
+/// routes, failure counters, sequence numbers).
 /// </summary>
 public class OutboundMessageManager(
     Database database,
     ILoggerFactory loggerFactory,
     IOptionsMonitor<SystemOptions> options,
     IEnumerable<IDappsBackhaul> backhauls,
+    IRoutingAlgorithm routingAlgorithm,
+    IRoutingContext routingContext,
     OperationalMetrics? metrics = null)
 {
     private readonly ILogger logger = loggerFactory.CreateLogger<OutboundMessageManager>();
@@ -75,8 +73,6 @@ public class OutboundMessageManager(
 
         var optionsValue = options.CurrentValue;
         var messages = await database.GetPendingOutboundMessages();
-        var neighbours = await database.GetNeighbours();
-        var peers = await database.GetDiscoveredPeers();
 
         foreach (var message in messages)
         {
@@ -91,12 +87,26 @@ public class OutboundMessageManager(
                 continue;
             }
 
-            var route = await ResolveRoute(message, neighbours, peers, optionsValue);
-            if (route is null)
+            var decision = await routingAlgorithm.ResolveAsync(message, routingContext, stoppingToken);
+            BackhaulRoute route;
+            switch (decision)
             {
-                logger.LogWarning("No route for {0}, leaving in queue", message.Id);
-                metrics.RecordNoRoute(message.Id, message.Destination);
-                continue;
+                case RouteDecision.NextHop nh:
+                    route = nh.Route;
+                    break;
+                case RouteDecision.Unreachable:
+                    logger.LogWarning("No route for {0}, leaving in queue", message.Id);
+                    metrics.RecordNoRoute(message.Id, message.Destination);
+                    continue;
+                default:
+                    // Future RouteDecision cases (SourceRoute, BearerDelegated,
+                    // FloodToNeighbours) will land here when those algorithms
+                    // ship; today they don't appear, so a defensive log keeps
+                    // a regression visible.
+                    logger.LogError("Unsupported RouteDecision {0} for {1}; treating as Unreachable",
+                        decision.GetType().Name, message.Id);
+                    metrics.RecordNoRoute(message.Id, message.Destination);
+                    continue;
             }
 
             // F1: preserve the originating callsign verbatim across re-forwards.
@@ -124,6 +134,7 @@ public class OutboundMessageManager(
             }
 
             var result = await backhaul.SendAsync(bm, route, optionsValue.Callsign, stoppingToken);
+            await routingAlgorithm.ObserveForwardOutcomeAsync(message, route, result, routingContext, stoppingToken);
             if (result.Accepted)
             {
                 logger.LogInformation("Remote end accepted message {0} (via {1})", message.Id, backhaul.GetType().Name);
@@ -137,73 +148,5 @@ public class OutboundMessageManager(
                 metrics.RecordForwardFailure(route.Callsign, message.Payload.Length, result.Error);
             }
         }
-    }
-
-    private async Task<BackhaulRoute?> ResolveRoute(
-        DbMessage message,
-        ICollection<DbNeighbour> neighbours,
-        IReadOnlyList<DbDiscoveredPeer> peers,
-        SystemOptions optionsValue)
-    {
-        // Destinations are `app@call[-ssid]`. Compare on the base
-        // callsign — SSID mismatches between configured route and
-        // destination are tolerated.
-        var destBaseCall = message.Destination.Split('@').Last().Split('-')[0];
-
-        // 1. Manual operator-configured neighbour wins. Lets a sysop
-        //    pin a specific route even if discovery would suggest a
-        //    different (and possibly cheaper) channel.
-        var manual = neighbours.FirstOrDefault(
-            n => n.Callsign.Split('-')[0].Equals(destBaseCall, StringComparison.OrdinalIgnoreCase));
-        if (manual is not null)
-        {
-            return new BackhaulRoute(
-                manual.Callsign,
-                BpqPort: manual.BpqPort ?? optionsValue.DefaultBpqPort,
-                UdpEndpoint: manual.UdpEndpoint);
-        }
-
-        // 2. Discovered peers, freshness-filtered, ordered by cost.
-        //    The cheapest fresh channel wins.
-        var now = DateTime.UtcNow;
-        var freshPeer = peers
-            .Where(p => p.Callsign.Split('-')[0].Equals(destBaseCall, StringComparison.OrdinalIgnoreCase))
-            .Where(p => (now - p.LastSeen).TotalSeconds <= p.TtlSeconds)
-            .OrderBy(p => p.CostHint)
-            .ThenBy(p => p.Hops)
-            .FirstOrDefault();
-        if (freshPeer is not null)
-        {
-            logger.LogInformation(
-                "Routing {0} to {1} via discovered peer on {2}/{3} (cost={4}, hops={5})",
-                message.Id, message.Destination,
-                freshPeer.Bearer, freshPeer.ChannelKey,
-                freshPeer.CostHint, freshPeer.Hops);
-            return new BackhaulRoute(
-                freshPeer.Callsign,
-                BpqPort: freshPeer.BpqPort ?? optionsValue.DefaultBpqPort,
-                UdpEndpoint: freshPeer.UdpEndpoint);
-        }
-
-        // 3. Hand-maintained route hint. The fallback for "I know peer
-        //    X is reachable via my neighbour Y" without a discovery
-        //    record. Phase B5 (flood-and-learn) may eventually obsolete
-        //    this, but it stays useful for explicit operator overrides.
-        var routeHint = await database.GetRouteHint(destBaseCall) ?? await database.GetRouteHint("*");
-        if (routeHint is not null)
-        {
-            var nextHop = await database.GetNeighbour(routeHint.NextHop);
-            if (nextHop is not null)
-            {
-                logger.LogInformation("Routing {0} for {1} via route-hint next-hop {2}",
-                    message.Id, message.Destination, nextHop.Callsign);
-                return new BackhaulRoute(
-                    nextHop.Callsign,
-                    BpqPort: nextHop.BpqPort ?? optionsValue.DefaultBpqPort,
-                    UdpEndpoint: nextHop.UdpEndpoint);
-            }
-        }
-
-        return null;
     }
 }

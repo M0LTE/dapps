@@ -49,6 +49,8 @@ DAPPS's B5/B6 needs (the lens to read each candidate through):
 
 **Ham-radio fit.** Best by definition — this is what the ham community already understands. *But* NET/ROM lives at the AX.25 layer below DAPPS. DAPPS-over-NET/ROM-routing would mean letting BPQ's NET/ROM table do the routing and DAPPS treats it as opaque transit. That's a viable architecture, but it's not "DAPPS implements NET/ROM" — it's "DAPPS defers routing to BPQ on AX.25 bearers and needs its own answer for non-AX.25 bearers." Mixed-bearer meshes (AGW + MeshCore + UDP) wouldn't have NET/ROM as a uniform substrate.
 
+**Operator-experience caveat:** real-world deployments have shown NET/ROM (and INP3, the more recent attempt to modernise it) converge poorly enough that they're not a useful target. The slow-cadence NODES broadcasts produce stale routing data, the quality metric is too coarse to discriminate live links from dead ones, and the absence of sequence numbers gives count-to-infinity scenarios on real packet networks. **NET/ROM and INP3 are off the candidate list for DAPPS.** Option C below (defer to BPQ's NET/ROM on AX.25 bearers) is correspondingly off the table — DAPPS needs its own routing answer that works uniformly across all bearers.
+
 ### 4. Reticulum (RNS / LXMF, modern Python)
 
 **Mechanism.** Each destination announces itself via flooded "announce" packets containing the destination hash and public key. Transport nodes record "which neighbour did this announce arrive from?" and use that as the next-hop for that destination. When a destination is needed but no announce has been heard, a node can issue a "path request" that propagates as a flood. Sustained communication uses Links (3-packet handshake establishes an encrypted channel; subsequent traffic uses a 16-bit link ID with negligible per-packet overhead).
@@ -107,15 +109,15 @@ How each candidate fits:
 
 ## Verdict for DAPPS
 
-No clear winner; the choice depends on what we optimise for. Three options seem worth taking seriously:
+Two options remain after the NET/ROM/INP3 caveat above:
 
 **Option A: AODV-flavoured passive learning + bounded flood.** The simplest of the bunch and what was sketched in chat. Passive learning (every inbound message teaches reverse-direction routes via F1's `src=`) gives free routing for bidirectional traffic; bounded flood handles cold-start. No wire-format addition beyond F1; `IRoutingAlgorithm` clean. Cost: convergence requires bidirectional traffic OR a flood — purely-listening nodes never get routes inferred about them. *Most pragmatic if we want B5 done in one PR pair (#1 passive, #2 bounded flood).*
 
 **Option B: Adopt MeshCore's routing model wholesale.** Same wire format on DAPPS that MeshCore uses on LoRa. Phase H1 (MeshCore Companion bearer) becomes simpler because the routing decisions match. Cost: source routing puts path bytes on every data packet, painful on slow AX.25. Probably wrong for primary AX.25-target deployments. *Pursue if MeshCore is the strategic target.*
 
-**Option C: Defer to NET/ROM on AX.25, do something else off it.** On AX.25 bearers, treat BPQ's existing NET/ROM as the L2.5 routing layer — DAPPS just hands off to BPQ and lets it sort out the AX.25 path. On non-AX.25 bearers (UDP, MeshCore, RHP) implement Option A or B. Cost: per-bearer routing logic; "what does B5 mean" varies by bearer. *Pursue if the goal is "play nice with the existing ham mesh."*
+~~**Option C: Defer to NET/ROM on AX.25.**~~ Off the table — see the lived-experience verdict in §3.
 
-Recommendation, weak: **Option A** for the v0.x phase, with the `IRoutingAlgorithm` interface designed to also fit Option B and Option C cleanly so we can revisit. Specifically, the interface's `Resolve` return type should be `RouteDecision` (a discriminated union of "next-hop callsign" and "source route", so MeshCore-style fits without breaking AODV-style), and `RunAsync` is a first-class hook so a future Babel / NET-ROM-style proactive algorithm can slot in without breaking existing implementations.
+**Decision: Option A** for the v0.x phase. The `IRoutingAlgorithm` interface is designed to fit Option B cleanly so we can revisit (the `Resolve` return type is `RouteDecision`, a discriminated union with `NextHop` and `Unreachable` initially, where future cases like `SourceRoute` slot in additively for MeshCore-style without breaking AODV-style). `RunAsync` is a first-class hook so a future proactive algorithm can ship without breaking existing implementations.
 
 ## Reading list
 

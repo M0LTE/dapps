@@ -1,6 +1,7 @@
 using System.Text.Json;
 using dapps.client.Backhaul;
 using dapps.core.Models;
+using dapps.core.Routing;
 using Microsoft.Extensions.Options;
 
 namespace dapps.core.Services;
@@ -19,6 +20,8 @@ public sealed class DatabaseAndMqttInbox(
     MqttBrokerService mqtt,
     InboundEventBus events,
     IOptionsMonitor<SystemOptions> options,
+    IRoutingAlgorithm routingAlgorithm,
+    IRoutingContext routingContext,
     ILogger<DatabaseAndMqttInbox> logger) : IBackhaulInbox
 {
     public async Task DeliverAsync(
@@ -26,6 +29,13 @@ public sealed class DatabaseAndMqttInbox(
         string sourceCallsign,
         CancellationToken ct)
     {
+        // Hand the message to the routing algorithm BEFORE persistence —
+        // passive-learning algorithms care about the (originator, link-source)
+        // pair, and that pair is only meaningful here at the wire boundary.
+        // Algorithms that don't observe inbound (StaticRoutingAlgorithm) no-op
+        // immediately.
+        await routingAlgorithm.ObserveInboundAsync(message, sourceCallsign, routingContext, ct);
+
         var headersJson = message.Headers is null
             ? "{}"
             : JsonSerializer.Serialize(message.Headers);
