@@ -33,6 +33,26 @@ public sealed class EventsController(
     public OperationalMetrics.Snapshot GetHealth() => metrics.Take();
 
     /// <summary>
+    /// Recently dropped messages — TTL-expired, hash-mismatch, etc. —
+    /// soft-deleted from the messages table. Polled by the dashboard's
+    /// "Recently dropped" panel for debugging.
+    /// </summary>
+    [HttpGet("dropped")]
+    public async Task<IReadOnlyList<DroppedMessageRow>> GetDropped()
+    {
+        var rows = await database.GetRecentDroppedMessages(50);
+        return rows.Select(d => new DroppedMessageRow(
+            Id: d.Id,
+            Destination: d.Destination,
+            SourceCallsign: d.SourceCallsign,
+            Bytes: d.Payload.Length,
+            Ttl: d.Ttl,
+            CreatedAt: d.CreatedAt,
+            DroppedAt: d.DroppedAt,
+            Reason: d.Reason)).ToList();
+    }
+
+    /// <summary>
     /// Snapshot of the two operational queues (outbound forwards
     /// pending; messages for local apps not yet ack'd) plus
     /// summary counts. Returned as JSON so the dashboard can
@@ -130,3 +150,13 @@ public sealed record QueueSnapshot(
     int UndeliveredLocal,
     IReadOnlyList<QueueRow> Outbound,
     IReadOnlyList<QueueRow> LocalInbox);
+
+public sealed record DroppedMessageRow(
+    string Id,
+    string Destination,
+    string SourceCallsign,
+    int Bytes,
+    int? Ttl,
+    DateTime CreatedAt,
+    DateTime DroppedAt,
+    string Reason);

@@ -34,6 +34,7 @@ public sealed class OutboundMessageManagerTests : IAsyncLifetime
         {
             c.CreateTable<DbOffer>();
             c.CreateTable<DbMessage>();
+            c.CreateTable<DbDroppedMessage>();
             c.CreateTable<DbNeighbour>();
             c.CreateTable<DbRouteHint>();
             c.CreateTable<DbDiscoveredPeer>();

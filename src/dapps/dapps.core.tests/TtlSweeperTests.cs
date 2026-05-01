@@ -28,6 +28,7 @@ public sealed class TtlSweeperTests : IAsyncLifetime
         {
             c.CreateTable<DbOffer>();
             c.CreateTable<DbMessage>();
+            c.CreateTable<DbDroppedMessage>();
         }
 
         database = new Database(NullLogger<Database>.Instance,
