@@ -64,7 +64,19 @@ jobs:
         run: dotnet build src/dapps/dapps.sln --no-restore --configuration Release
 
       - name: Test
-        run: dotnet test src/dapps/dapps.core.tests/dapps.core.tests.csproj --no-build --configuration Release
+        # Microsoft Testing Platform passes args after `--` to the test
+        # runner. `--output detailed` prints per-test results so CI logs
+        # show *which* test failed inline, no artifact-digging needed.
+        run: dotnet test src/dapps/dapps.core.tests/dapps.core.tests.csproj --no-build --configuration Release -- --output detailed
+
+      - name: Upload test results on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: src/dapps/dapps.core.tests/bin/Release/net8.0/TestResults/
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Read version
         id: version
