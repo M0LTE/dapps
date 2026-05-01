@@ -33,6 +33,7 @@ public sealed class RemainingControllersTests : IAsyncLifetime
         {
             c.CreateTable<DbOffer>();
             c.CreateTable<DbMessage>();
+            c.CreateTable<DbDroppedMessage>();
             c.CreateTable<DbSystemOption>();
             c.CreateTable<DbNeighbour>();
             c.CreateTable<DbRouteHint>();

@@ -549,6 +549,76 @@ else
     </table>
 }
 
+<h2>Recently dropped <span id="dropped-count" class="pill">—</span></h2>
+<p class="muted-inline">Messages DAPPS threw away (TTL expired in queue, etc.) instead of forwarding or delivering. Soft-deleted from the active queues so you can see what happened during RF testing. <span class="muted">Auto-refreshes every 5s.</span></p>
+<table id="dropped-table">
+    <thead>
+        <tr>
+            <th>Dropped</th>
+            <th>Reason</th>
+            <th>Id</th>
+            <th>Destination</th>
+            <th>From</th>
+            <th class="numeric">Bytes</th>
+            <th class="numeric">TTL</th>
+            <th>Lived for</th>
+        </tr>
+    </thead>
+    <tbody id="dropped-body">
+        <tr><td colspan="8" class="muted" style="text-align:center;">No drops yet.</td></tr>
+    </tbody>
+</table>
+
+<script>
+    (function () {
+        const fmtAgo = (s) => {
+            if (s < 90) return `${s}s`;
+            const m = Math.floor(s / 60);
+            if (m < 90) return `${m}m`;
+            const h = Math.floor(s / 3600);
+            if (h < 36) return `${h}h`;
+            return `${Math.floor(s / 86400)}d`;
+        };
+        const escape = (s) => String(s ?? '').replace(/[&<>"']/g, c =>
+            ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        async function poll() {
+            try {
+                const res = await fetch('/Events/dropped', { credentials: 'same-origin' });
+                if (!res.ok) return;
+                const rows = await res.json();
+                const body = document.getElementById('dropped-body');
+                const count = document.getElementById('dropped-count');
+                count.textContent = rows.length;
+                count.className = 'pill' + (rows.length ? ' warn' : '');
+                if (!rows.length) {
+                    body.innerHTML = '<tr><td colspan="8" class="muted" style="text-align:center;">No drops yet.</td></tr>';
+                    return;
+                }
+                body.innerHTML = rows.map(r => {
+                    const droppedAt = new Date(r.droppedAt);
+                    const lived = Math.max(0, Math.floor(
+                        (droppedAt.getTime() - new Date(r.createdAt).getTime()) / 1000));
+                    const ts = droppedAt.toISOString().substring(11, 19);
+                    const droppedSecsAgo = Math.max(0, Math.floor(
+                        (Date.now() - droppedAt.getTime()) / 1000));
+                    return `<tr>` +
+                        `<td><code>${ts}</code> <span class="muted">(${fmtAgo(droppedSecsAgo)} ago)</span></td>` +
+                        `<td><span class="pill warn">${escape(r.reason)}</span></td>` +
+                        `<td><code>${escape(r.id)}</code></td>` +
+                        `<td><code>${escape(r.destination)}</code></td>` +
+                        `<td><code>${escape(r.sourceCallsign)}</code></td>` +
+                        `<td class="numeric">${r.bytes}</td>` +
+                        `<td class="numeric">${r.ttl ?? '—'}</td>` +
+                        `<td class="muted">${fmtAgo(lived)}</td>` +
+                        `</tr>`;
+                }).join('');
+            } catch { /* try again next tick */ }
+        }
+        poll();
+        setInterval(poll, 5000);
+    })();
+</script>
+
 <h2>Live inbound <span id="sse-status" class="pill">connecting</span></h2>
 <p class="muted">
     Server-Sent Events feed of messages arriving at this node. Clears

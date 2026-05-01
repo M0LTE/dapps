@@ -155,8 +155,50 @@ public class Database(ILogger<Database> logger, IOptionsMonitor<SystemOptions> o
     }
 
     /// <summary>
-    /// Delete every message and offer whose ttl has elapsed. Returns the
-    /// total row count removed. Rows with no ttl set are left alone.
+    /// Soft-delete: copy the message into <c>dropped_messages</c> with
+    /// the given reason + a now() timestamp, then remove from
+    /// <c>messages</c>. Idempotent — a missing row is a no-op (it might
+    /// have been concurrently dropped). Used by the forwarder and TTL
+    /// sweeper instead of <see cref="DeleteMessage"/> when discarding
+    /// rather than acknowledging.
+    /// </summary>
+    internal async Task SoftDeleteMessage(string id, string reason)
+    {
+        var c = DbInfo.GetAsyncConnection();
+        var row = await c.FindAsync<DbMessage>(id);
+        if (row is null) return;
+        await c.InsertAsync(new DbDroppedMessage
+        {
+            Id = row.Id,
+            Payload = row.Payload,
+            Salt = row.Salt,
+            Destination = row.Destination,
+            SourceCallsign = row.SourceCallsign,
+            AdditionalProperties = row.AdditionalProperties,
+            Forwarded = row.Forwarded,
+            LocallyDelivered = row.LocallyDelivered,
+            Ttl = row.Ttl,
+            CreatedAt = row.CreatedAt,
+            DroppedAt = DateTime.UtcNow,
+            Reason = reason,
+        });
+        await c.DeleteAsync<DbMessage>(id);
+    }
+
+    public async Task<IReadOnlyList<DbDroppedMessage>> GetRecentDroppedMessages(int limit = 50)
+    {
+        var c = DbInfo.GetAsyncConnection();
+        var rows = await c.QueryAsync<DbDroppedMessage>(
+            "select * from dropped_messages order by DroppedAt desc limit ?", limit);
+        return rows.ToList();
+    }
+
+    /// <summary>
+    /// Soft-delete every message whose TTL has elapsed. Hard-delete
+    /// every offer whose TTL has elapsed (offers are protocol-level
+    /// scaffolding — there's no audit value in keeping a "we never
+    /// got the data for that offer" row around). Returns the count of
+    /// rows actioned across both tables.
     /// </summary>
     internal async Task<int> DeleteExpired(DateTime now)
     {
@@ -180,7 +222,7 @@ public class Database(ILogger<Database> logger, IOptionsMonitor<SystemOptions> o
             .ToList();
         foreach (var message in expiredMessages)
         {
-            await connection.DeleteAsync<DbMessage>(message.Id);
+            await SoftDeleteMessage(message.Id, "ttl-expired");
         }
 
         return expiredOffers.Count + expiredMessages.Count;

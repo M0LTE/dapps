@@ -51,7 +51,7 @@ public class OutboundMessageManager(
                     message.Id, message.Destination,
                     (int)(DateTime.UtcNow - message.CreatedAt).TotalSeconds, message.Ttl);
                 metrics.RecordTtlExpired(message.Id, message.Destination);
-                await database.DeleteMessage(message.Id);
+                await database.SoftDeleteMessage(message.Id, "ttl-expired");
                 continue;
             }
 

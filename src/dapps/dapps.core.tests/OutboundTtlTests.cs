@@ -42,6 +42,7 @@ public sealed class OutboundTtlTests : IAsyncLifetime
         {
             c.CreateTable<DbOffer>();
             c.CreateTable<DbMessage>();
+            c.CreateTable<DbDroppedMessage>();
             c.CreateTable<DbAppToken>();
             c.CreateTable<DbNeighbour>();
             c.CreateTable<DbRouteHint>();
