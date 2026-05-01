@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using dapps.client.Backhaul;
 using dapps.core.Models;
+using dapps.core.Routing;
 using dapps.core.Services;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -82,15 +83,19 @@ public sealed class F1MultiHopForwardingTests : IAsyncLifetime
         var broker = new MqttBrokerService(
             NullLogger<MqttBrokerService>.Instance, optionsMonitor, database, tokens);
         var events = new InboundEventBus();
+        var routingContext = new DatabaseRoutingContext(database, optionsMonitor);
+        var routingAlgorithm = new StaticRoutingAlgorithm(NullLogger<StaticRoutingAlgorithm>.Instance);
         inbox = new DatabaseAndMqttInbox(
             database, broker, events, optionsMonitor,
+            routingAlgorithm, routingContext,
             NullLogger<DatabaseAndMqttInbox>.Instance);
 
         outbound = new OutboundMessageManager(
             database,
             new NullLoggerFactory(),
             optionsMonitor,
-            new IDappsBackhaul[] { capture });
+            new IDappsBackhaul[] { capture },
+            routingAlgorithm, routingContext);
 
         await Task.CompletedTask;
     }

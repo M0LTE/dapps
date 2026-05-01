@@ -4,6 +4,7 @@ using AwesomeAssertions;
 using dapps.client.Backhaul;
 using dapps.client.Transport.Agw;
 using dapps.core.Models;
+using dapps.core.Routing;
 using dapps.core.Services;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -125,15 +126,19 @@ public class TtlForwardingIntegrationTests(TwoInstanceLinbpqFixture fixture) : I
         // ── 3. Run the forwarder ───────────────────────────────────────────
         var transport = new AgwOutboundTransport(fixture.Host, fixture.AgwPortA, NullLoggerFactory.Instance);
         var backhaul = new Dappsv1SessionBackhaul(transport, NullLoggerFactory.Instance);
+        var optionsMonitor = new TestOptionsMonitor<SystemOptions>(new SystemOptions
+        {
+            Callsign = fixture.ApplCallA,
+            DefaultBpqPort = fixture.AxipPortIndex,
+        });
+        var routingContext = new DatabaseRoutingContext(database, optionsMonitor);
+        var routingAlgorithm = new StaticRoutingAlgorithm(NullLogger<StaticRoutingAlgorithm>.Instance);
         var manager = new OutboundMessageManager(
             database,
             NullLoggerFactory.Instance,
-            new TestOptionsMonitor<SystemOptions>(new SystemOptions
-            {
-                Callsign = fixture.ApplCallA,
-                DefaultBpqPort = fixture.AxipPortIndex,
-            }),
-            [backhaul]);
+            optionsMonitor,
+            [backhaul],
+            routingAlgorithm, routingContext);
 
         await manager.DoRun(ct);
 
