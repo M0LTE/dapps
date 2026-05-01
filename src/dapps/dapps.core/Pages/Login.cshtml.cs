@@ -14,8 +14,13 @@ public sealed class LoginModel(AdminPasswordStore store) : PageModel
     public string? Error { get; private set; }
     public string? ReturnUrl { get; set; }
 
-    public IActionResult OnGet(string? returnUrl = null)
+    public async Task<IActionResult> OnGetAsync(string? returnUrl = null)
     {
+        // Fresh install with no password set yet: bounce to /Setup so
+        // the operator sees the right form, not a login form for a
+        // password that doesn't exist.
+        if (!await store.IsConfiguredAsync()) return LocalRedirect("/Setup");
+
         // Already signed in? Skip the form.
         if (User.Identity?.IsAuthenticated == true)
         {
