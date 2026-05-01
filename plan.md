@@ -406,11 +406,9 @@ The implementation does not need feature parity with `dapps.core` — it only ne
 
 Items deferred from earlier discussions, mostly "we know it'll need to happen, just not yet":
 
-### F1. End-to-end source tracking
+### F1. End-to-end source tracking *(done — PR #47)*
 
-Today `dapps-source` user property is the **link source** — the callsign that handed us the message. In a multi-hop scenario it's the last hop, not the original sender. Spec change needed: an `src=` field on the `ihave` line carrying the originator's callsign.
-
-Recompute `chk` example. Update parser. Update outbound emitter. Surface via a new MQTT user property (e.g. `dapps-origin`) so apps can distinguish "delivered by N1FOO" from "originally sent by G7BAR".
+`ihave` gained an optional `src=<callsign>` field carrying the originating callsign — distinct from the link source. Originators set it; relays preserve it verbatim across re-forwards. Receivers expose it as the `dapps-origin` MQTT user property and the REST `OriginatorCallsign` field. Pre-F1 senders that omit `src=` round-trip cleanly with originator unknown. `BackhaulMessageCodec` bumped to v2 with a `HasOriginator` flag bit; v1 messages still decode. The 6-node multi-hop simulator's five canned exercises validate it end-to-end across path lengths 1-4 and branching.
 
 ### F2. Multi-part messages
 
