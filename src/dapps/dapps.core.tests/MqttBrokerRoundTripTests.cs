@@ -37,6 +37,7 @@ public sealed class MqttBrokerRoundTripTests : IAsyncLifetime
         {
             c.CreateTable<DbOffer>();
             c.CreateTable<DbMessage>();
+            c.CreateTable<DbDroppedMessage>();
             c.CreateTable<DbSystemOption>();
             c.CreateTable<DbRouteHint>();
             c.CreateTable<DbNeighbour>();

@@ -45,6 +45,7 @@ public class TtlForwardingIntegrationTests(TwoInstanceLinbpqFixture fixture) : I
         {
             c.CreateTable<DbOffer>();
             c.CreateTable<DbMessage>();
+            c.CreateTable<DbDroppedMessage>();
             c.CreateTable<DbNeighbour>();
             c.CreateTable<DbRouteHint>();
             c.CreateTable<DbDiscoveredPeer>();
