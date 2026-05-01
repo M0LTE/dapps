@@ -7,6 +7,7 @@ using dapps.core.Models;
 using dapps.core.Services;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using SQLite;
 
 namespace dapps.core.tests;
 
@@ -22,6 +23,7 @@ namespace dapps.core.tests;
 /// MTU is dialed down to 64 bytes for the multi-fragment case so a
 /// 1 KB payload chunks across many datagrams.
 /// </summary>
+[Collection(SqliteOverridePathCollection.Name)]
 public sealed class UdpBackhaulEndToEndTests
 {
     [Fact]
@@ -130,8 +132,22 @@ public sealed class UdpBackhaulEndToEndTests
             Callsign = "N0CALL",
             UdpListenPort = port,
         });
+        // The UDP listener takes a Database for its inbound IP→callsign
+        // mapping (so passive learning can identify the link source).
+        // These tests use unique temp DB paths per test so they don't
+        // collide; an empty neighbours table just means the listener
+        // falls back to the "UDP" sentinel — which is what these tests
+        // expect anyway.
+        var dbPath = Path.Combine(Path.GetTempPath(), $"dapps-udpe2e-{Guid.NewGuid():N}.db");
+        DbInfo.OverridePath = dbPath;
+        using (var c = DbInfo.GetConnection())
+        {
+            c.CreateTable<DbNeighbour>();
+            c.CreateTable<DbSystemOption>();
+        }
+        var database = new Database(NullLogger<Database>.Instance, optionsMonitor);
         var listener = new UdpDatagramListener(
-            optionsMonitor, inbox, NullLogger<UdpDatagramListener>.Instance);
+            optionsMonitor, inbox, database, NullLogger<UdpDatagramListener>.Instance);
         // Fire-and-forget: BackgroundService.StartAsync returns once the
         // execute task is scheduled. The listener begins receiving on its
         // own task. Disposal cancels.

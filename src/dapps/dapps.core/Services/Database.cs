@@ -411,6 +411,81 @@ public class Database(ILogger<Database> logger, IOptionsMonitor<SystemOptions> o
         return deleted > 0;
     }
 
+    // ── Passive-learning routes (PR-B) ──────────────────────────────
+
+    /// <summary>
+    /// Record (or refresh) a learned route for the given destination.
+    /// One row per destination base callsign — newer observations
+    /// overwrite older ones. <see cref="DbLearnedRoute.LastSeenAt"/>
+    /// always bumps to <c>now</c>; failure counter resets when the
+    /// next-hop changes (a new path is fresh evidence of liveness).
+    /// </summary>
+    internal async Task UpsertLearnedRouteAsync(string destinationBaseCallsign, string nextHopCallsign, DateTime now)
+    {
+        var connection = DbInfo.GetAsyncConnection();
+        var existing = await connection.FindAsync<DbLearnedRoute>(destinationBaseCallsign);
+        if (existing is null)
+        {
+            await connection.InsertAsync(new DbLearnedRoute
+            {
+                DestinationBaseCallsign = destinationBaseCallsign,
+                NextHopCallsign = nextHopCallsign,
+                LastSeenAt = now,
+                LastUsedAt = DateTime.MinValue,
+                ConsecutiveFailures = 0,
+            });
+            return;
+        }
+
+        existing.LastSeenAt = now;
+        if (!string.Equals(existing.NextHopCallsign, nextHopCallsign, StringComparison.OrdinalIgnoreCase))
+        {
+            existing.NextHopCallsign = nextHopCallsign;
+            existing.ConsecutiveFailures = 0;
+        }
+        await connection.UpdateAsync(existing);
+    }
+
+    /// <summary>Look up the current learned route, if any.</summary>
+    internal async Task<DbLearnedRoute?> GetLearnedRouteAsync(string destinationBaseCallsign)
+        => await DbInfo.GetAsyncConnection().FindAsync<DbLearnedRoute>(destinationBaseCallsign);
+
+    /// <summary>Forward succeeded — reset failure counter, update <see cref="DbLearnedRoute.LastUsedAt"/>.</summary>
+    internal async Task RecordLearnedRouteSuccessAsync(string destinationBaseCallsign, DateTime now)
+    {
+        var connection = DbInfo.GetAsyncConnection();
+        var row = await connection.FindAsync<DbLearnedRoute>(destinationBaseCallsign);
+        if (row is null) return;
+        row.ConsecutiveFailures = 0;
+        row.LastUsedAt = now;
+        await connection.UpdateAsync(row);
+    }
+
+    /// <summary>Forward failed — increment failure counter; delete the
+    /// row if the threshold is hit. Returns the new failure count, or
+    /// <c>-1</c> if the row was deleted (i.e. invalidated).</summary>
+    internal async Task<int> RecordLearnedRouteFailureAsync(string destinationBaseCallsign, int invalidationThreshold)
+    {
+        var connection = DbInfo.GetAsyncConnection();
+        var row = await connection.FindAsync<DbLearnedRoute>(destinationBaseCallsign);
+        if (row is null) return 0;
+        row.ConsecutiveFailures++;
+        if (row.ConsecutiveFailures >= invalidationThreshold)
+        {
+            await connection.DeleteAsync<DbLearnedRoute>(destinationBaseCallsign);
+            return -1;
+        }
+        await connection.UpdateAsync(row);
+        return row.ConsecutiveFailures;
+    }
+
+    /// <summary>All current learned routes — for dashboard / debug.</summary>
+    public async Task<IReadOnlyList<DbLearnedRoute>> GetLearnedRoutesAsync()
+    {
+        var connection = DbInfo.GetAsyncConnection();
+        return await connection.QueryAsync<DbLearnedRoute>("select * from learnedroutes order by LastSeenAt desc");
+    }
+
     internal async Task SaveSystemOptions(SystemOptions systemOptions)
     {
         var connection = DbInfo.GetAsyncConnection();

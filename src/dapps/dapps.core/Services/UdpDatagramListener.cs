@@ -22,6 +22,7 @@ namespace dapps.core.Services;
 public sealed class UdpDatagramListener(
     IOptionsMonitor<SystemOptions> options,
     IBackhaulInbox inbox,
+    Database database,
     ILogger<UdpDatagramListener> logger) : BackgroundService
 {
     /// <summary>Source address used for inbound delivery's sourceCallsign
@@ -93,9 +94,17 @@ public sealed class UdpDatagramListener(
                     continue;
                 }
 
-                logger.LogInformation("UDP datagram delivered: {0} from {1} (dst={2})",
-                    decoded.Id, received.RemoteEndPoint, decoded.Destination);
-                await inbox.DeliverAsync(decoded, UnknownSourceCallsign, stoppingToken);
+                // Prefer the in-band link-source callsign (codec v3+)
+                // — it's authoritative because the sender stamps it
+                // from its own configured callsign. Fall back to
+                // IP:port→neighbour mapping for v2/v1 messages and
+                // for cases where the sender didn't stamp it.
+                var sourceCallsign = !string.IsNullOrEmpty(decoded.LinkSourceCallsign)
+                    ? decoded.LinkSourceCallsign!
+                    : await ResolveSourceCallsignAsync(received.RemoteEndPoint);
+                logger.LogInformation("UDP datagram delivered: {0} from {1} (dst={2}, source={3})",
+                    decoded.Id, received.RemoteEndPoint, decoded.Destination, sourceCallsign);
+                await inbox.DeliverAsync(decoded, sourceCallsign, stoppingToken);
             }
             catch (Exception ex)
             {
@@ -112,5 +121,46 @@ public sealed class UdpDatagramListener(
                 nextSweep = DateTime.UtcNow + SweepInterval;
             }
         }
+    }
+
+    /// <summary>
+    /// Map an inbound IP:port to the configured neighbour's callsign.
+    /// Tries an exact <c>UdpEndpoint</c> match first, then falls back
+    /// to port-only when nothing matches exactly — handles cases like
+    /// loopback-vs-eth0 where the source IP we observe differs from
+    /// the host literal the neighbour was configured with (common on
+    /// WSL2 / containerised dev setups). Returns the literal "UDP"
+    /// when no neighbour matches or the port is shared by multiple
+    /// neighbours (genuinely ambiguous).
+    /// </summary>
+    private async Task<string> ResolveSourceCallsignAsync(IPEndPoint remote)
+    {
+        var neighbours = await database.GetNeighbours();
+        if (neighbours.Count == 0) return UnknownSourceCallsign;
+
+        var exactKey = $"{remote.Address}:{remote.Port}";
+        var exact = neighbours.FirstOrDefault(n =>
+            !string.IsNullOrEmpty(n.UdpEndpoint)
+            && string.Equals(n.UdpEndpoint, exactKey, StringComparison.OrdinalIgnoreCase));
+        if (exact is not null) return exact.Callsign;
+
+        var byPort = neighbours
+            .Where(n => !string.IsNullOrEmpty(n.UdpEndpoint) && ParsePort(n.UdpEndpoint!) == remote.Port)
+            .ToList();
+        if (byPort.Count == 1) return byPort[0].Callsign;
+
+        // No match, or multiple neighbours share that port. Without a
+        // bearer-level callsign in the datagram we can't disambiguate;
+        // fall back to the placeholder so the message still gets
+        // delivered (passive learning will skip it, which is correct
+        // behaviour when the link source is genuinely unknown).
+        return UnknownSourceCallsign;
+    }
+
+    private static int? ParsePort(string endpoint)
+    {
+        var i = endpoint.LastIndexOf(':');
+        if (i < 0 || i == endpoint.Length - 1) return null;
+        return int.TryParse(endpoint.AsSpan(i + 1), out var p) ? p : null;
     }
 }

@@ -31,4 +31,19 @@ public sealed class DatabaseRoutingContext(
         if (hint is null) return null;
         return await database.GetNeighbour(hint.NextHop);
     }
+
+    public async Task<DbNeighbour?> GetNeighbourByCallsignAsync(string callsign, CancellationToken ct)
+        => await database.GetNeighbour(callsign);
+
+    public Task UpsertLearnedRouteAsync(string destinationBaseCallsign, string nextHopCallsign, CancellationToken ct)
+        => database.UpsertLearnedRouteAsync(destinationBaseCallsign, nextHopCallsign, DateTime.UtcNow);
+
+    public Task<DbLearnedRoute?> GetLearnedRouteAsync(string destinationBaseCallsign, CancellationToken ct)
+        => database.GetLearnedRouteAsync(destinationBaseCallsign);
+
+    public Task RecordLearnedRouteSuccessAsync(string destinationBaseCallsign, CancellationToken ct)
+        => database.RecordLearnedRouteSuccessAsync(destinationBaseCallsign, DateTime.UtcNow);
+
+    public Task<int> RecordLearnedRouteFailureAsync(string destinationBaseCallsign, int invalidationThreshold, CancellationToken ct)
+        => database.RecordLearnedRouteFailureAsync(destinationBaseCallsign, invalidationThreshold);
 }
