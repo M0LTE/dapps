@@ -58,7 +58,23 @@ public sealed class UdpMulticastDiscoveryBearer : IDiscoveryBearer
 
             var recv = new UdpClient();
             recv.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
-            recv.Client.Bind(new IPEndPoint(IPAddress.Any, endpoint.Port));
+            // Bind to the multicast group address itself, NOT IPAddress.Any.
+            //
+            // When a single process subscribes to multiple channels that
+            // share a UDP port (channel-keys differing only in multicast
+            // group address), binding each recv socket to 0.0.0.0:port
+            // with SO_REUSEADDR causes Linux's kernel multicast filtering
+            // to leak packets across groups within the process — a node
+            // subscribed to G1 ends up receiving G2's beacons too, with
+            // sourceCallsign attributed to whichever GroupBinding's
+            // ReadLoop happens to dequeue first.
+            //
+            // Binding to the group address makes the kernel do the
+            // group-level filter on the socket directly, so each socket
+            // only ever delivers its own group's traffic. No effect on
+            // single-channel deployments; cleanly fixes the multi-channel
+            // case.
+            recv.Client.Bind(new IPEndPoint(endpoint.Address, endpoint.Port));
             recv.JoinMulticastGroup(endpoint.Address);
 
             var send = new UdpClient();
