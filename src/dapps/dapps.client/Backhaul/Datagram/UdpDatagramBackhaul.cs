@@ -58,7 +58,15 @@ public sealed class UdpDatagramBackhaul : IDappsBackhaul, IDisposable
 
         try
         {
-            var encoded = BackhaulMessageCodec.Encode(message);
+            // Stamp the link source with our local callsign before
+            // encoding — UDP doesn't carry a session-level sender
+            // identity, so we have to put it in-band. Receivers use
+            // this for passive routing learning. AGW bearers identify
+            // the link source from the AX.25 C-frame and don't need
+            // this; setting it here is harmless if the message gets
+            // bridged across bearers.
+            var stamped = message with { LinkSourceCallsign = localCallsign };
+            var encoded = BackhaulMessageCodec.Encode(stamped);
             var fragments = Packetiser.Split(message.Id, encoded, _mtu);
 
             _logger.LogInformation(

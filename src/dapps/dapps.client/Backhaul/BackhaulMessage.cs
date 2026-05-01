@@ -19,4 +19,18 @@ public sealed record BackhaulMessage(
     int? Ttl,
     byte[] Payload,
     IReadOnlyDictionary<string, string>? Headers = null,
-    string? Originator = null);
+    string? Originator = null,
+    string? LinkSourceCallsign = null);
+
+// LinkSourceCallsign: the *immediate sender's* callsign, distinct from
+// Originator (the F1 end-to-end source). Carried on bearers that don't
+// natively identify the sender — UDP being the prime example, since
+// the source port is ephemeral and there's no session-level handshake
+// that establishes peer identity. Stamped by the bearer's send path
+// with the local callsign; consumed by the receive path so the inbox
+// (and downstream passive-learning algorithms) can see who handed
+// each hop the message.
+//
+// AGW already identifies the link source from the C-frame's CallFrom
+// field, so AGW-bearer SendAsync may leave this null; the inbound
+// path uses the AGW-supplied identity directly.

@@ -277,6 +277,60 @@ cmd_verify() {
     for n in "${NODES[@]}"; do show_inbox "$n"; done
 }
 
+# Dump every node's learned-routes table — populated by the passive
+# learning algorithm as inbound traffic arrives carrying F1 src=
+# headers. After the canned exercises, these tables are the proof
+# that learning actually happened.
+cmd_learned() {
+    echo ">>> Learned routes across the mesh:"
+    for n in "${NODES[@]}"; do
+        local d; d="$(node_dir "$n")/data/dapps.db"
+        echo "----- ${CALLSIGN[$n]} learned routes -----"
+        if [ ! -f "$d" ]; then echo "(db not present)"; continue; fi
+        python3 - "$d" <<'PY'
+import sqlite3, sys
+con = sqlite3.connect(sys.argv[1])
+try:
+    rows = list(con.execute("select DestinationBaseCallsign, NextHopCallsign, LastSeenAt, ConsecutiveFailures from learnedroutes order by DestinationBaseCallsign"))
+except sqlite3.OperationalError as e:
+    print(f"  (no learnedroutes table yet: {e})"); sys.exit()
+if not rows:
+    print("  (none)")
+for dest, nh, seen, fails in rows:
+    print(f"  → {dest} via {nh}  (failures={fails})")
+PY
+    done
+}
+
+# Drop the route-hints table and the discovered-peer entries on every
+# node, leaving ONLY learned routes as the routing source. Then send
+# A→F again. If passive learning has done its job, the message still
+# delivers — proving that after one round of bidirectional traffic
+# the network can route without explicit operator config.
+cmd_prove_learning() {
+    echo ">>> Wiping route-hints + discovered-peers on every node…"
+    for n in "${NODES[@]}"; do
+        local d; d="$(node_dir "$n")/data/dapps.db"
+        python3 - "$d" <<'PY'
+import sqlite3, sys
+con = sqlite3.connect(sys.argv[1])
+con.execute("delete from routehints"); con.execute("delete from discoveredpeers")
+con.commit()
+PY
+    done
+    echo ">>> A→F using ONLY learned routes…"
+    submit_message A F "learned-only-$(date +%s)"
+    drain_queues
+    show_inbox F
+    echo
+    echo "═════════════════════════════════════════════════════════════"
+    echo "  PR-B ACCEPTANCE: above message arrived at F using ONLY"
+    echo "  routes learned passively from prior traffic. No route-hints"
+    echo "  configured, no discovered peers seeded. If you see a row"
+    echo "  with origin=G0SIA-1, passive learning is working."
+    echo "═════════════════════════════════════════════════════════════"
+}
+
 # Canned non-trivial exercise — runs several sends across the topology
 # that exercise different path lengths, branching, and parallel flows.
 # After all sends complete, prints each receiver's inbox so F1 origin
@@ -339,6 +393,12 @@ cmd_exercise() {
     echo "  datagram-shaped backhauls; the receiver app has dapps-source"
     echo "  via MQTT for the link source separately."
     echo "═════════════════════════════════════════════════════════════"
+
+    echo
+    cmd_learned
+
+    echo
+    cmd_prove_learning
 }
 
 cmd_status() {
@@ -375,11 +435,13 @@ cmd_up() {
 }
 
 case "${1:-up}" in
-    up)        cmd_up ;;
-    stop)      cmd_stop ;;
-    send)      cmd_send "$2" "$3" "${4:-}" ;;
-    exercise)  cmd_exercise ;;
-    status)    cmd_status ;;
-    verify)    cmd_verify ;;
-    *)         echo "usage: $0 {up|stop|send <from> <to> [payload]|exercise|status|verify}"; exit 2 ;;
+    up)         cmd_up ;;
+    stop)       cmd_stop ;;
+    send)       cmd_send "$2" "$3" "${4:-}" ;;
+    exercise)   cmd_exercise ;;
+    status)     cmd_status ;;
+    verify)     cmd_verify ;;
+    learned)    cmd_learned ;;
+    prove-learning) cmd_prove_learning ;;
+    *)          echo "usage: $0 {up|stop|send <from> <to> [payload]|exercise|status|verify|learned|prove-learning}"; exit 2 ;;
 esac

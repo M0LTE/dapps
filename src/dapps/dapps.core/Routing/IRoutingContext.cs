@@ -36,4 +36,27 @@ public interface IRoutingContext
     /// match. Returns the next-hop neighbour (already resolved) or
     /// null if no hint applies.</summary>
     Task<DbNeighbour?> ResolveRouteHintAsync(string destinationBaseCallsign, CancellationToken ct);
+
+    /// <summary>Look up the neighbour row for a callsign — used by
+    /// passive-learning to resolve a learned-route's next-hop into a
+    /// concrete bearer hint.</summary>
+    Task<DbNeighbour?> GetNeighbourByCallsignAsync(string callsign, CancellationToken ct);
+
+    // ── Passive-learning state (PR-B) ──────────────────────────────
+    //
+    // Algorithms that need to PERSIST learned facts (not just read
+    // existing ones) call these. Kept on the context interface rather
+    // than handing the algorithm a Database directly: this way an
+    // in-memory test context can stub the learning surface without
+    // standing up SQLite.
+
+    Task UpsertLearnedRouteAsync(string destinationBaseCallsign, string nextHopCallsign, CancellationToken ct);
+
+    Task<DbLearnedRoute?> GetLearnedRouteAsync(string destinationBaseCallsign, CancellationToken ct);
+
+    Task RecordLearnedRouteSuccessAsync(string destinationBaseCallsign, CancellationToken ct);
+
+    /// <summary>Returns the new failure count, or -1 if the row was
+    /// deleted (invalidation threshold hit).</summary>
+    Task<int> RecordLearnedRouteFailureAsync(string destinationBaseCallsign, int invalidationThreshold, CancellationToken ct);
 }
