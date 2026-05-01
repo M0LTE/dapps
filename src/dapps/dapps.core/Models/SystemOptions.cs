@@ -47,4 +47,14 @@ public class SystemOptions
     /// not fine for shared nodes. Plan A4.
     /// </summary>
     public bool AuthRequired { get; set; }
+
+    /// <summary>
+    /// When true, dapps periodically polls the GitHub Releases API and
+    /// surfaces "v0.X.Y available" in the dashboard. Outbound HTTPS
+    /// only; no operator-identifying data leaks (User-Agent is just
+    /// <c>dapps/&lt;version&gt;</c>). Set to false for nodes that are
+    /// firewalled off the public internet, or to opt out of the
+    /// notification entirely. Plan C5.1.
+    /// </summary>
+    public bool UpdateCheckEnabled { get; set; } = true;
 }

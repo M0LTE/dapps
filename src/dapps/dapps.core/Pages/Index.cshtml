@@ -10,6 +10,7 @@
         DAPPS
         <span class="callsign">@Model.Options.Callsign</span>
     </span>
+    <span id="version-pill" class="pill" style="display:none"></span>
     <span class="spacer"></span>
     @if (User.Identity?.IsAuthenticated == true)
     {
@@ -27,6 +28,51 @@
 {
     <div class="err-banner">@Model.FlashError</div>
 }
+
+<script>
+    // Poll /Events/version once on load and every 10 minutes after.
+    // Renders one of three states into #version-pill in the header:
+    //   - dev build:        "dev <sha>"   (info pill)
+    //   - up to date:       "v0.X.Y"      (muted pill)
+    //   - update available: "v0.X.Y → v0.X.Z available" (warn pill, links to release)
+    (function () {
+        const pill = document.getElementById('version-pill');
+        if (!pill) return;
+        async function poll() {
+            try {
+                const res = await fetch('/Events/version', { credentials: 'same-origin' });
+                if (!res.ok) return;
+                const v = await res.json();
+                pill.style.display = '';
+                pill.innerHTML = '';
+                if (v.isDevBuild) {
+                    pill.className = 'pill info';
+                    pill.textContent = v.current;
+                    pill.title = 'Running a dev build (not stamped from a release)';
+                } else if (v.isAvailable && v.latest) {
+                    pill.className = 'pill warn';
+                    const a = document.createElement('a');
+                    a.href = v.releaseUrl || '#';
+                    a.target = '_blank';
+                    a.rel = 'noopener';
+                    a.style.color = 'inherit';
+                    a.style.textDecoration = 'none';
+                    a.textContent = `v${v.current} → v${v.latest} available`;
+                    pill.appendChild(a);
+                    pill.title = 'A newer release is on GitHub. Click for changelog.';
+                } else {
+                    pill.className = 'pill';
+                    pill.textContent = `v${v.current}`;
+                    pill.title = v.latest
+                        ? `Latest on GitHub: v${v.latest}`
+                        : 'Update check has not run yet';
+                }
+            } catch { /* swallow; try again next tick */ }
+        }
+        poll();
+        setInterval(poll, 10 * 60 * 1000);
+    })();
+</script>
 
 <h2>Node</h2>
 <div class="grid">
@@ -104,6 +150,7 @@
         <label>MQTT port <input name="MqttPort" type="number" min="1" max="65535" value="@Model.Options.MqttPort" required /></label>
         <label>UDP listener port (0 = disabled) <input name="UdpListenPort" type="number" min="0" max="65535" value="@Model.Options.UdpListenPort" required /></label>
         <label class="checkbox-label"><input name="AuthRequired" type="checkbox" @(Model.Options.AuthRequired ? "checked" : "") /> App-interface auth required</label>
+        <label class="checkbox-label"><input name="UpdateCheckEnabled" type="checkbox" @(Model.Options.UpdateCheckEnabled ? "checked" : "") /> Check GitHub for new releases</label>
         <button type="submit">Save</button>
     </form>
 </details>
@@ -728,6 +775,7 @@ else
             MqttPort: parseInt(f.MqttPort.value, 10),
             UdpListenPort: parseInt(f.UdpListenPort.value, 10),
             AuthRequired: f.AuthRequired.checked,
+            UpdateCheckEnabled: f.UpdateCheckEnabled.checked,
         };
         if (await dappsPostJson('/Config', body)) location.reload();
     }

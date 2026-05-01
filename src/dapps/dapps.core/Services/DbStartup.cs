@@ -61,6 +61,7 @@ public class DbStartup(ILogger<DbStartup> logger) : IHostedService
         InsertIfNotPresent(options, "MqttPort", "1883");
         InsertIfNotPresent(options, "UdpListenPort", "0");
         InsertIfNotPresent(options, "AuthRequired", "false");
+        InsertIfNotPresent(options, "UpdateCheckEnabled", "true");
 
         ValidateRequiredConfig();
 
