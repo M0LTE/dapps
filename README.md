@@ -332,7 +332,6 @@ export DAPPS_NODE_HOST=127.0.0.1     # where BPQ is listening
 export DAPPS_AGW_PORT=8000           # match BPQ's AGWPORT
 export DAPPS_DEFAULT_BPQ_PORT=0      # 0-indexed BPQ port byte for outbound (BPQ port 1)
 export DAPPS_MQTT_PORT=1883          # embedded MQTT broker port (for app subscribers)
-export DAPPS_ADMIN_PASSWORD=...      # dashboard sysop password (optional; if unset, dashboard is open)
 
 # Where the HTTP API binds. Default is localhost:5000 — override to expose on the LAN.
 export ASPNETCORE_URLS=http://127.0.0.1:5000
@@ -342,8 +341,6 @@ export ASPNETCORE_URLS=http://127.0.0.1:5000
 
 DAPPS refuses to start with the placeholder `N0CALL` value — set `DAPPS_CALLSIGN` to a real callsign before the first run, or POST to `/Config` after it.
 
-`DAPPS_ADMIN_PASSWORD` is what locks the dashboard and admin endpoints (`/Config`, `/Neighbours`, `/AppTokens`). It's only consulted on first start — once the password hash lands in `dapps.db`, the env var is ignored. **Set it before exposing the dashboard off `127.0.0.1`** (the default bind is loopback). Rotate later via `POST /Config/admin-password` or the dashboard's own form.
-
 You should see startup logs ending with something like:
 
 ```
@@ -352,11 +349,11 @@ MQTT broker: localhost:1883
 Now listening on: http://localhost:5000
 ```
 
-Browse to <http://localhost:5000/> for the dashboard (queue panels, neighbour list, discovered peers, live inbound feed, send-test-message form, edit-config sections). Sign in with whatever you set `DAPPS_ADMIN_PASSWORD` to.
+Browse to <http://localhost:5000/>. The first request hits a one-shot setup form — pick a sysop password, you're signed in, and the dashboard appears. From then on, signing out goes back through `/Login` with that password. The cookie lasts 90 days, sliding. **Set the password before binding off loopback** so the LAN doesn't get a moment to set it for you. Forgot the password? Stop dapps, run `sqlite3 /var/lib/dapps/dapps.db "delete from systemoptions where option like 'AdminPassword%';"`, restart, and the setup form re-arms.
 
 To bind the HTTP API on a different interface or port, set `ASPNETCORE_URLS` before launch — e.g. `ASPNETCORE_URLS=http://0.0.0.0:5000` to make the dashboard reachable from elsewhere on the LAN, or `http://0.0.0.0:8080` to move ports.
 
-App-interface auth (separate from the dashboard's admin password — it gates `/AppApi/*` and the MQTT broker for *applications*) is opt-in. By default any app on the host can act as any app name; to require per-app tokens:
+App-interface auth (separate from the dashboard's sysop password — it gates `/AppApi/*` and the MQTT broker for *applications*) is opt-in. By default any app on the host can act as any app name; to require per-app tokens:
 
 1. Mint a token for each app: `curl -X POST http://localhost:5000/AppTokens -H 'content-type: application/json' -d '{"App":"myapp"}'` — capture the returned `token` (it's only shown once).
 2. POST `{"AuthRequired":true, ...}` to `/Config` (or set `DAPPS_AUTH_REQUIRED=true` before first start).
@@ -399,7 +396,7 @@ The shell-based start above is fine for kicking the tyres. For a real deployment
 | Path | What it is |
 |---|---|
 | `/opt/dapps/dapps` | the binary, root-owned, mode 755 |
-| `/etc/dapps.env` | env-var bootstrap (callsign, ports, admin password). Mode 640, group `dapps` |
+| `/etc/dapps.env` | env-var bootstrap (callsign, ports). Mode 640, group `dapps` |
 | `/var/lib/dapps/` | working directory; `dapps.db` lands here. Owned by the `dapps` user, mode 750 |
 | `/etc/systemd/system/dapps.service` | the unit file (below) |
 
@@ -426,10 +423,9 @@ DAPPS_NODE_HOST=127.0.0.1
 DAPPS_AGW_PORT=8000
 DAPPS_DEFAULT_BPQ_PORT=0
 DAPPS_MQTT_PORT=1883
-DAPPS_ADMIN_PASSWORD=change-me-something-long
 ```
 
-After first start the values land in `dapps.db`; the env vars are ignored on subsequent starts. Keep `/etc/dapps.env` around anyway — it's the operator's record of the bootstrap values.
+After first start the values land in `dapps.db`; the env vars are ignored on subsequent starts. Keep `/etc/dapps.env` around anyway — it's the operator's record of the bootstrap values. The dashboard's sysop password isn't here — it's set through the browser on first access (see §3).
 
 ```sh
 sudo install -m 640 -o root -g dapps /dev/stdin /etc/dapps.env <<EOF
@@ -458,7 +454,7 @@ RestartSec=5
 
 # Bind the HTTP listener — loopback by default. Change to
 # http://0.0.0.0:5000 to expose the dashboard on the LAN
-# (DO set DAPPS_ADMIN_PASSWORD before doing that).
+# (set the sysop password through the browser first).
 Environment=ASPNETCORE_URLS=http://127.0.0.1:5000
 
 # Hardening — DAPPS only needs its binary, its DB, and TCP.

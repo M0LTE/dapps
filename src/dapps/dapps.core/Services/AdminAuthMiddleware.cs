@@ -9,10 +9,16 @@ namespace dapps.core.Services;
 /// <c>/AppApi/*</c> with its own bearer-token model — those requests
 /// pass through here untouched.
 ///
-/// Bootstrap-friendly: when no admin password is set yet (fresh node,
-/// no <c>DAPPS_ADMIN_PASSWORD</c> on first start), the dashboard is
-/// open. As soon as a password is set (via <c>/Config</c>, or via the
-/// env var on a future restart), enforcement turns on.
+/// Three states:
+/// <list type="bullet">
+/// <item>No admin password configured (fresh install) → redirect to
+///   <c>/Setup</c>. The first request lands the operator on a one-shot
+///   "set your password" form; once they submit it, normal cookie auth
+///   kicks in.</item>
+/// <item>Password configured, no valid cookie → redirect to <c>/Login</c>
+///   via the cookie scheme's challenge.</item>
+/// <item>Password configured, valid cookie → pass through.</item>
+/// </list>
 /// </summary>
 public sealed class AdminAuthMiddleware(RequestDelegate next)
 {
@@ -21,21 +27,23 @@ public sealed class AdminAuthMiddleware(RequestDelegate next)
         var path = ctx.Request.Path.Value ?? "";
 
         // Pass-through for paths the middleware deliberately doesn't gate:
-        //   /AppApi/*  — owned by BearerAuthMiddleware
-        //   /Login, /Logout  — the auth UX itself
-        //   static asset paths Razor's StaticFiles middleware would serve
+        //   /AppApi/*       — owned by BearerAuthMiddleware
+        //   /Setup          — first-use password creation; gated by
+        //                     state, not auth (see PageModel)
+        //   /Login, /Logout — the auth UX itself
+        //   static asset paths Razor's StaticFiles middleware serves
         if (IsPassThrough(path))
         {
             await next(ctx);
             return;
         }
 
-        // No password configured? Dashboard is open. Operator should
-        // set DAPPS_ADMIN_PASSWORD or POST to /Config before exposing
-        // the node off-loopback (the README says as much).
+        // No password configured? First-use flow. Send the operator to
+        // /Setup. Until they complete it, every other path bounces
+        // here.
         if (!await store.IsConfiguredAsync())
         {
-            await next(ctx);
+            ctx.Response.Redirect("/Setup");
             return;
         }
 
@@ -53,6 +61,7 @@ public sealed class AdminAuthMiddleware(RequestDelegate next)
     {
         if (string.IsNullOrEmpty(path)) return false;
         return path.StartsWith("/AppApi", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith("/Setup", StringComparison.OrdinalIgnoreCase)
             || path.StartsWith("/Login", StringComparison.OrdinalIgnoreCase)
             || path.StartsWith("/Logout", StringComparison.OrdinalIgnoreCase)
             || path.StartsWith("/lib/", StringComparison.OrdinalIgnoreCase)

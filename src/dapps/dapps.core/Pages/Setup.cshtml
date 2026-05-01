@@ -1,0 +1,128 @@
+@page
+@model dapps.core.Pages.SetupModel
+@{
+    Layout = null;
+    ViewData["Title"] = "First-time setup — DAPPS";
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>@ViewData["Title"]</title>
+    <style>
+        :root {
+            --bg: #f8fafc; --surface: #ffffff;
+            --border: #e2e8f0; --border-strong: #cbd5e1;
+            --text: #0f172a; --text-muted: #64748b;
+            --accent: #2563eb; --accent-hover: #1d4ed8;
+            --err: #dc2626; --err-soft: #fee2e2;
+        }
+        @@media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #0b1220; --surface: #111827;
+                --border: #1f2937; --border-strong: #334155;
+                --text: #e5e7eb; --text-muted: #94a3b8;
+                --accent: #60a5fa; --accent-hover: #93c5fd;
+                --err: #f87171; --err-soft: #7f1d1d;
+            }
+        }
+        * { box-sizing: border-box; }
+        body {
+            font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+            background:
+                radial-gradient(circle at 0% 0%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 50%),
+                radial-gradient(circle at 100% 100%, color-mix(in srgb, var(--accent) 6%, transparent), transparent 50%),
+                var(--bg);
+            color: var(--text);
+            margin: 0; min-height: 100vh;
+            display: flex; align-items: center; justify-content: center;
+            -webkit-font-smoothing: antialiased;
+        }
+        .card {
+            background: var(--surface); border: 1px solid var(--border);
+            padding: 2rem 2.25rem; border-radius: 12px; min-width: 360px; max-width: 440px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 12px 32px rgba(0,0,0,0.08);
+        }
+        .brand {
+            display: flex; align-items: baseline; gap: 0.5rem;
+            font-weight: 600; font-size: 1.05rem;
+            color: var(--text);
+        }
+        .brand .dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: #16a34a; align-self: center;
+            box-shadow: 0 0 0 3px color-mix(in srgb, #16a34a 25%, transparent);
+        }
+        h1 {
+            margin: 0.25rem 0 0.5rem 0; font-size: 1.4rem; font-weight: 600;
+            letter-spacing: -0.01em;
+        }
+        .intro {
+            color: var(--text-muted); font-size: 0.9rem; line-height: 1.5;
+            margin: 0 0 1.5rem;
+        }
+        label {
+            display: block; margin: 0.85rem 0 0.4rem;
+            font-size: 0.78rem; font-weight: 600; text-transform: uppercase;
+            letter-spacing: 0.06em; color: var(--text-muted);
+        }
+        input[type=password] {
+            width: 100%; padding: 0.65rem 0.75rem;
+            background: var(--surface); border: 1px solid var(--border-strong);
+            border-radius: 6px; color: var(--text); font-size: 1rem; font-family: inherit;
+        }
+        input[type=password]:focus {
+            outline: 2px solid var(--accent); outline-offset: -1px;
+            border-color: var(--accent);
+        }
+        button {
+            width: 100%; padding: 0.7rem; margin-top: 1.25rem;
+            background: var(--accent); color: white; border: 0;
+            border-radius: 6px; font-size: 1rem; font-weight: 600;
+            cursor: pointer; transition: background 120ms; font-family: inherit;
+        }
+        button:hover { background: var(--accent-hover); }
+        .error {
+            color: var(--err); background: var(--err-soft);
+            margin-top: 0.85rem; padding: 0.5rem 0.7rem;
+            border-radius: 6px; font-size: 0.85rem;
+        }
+        .hint {
+            color: var(--text-muted); margin-top: 1.25rem;
+            font-size: 0.78rem; line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="brand"><span class="dot"></span> DAPPS</div>
+        <h1>First-time setup</h1>
+        <p class="intro">
+            Choose a password for the dashboard. You'll use it to sign in
+            here and to gate the admin endpoints (<code>/Config</code>,
+            <code>/Neighbours</code>, <code>/AppTokens</code>). One password
+            for the whole node — there are no user accounts.
+        </p>
+        <form method="post">
+            <label for="password">Password</label>
+            <input id="password" name="password" type="password" autofocus required minlength="8" />
+
+            <label for="confirm">Confirm password</label>
+            <input id="confirm" name="confirm" type="password" required minlength="8" />
+
+            <button type="submit">Set password &amp; sign in</button>
+            @if (!string.IsNullOrEmpty(Model.Error))
+            {
+                <div class="error">@Model.Error</div>
+            }
+        </form>
+        <div class="hint">
+            Forgotten later? Stop dapps, run
+            <code>sqlite3 /var/lib/dapps/dapps.db "delete from systemoptions where option like 'AdminPassword%';"</code>,
+            restart, and you'll land back here.
+        </div>
+    </div>
+</body>
+</html>
