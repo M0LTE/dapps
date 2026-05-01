@@ -48,19 +48,16 @@ declare -A AGW_PORT=(  [A]=18001 [B]=18002 [C]=18003 [D]=18004 [E]=18005 [F]=180
 declare -A CALLSIGN=(  [A]=G0SIA-1 [B]=G0SIB-1 [C]=G0SIC-1 [D]=G0SID-1 [E]=G0SIE-1 [F]=G0SIF-1 )
 
 # Discovery channels — UDP multicast groups standing in for distinct
-# RF "broadcast domains". Each group MUST use its own port: when
-# UdpMulticastDiscoveryBearer subscribes a recv socket per channel it
-# binds 0.0.0.0:port and joins the group; multiple recv sockets sharing
-# a port (e.g. node B subscribed to G1 and G2 both on port 54321)
-# triggers Linux's REUSEADDR + multicast filtering edge cases and
-# packets leak across groups within the process. Until that's fixed in
-# the bearer (see plan.md Phase B), distinct ports are the way to keep
-# the simulator's discovery clean.
+# RF "broadcast domains". All five share the same UDP port and differ
+# only in multicast group address; this used to leak across groups
+# within a process (see UdpMulticastDiscoveryBearer's bind comment for
+# the gory detail), now fixed by binding each recv socket to the group
+# address rather than IPAddress.Any.
 G1="239.0.7.1:54321"
-G2="239.0.7.2:54322"
-G3="239.0.7.3:54323"
-G4="239.0.7.4:54324"
-G5="239.0.7.5:54325"
+G2="239.0.7.2:54321"
+G3="239.0.7.3:54321"
+G4="239.0.7.4:54321"
+G5="239.0.7.5:54321"
 declare -A CHANNELS=(
     [A]="$G1"
     [B]="$G1 $G2"
