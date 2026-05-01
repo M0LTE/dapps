@@ -31,6 +31,14 @@ public sealed class IndexModel(
     public int UndeliveredLocal { get; private set; }
     public IReadOnlyList<DbMessage> RecentMessages { get; private set; } = [];
 
+    /// <summary>Messages destined for somewhere else, not yet forwarded.
+    /// What the OutboundMessageManager loop is working through.</summary>
+    public IReadOnlyList<DbMessage> OutboundQueue { get; private set; } = [];
+
+    /// <summary>Messages destined for an app on this node, not yet
+    /// ack'd by that app. The "inbox" half of the queue.</summary>
+    public IReadOnlyList<DbMessage> LocalInbox { get; private set; } = [];
+
     public IReadOnlyList<DbDiscoveredPeer> DiscoveredPeers { get; private set; } = [];
 
     public IReadOnlyList<DbDiscoveryChannel> DiscoveryChannels { get; private set; } = [];
@@ -85,7 +93,19 @@ public sealed class IndexModel(
         TotalMessages = await database.CountMessages();
         PendingOutbound = await database.CountPendingOutbound();
         UndeliveredLocal = await database.CountUndeliveredLocal();
-        RecentMessages = await database.GetRecentMessages(20);
+        RecentMessages = await database.GetRecentMessages(50);
+        // Split the recent slice into the two operational queues.
+        // Done here in C# rather than via separate DB queries because
+        // the slice is small (50 rows) and we already have the data.
+        var local = Options.Callsign.Split('-')[0];
+        OutboundQueue = RecentMessages
+            .Where(m => !m.Forwarded
+                && !string.Equals(m.Destination.Split('@').Last().Split('-')[0], local, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        LocalInbox = RecentMessages
+            .Where(m => !m.LocallyDelivered
+                && string.Equals(m.Destination.Split('@').Last().Split('-')[0], local, StringComparison.OrdinalIgnoreCase))
+            .ToList();
         DiscoveredPeers = await database.GetDiscoveredPeers();
         DiscoveryChannels = await database.GetDiscoveryChannels();
 
