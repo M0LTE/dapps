@@ -1,29 +1,36 @@
 #!/usr/bin/env bash
 #
-# Local 3-node multi-hop simulator. Spins up three dapps.core instances on
-# loopback — A and C in disjoint UDP-multicast "broadcast domains," with B
-# straddling both as a relay — and drives an A→B→C send so you can watch
-# F1 source-tracking propagate end-to-end without RF.
+# Local 6-node multi-hop simulator. Spins up six dapps.core instances on
+# loopback in a small-region mesh that exercises chained relays,
+# branching, and off-spine paths — the kind of topology a real RF test
+# network would produce. Drives several A→…→Z sends across the
+# topology and reports each receiver's view of OriginatorCallsign so
+# F1 source-tracking can be verified end-to-end at a glance.
 #
 # Topology
-#   G0SIA-1  ─ udp:239.0.7.1:54321 ─  G0SIB-1  ─ udp:239.0.7.2:54321 ─  G0SIC-1
-#                                       │
-#                                       └── reachable on both groups → relay
 #
-# Routing today is route-hint driven (no Phase B5 learned routing yet);
-# the multicast channels exist so each node's discovered-peers table
-# gets populated and you can see the discovery side working alongside.
-# Once B5 lands, this script can drop the explicit route-hints and rely
-# on flooded routes instead.
+#       A ─── B ─── C ─── D                          (1, 2, 3 hops from A)
+#                   │
+#                   └─── E ─── F                     (3 hops, then 4 from A)
+#
+# Each link is unicast UDP between adjacent nodes; each node has a
+# manual neighbour entry for its direct UDP-reachable peers. Pre-B5,
+# route-hints chain hops for distant destinations (A→F walks A→B→C→E→F
+# one hop at a time as each relay's resolver picks the next-hop hint).
+# Discovery channels are intentionally NOT configured — multicast on
+# WSL2 leaks across loopback and pollutes routing; once B5 ships and
+# beacon transport is loopback-friendly the channels come back to also
+# exercise discovery.
 #
 # Usage:
-#   scripts/sim-multihop.sh           # build, start, configure, send-test, tail
+#   scripts/sim-multihop.sh           # build, start, configure, send-tests
 #   scripts/sim-multihop.sh stop      # tear down
-#   scripts/sim-multihop.sh send      # send another A→C message
+#   scripts/sim-multihop.sh send X Y  # send a message X → Y
+#   scripts/sim-multihop.sh exercise  # run the canned non-trivial set
 #   scripts/sim-multihop.sh status    # ports, PIDs, queue counts
+#   scripts/sim-multihop.sh verify    # show every node's inbox
 #
-# Requires: dotnet 8 SDK, curl, python3 (with stdlib sqlite3 — present
-# on every distro python).
+# Requires: dotnet 8 SDK, curl, python3 (with stdlib sqlite3).
 set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
@@ -32,38 +39,48 @@ BIN_DIR="$SIM_DIR/bin"
 PROJ="$REPO/src/dapps/dapps.core/dapps.core.csproj"
 SIM_PWD="${SIM_PWD:-simpassw0rd}"
 
-# Per-node port + listen-port allocations. Loopback only — these MUST
-# NOT overlap with anything the host actually uses.
-declare -A HTTP_PORT=( [A]=15001 [B]=15002 [C]=15003 )
-declare -A MQTT_PORT=( [A]=11881 [B]=11882 [C]=11883 )
-declare -A UDP_PORT=(  [A]=50071 [B]=50072 [C]=50073 )
-declare -A AGW_PORT=(  [A]=18001 [B]=18002 [C]=18003 )   # closed; AGW probe will fail, harmless
-declare -A CALLSIGN=(  [A]=G0SIA-1 [B]=G0SIB-1 [C]=G0SIC-1 )
+NODES=(A B C D E F)
 
-# Multicast groups: A subscribes to G1 only, C to G2 only, B to both.
-G1="239.0.7.1:54321"
-G2="239.0.7.2:54321"
-declare -A CHANNELS=(
-    [A]="$G1"
-    [B]="$G1 $G2"
-    [C]="$G2"
-)
+declare -A HTTP_PORT=( [A]=15001 [B]=15002 [C]=15003 [D]=15004 [E]=15005 [F]=15006 )
+declare -A MQTT_PORT=( [A]=11881 [B]=11882 [C]=11883 [D]=11884 [E]=11885 [F]=11886 )
+declare -A UDP_PORT=(  [A]=50071 [B]=50072 [C]=50073 [D]=50074 [E]=50075 [F]=50076 )
+declare -A AGW_PORT=(  [A]=18001 [B]=18002 [C]=18003 [D]=18004 [E]=18005 [F]=18006 )   # closed; AGW probe will fail, harmless
+declare -A CALLSIGN=(  [A]=G0SIA-1 [B]=G0SIB-1 [C]=G0SIC-1 [D]=G0SID-1 [E]=G0SIE-1 [F]=G0SIF-1 )
 
-# Manual neighbour wiring. Each entry is "callsign,udpEndpoint" pairs.
-# A knows B; B knows A and C; C knows B.
+# Discovery channels were originally seeded here (G1..G5 standing in for
+# RF "broadcast domains") but multicast on WSL2 leaks across loopback
+# interfaces — every node ends up discovering every other on every
+# channel, with bogus UdpEndpoints scraped from ephemeral source ports.
+# That bypassed our explicit route-hints and dropped traffic into closed
+# ports. Routing decisions in this simulator are purely route-hint
+# driven; once Phase B5 (learned-graph routing) lands and beacons get
+# refactored to be loopback-friendly, this block can come back to also
+# exercise the discovery side.
+declare -A CHANNELS=( [A]="" [B]="" [C]="" [D]="" [E]="" [F]="" )
+
+# Direct neighbours — entries are space-separated "<letter>" lookups
+# into the rest of the tables. Resolves to the matching callsign + UDP
+# endpoint at configuration time.
 declare -A NEIGHBOURS=(
-    [A]="G0SIB-1,127.0.0.1:${UDP_PORT[B]}"
-    [B]="G0SIA-1,127.0.0.1:${UDP_PORT[A]} G0SIC-1,127.0.0.1:${UDP_PORT[C]}"
-    [C]="G0SIB-1,127.0.0.1:${UDP_PORT[B]}"
+    [A]="B"
+    [B]="A C"
+    [C]="B D E"
+    [D]="C"
+    [E]="C F"
+    [F]="E"
 )
 
-# Route hints: pre-B5 force-the-relay. Each entry is "destBaseCall,nextHopCall".
-# Destination is the BASE callsign (no SSID) — that's what the route
-# resolver uses as the lookup key.
+# Route hints — pre-B5 force-the-relay. Each entry "<destLetter>:<nextHopLetter>".
+# At each hop, the resolver sees the destination, looks up the hint, and
+# forwards to the corresponding neighbour. Chains hop-by-hop until the
+# destination is itself a direct neighbour.
 declare -A ROUTE_HINTS=(
-    [A]="G0SIC,G0SIB-1"
-    [B]=""
-    [C]="G0SIA,G0SIB-1"
+    [A]="C:B D:B E:B F:B"
+    [B]="D:C E:C F:C"
+    [C]="A:B F:E"
+    [D]="A:C B:C E:C F:C"
+    [E]="A:C B:C D:C"
+    [F]="A:E B:E C:E D:E"
 )
 
 mkdir -p "$SIM_DIR" "$BIN_DIR"
@@ -90,7 +107,7 @@ node_dir() { echo "$SIM_DIR/${1,,}"; }
 
 start_node() {
     local n=$1
-    local d="$(node_dir "$n")"
+    local d; d="$(node_dir "$n")"
     mkdir -p "$d/data"
     rm -f "$d/data/dapps.db" "$d/dapps.log"
 
@@ -112,7 +129,6 @@ start_node() {
         echo $! >"$d/pid"
     )
 
-    # Wait for HTTP up.
     for _ in $(seq 1 60); do
         if curl -fs "http://127.0.0.1:${HTTP_PORT[$n]}/Setup" -o /dev/null 2>/dev/null; then
             return 0
@@ -126,11 +142,10 @@ start_node() {
 
 stop_node() {
     local n=$1
-    local pid_file="$(node_dir "$n")/pid"
+    local pid_file; pid_file="$(node_dir "$n")/pid"
     [ -f "$pid_file" ] || return 0
     local pid; pid=$(cat "$pid_file")
     if kill -0 "$pid" 2>/dev/null; then
-        echo ">>> Stopping $n (pid $pid)"
         kill "$pid" 2>/dev/null || true
         for _ in $(seq 1 20); do
             kill -0 "$pid" 2>/dev/null || break
@@ -145,48 +160,43 @@ stop_node() {
 configure_node() {
     local n=$1
     local base="http://127.0.0.1:${HTTP_PORT[$n]}"
-    local cookie="$(node_dir "$n")/cookie.txt"
+    local cookie; cookie="$(node_dir "$n")/cookie.txt"
     rm -f "$cookie"
 
-    echo ">>> Configuring $n"
-    # First-use: set the admin password.
     curl -fsS -o /dev/null -X POST "$base/Setup" \
         --data-urlencode "Password=$SIM_PWD" \
         --data-urlencode "Confirm=$SIM_PWD"
-    # Login → cookie.
     curl -fsS -o /dev/null -c "$cookie" -X POST "$base/Login" \
         --data-urlencode "Password=$SIM_PWD"
 
-    # Discovery channels.
     for ch in ${CHANNELS[$n]}; do
         curl -fsS -o /dev/null -b "$cookie" -X POST "$base/DiscoveryChannels" \
             -H 'content-type: application/json' \
             -d "{\"Bearer\":\"udp\",\"ChannelKey\":\"$ch\",\"LinkClass\":\"LanMulticast\"}"
     done
 
-    # Neighbours.
-    for entry in ${NEIGHBOURS[$n]}; do
-        local call="${entry%%,*}"
-        local udp="${entry#*,}"
+    for nb in ${NEIGHBOURS[$n]}; do
         curl -fsS -o /dev/null -b "$cookie" -X POST "$base/Neighbours" \
             -H 'content-type: application/json' \
-            -d "{\"Callsign\":\"$call\",\"BpqPort\":null,\"UdpEndpoint\":\"$udp\"}"
+            -d "{\"Callsign\":\"${CALLSIGN[$nb]}\",\"BpqPort\":null,\"UdpEndpoint\":\"127.0.0.1:${UDP_PORT[$nb]}\"}"
     done
 
-    # Route hints — pre-B5 force-the-relay. There's no public POST for
-    # routehints today, so this script seeds them via Python's stdlib
-    # sqlite3 module (present everywhere; no extra packages needed).
     if [ -n "${ROUTE_HINTS[$n]:-}" ]; then
-        local db="$(node_dir "$n")/data/dapps.db"
+        local db; db="$(node_dir "$n")/data/dapps.db"
         for entry in ${ROUTE_HINTS[$n]}; do
-            local dest="${entry%%,*}"
-            local hop="${entry#*,}"
+            local dest_letter="${entry%%:*}"
+            local hop_letter="${entry##*:}"
+            # Route hint Destination is the BASE callsign (no SSID) — that's
+            # what the resolver uses as the lookup key. NextHop is the full
+            # neighbour callsign with SSID.
+            local dest_base="${CALLSIGN[$dest_letter]%-*}"
+            local hop_full="${CALLSIGN[$hop_letter]}"
             python3 -c "
 import sqlite3, sys
 con = sqlite3.connect(sys.argv[1])
 con.execute('insert or replace into routehints (Destination, NextHop) values (?, ?)', (sys.argv[2], sys.argv[3]))
 con.commit()
-" "$db" "$dest" "$hop"
+" "$db" "$dest_base" "$hop_full"
         done
     fi
 }
@@ -194,73 +204,171 @@ con.commit()
 # ── exercise the topology ──────────────────────────────────────────────
 trigger_run() {
     local n=$1
-    local cookie="$(node_dir "$n")/cookie.txt"
+    # /Message/dorun is admin-protected — pass the cookie set up at
+    # configure_node, otherwise the request gets a 302 to /Login and
+    # the forwarder silently never runs.
+    local cookie; cookie="$(node_dir "$n")/cookie.txt"
     curl -fsS -o /dev/null -b "$cookie" -X POST "http://127.0.0.1:${HTTP_PORT[$n]}/Message/dorun" || true
 }
 
-send_a_to_c() {
-    local payload="hello-from-A-$(date +%s)"
-    # Base64-encode payload bytes for /AppApi/outbound. Anything stable
-    # works; using `hello-from-A-<unix-ts>` so the receiver can eyeball
-    # which run produced which message.
+# Drain queues by running every node's forwarder a few times. Multi-hop
+# messages need one round per hop, so 6 rounds covers paths of length
+# up to 5 with comfortable headroom.
+drain_queues() {
+    for _ in 1 2 3 4 5 6; do
+        for n in "${NODES[@]}"; do
+            trigger_run "$n" &
+        done
+        wait
+        sleep 0.3
+    done
+}
+
+submit_message() {
+    local from=$1 to=$2 payload=$3
     local b64
     b64=$(printf '%s' "$payload" | base64 -w0 2>/dev/null || printf '%s' "$payload" | base64)
-    echo ">>> A submitting message for C: '$payload'"
-    # /AppApi is open when AuthRequired=false (sim default) — no token,
-    # no cookie. SubmitOutboundMessage stamps OriginatorCallsign with
-    # A's own callsign, which is what F1 needs to propagate end-to-end.
     curl -fsS -o /dev/null -X POST \
-        "http://127.0.0.1:${HTTP_PORT[A]}/AppApi/outbound" \
+        "http://127.0.0.1:${HTTP_PORT[$from]}/AppApi/outbound" \
         -H 'content-type: application/json' \
-        -d "{\"App\":\"chat\",\"DestCallsign\":\"${CALLSIGN[C]}\",\"Payload\":\"$b64\",\"Ttl\":300}"
-    echo ">>> Forwarder run on A → expect message to land at B"
-    trigger_run A
-    sleep 1
-    echo ">>> Forwarder run on B → expect message to land at C"
-    trigger_run B
-    sleep 1
-    echo ">>> A→C send done. Inspect via:"
-    for n in A B C; do
-        echo "    http://127.0.0.1:${HTTP_PORT[$n]}/   (${CALLSIGN[$n]}, login pwd: $SIM_PWD)"
-    done
-    # Show what C's app sees — this is the F1 acceptance criterion:
-    # OriginatorCallsign should be A's callsign (NOT B's, the link source).
-    echo ">>> C's inbox for app 'chat' (expect OriginatorCallsign=${CALLSIGN[A]}):"
-    curl -fsS "http://127.0.0.1:${HTTP_PORT[C]}/AppApi/inbound/chat" || true
+        -d "{\"App\":\"chat\",\"DestCallsign\":\"${CALLSIGN[$to]}\",\"Payload\":\"$b64\",\"Ttl\":300}"
+}
+
+cmd_send() {
+    local from=$1 to=$2
+    local payload="${3:-hello-${from}-to-${to}-$(date +%s%3N)}"
+    echo ">>> Submit ${CALLSIGN[$from]} → ${CALLSIGN[$to]}: '$payload'"
+    submit_message "$from" "$to" "$payload"
+    drain_queues
+    show_inbox "$to"
+}
+
+show_inbox() {
+    local n=$1
+    echo "----- ${CALLSIGN[$n]} inbox (chat) -----"
+    local rows
+    rows=$(curl -fsS "http://127.0.0.1:${HTTP_PORT[$n]}/AppApi/inbound/chat")
+    if [ -z "$rows" ] || [ "$rows" = "[]" ]; then
+        echo "(empty)"
+        return
+    fi
+    # Pretty-print each row as: id  origin=X  source=Y  payload-decoded
+    python3 - "$rows" <<'PY'
+import json, sys, base64
+rows = json.loads(sys.argv[1])
+for r in rows:
+    payload = base64.b64decode(r.get("payload", "") or "").decode("utf-8", errors="replace")
+    print(f"  id={r['id']}  origin={r.get('originatorCallsign') or '?'}  source={r['sourceCallsign']}  payload={payload!r}  ttl={r.get('ttl')}")
+PY
+}
+
+cmd_verify() {
+    echo ">>> Inboxes across the mesh:"
+    for n in "${NODES[@]}"; do show_inbox "$n"; done
+}
+
+# Canned non-trivial exercise — runs several sends across the topology
+# that exercise different path lengths, branching, and parallel flows.
+# After all sends complete, prints each receiver's inbox so F1 origin
+# preservation can be verified at a glance.
+cmd_exercise() {
     echo
+    echo "═════════════════════════════════════════════════════════════"
+    echo "  EXERCISE 1: longest forward path A→F (4 hops: A→B→C→E→F)"
+    echo "═════════════════════════════════════════════════════════════"
+    submit_message A F "long-forward-$(date +%s)"
+    drain_queues
+    show_inbox F
+
+    echo
+    echo "═════════════════════════════════════════════════════════════"
+    echo "  EXERCISE 2: reverse longest path F→A (4 hops: F→E→C→B→A)"
+    echo "═════════════════════════════════════════════════════════════"
+    submit_message F A "long-reverse-$(date +%s)"
+    drain_queues
+    show_inbox A
+
+    echo
+    echo "═════════════════════════════════════════════════════════════"
+    echo "  EXERCISE 3: off-spine D→F (3 hops: D→C→E→F, never touches A or B)"
+    echo "═════════════════════════════════════════════════════════════"
+    submit_message D F "off-spine-$(date +%s)"
+    drain_queues
+    show_inbox F
+
+    echo
+    echo "═════════════════════════════════════════════════════════════"
+    echo "  EXERCISE 4: fan-out from A to D, E, F submitted in parallel"
+    echo "  (one originator splitting across three different paths)"
+    echo "═════════════════════════════════════════════════════════════"
+    submit_message A D "fan-out-D-$(date +%s)" &
+    submit_message A E "fan-out-E-$(date +%s)" &
+    submit_message A F "fan-out-F-$(date +%s)" &
+    wait
+    drain_queues
+    for n in D E F; do show_inbox "$n"; done
+
+    echo
+    echo "═════════════════════════════════════════════════════════════"
+    echo "  EXERCISE 5: cross-traffic A↔F simultaneously"
+    echo "  (both endpoints originate; relays handle fan-in)"
+    echo "═════════════════════════════════════════════════════════════"
+    submit_message A F "cross-A2F-$(date +%s)" &
+    submit_message F A "cross-F2A-$(date +%s)" &
+    wait
+    drain_queues
+    show_inbox A
+    show_inbox F
+
+    echo
+    echo "═════════════════════════════════════════════════════════════"
+    echo "  F1 ACCEPTANCE CHECK"
+    echo "  Every 'origin=…' above should be the *originator* callsign"
+    echo "  (the from-side of the arrow), NOT the link-source/relay."
+    echo "  source=UDP is fine — it's the bearer placeholder for"
+    echo "  datagram-shaped backhauls; the receiver app has dapps-source"
+    echo "  via MQTT for the link source separately."
+    echo "═════════════════════════════════════════════════════════════"
 }
 
 cmd_status() {
-    for n in A B C; do
-        local d="$(node_dir "$n")"
+    for n in "${NODES[@]}"; do
+        local d; d="$(node_dir "$n")"
         local pid; pid=$(cat "$d/pid" 2>/dev/null || echo -)
         local alive=no
         kill -0 "$pid" 2>/dev/null && alive=yes
-        printf "  %s  pid=%-6s alive=%s  dashboard=http://127.0.0.1:%s/\n" \
-            "${CALLSIGN[$n]}" "$pid" "$alive" "${HTTP_PORT[$n]}"
+        printf "  %s  pid=%-6s alive=%s  http=:%s  udp=:%s\n" \
+            "${CALLSIGN[$n]}" "$pid" "$alive" "${HTTP_PORT[$n]}" "${UDP_PORT[$n]}"
     done
 }
 
 cmd_stop() {
-    for n in A B C; do stop_node "$n"; done
+    for n in "${NODES[@]}"; do stop_node "$n"; done
 }
-
-cmd_send() { send_a_to_c; }
 
 cmd_up() {
     maybe_publish
     cmd_stop
-    for n in A B C; do start_node "$n"; done
-    for n in A B C; do configure_node "$n"; done
-    echo ">>> Topology ready. Status:"
+    for n in "${NODES[@]}"; do start_node "$n"; done
+    for n in "${NODES[@]}"; do configure_node "$n"; done
+    echo
+    echo ">>> Topology ready:"
     cmd_status
-    send_a_to_c
+    echo
+    echo ">>> Dashboards (login pwd: $SIM_PWD):"
+    for n in "${NODES[@]}"; do
+        printf "    %s  http://127.0.0.1:%s/\n" "${CALLSIGN[$n]}" "${HTTP_PORT[$n]}"
+    done
+    echo
+    cmd_exercise
 }
 
 case "${1:-up}" in
-    up)     cmd_up ;;
-    stop)   cmd_stop ;;
-    send)   cmd_send ;;
-    status) cmd_status ;;
-    *)      echo "usage: $0 {up|stop|send|status}"; exit 2 ;;
+    up)        cmd_up ;;
+    stop)      cmd_stop ;;
+    send)      cmd_send "$2" "$3" "${4:-}" ;;
+    exercise)  cmd_exercise ;;
+    status)    cmd_status ;;
+    verify)    cmd_verify ;;
+    *)         echo "usage: $0 {up|stop|send <from> <to> [payload]|exercise|status|verify}"; exit 2 ;;
 esac
