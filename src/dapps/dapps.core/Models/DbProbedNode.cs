@@ -53,4 +53,22 @@ public sealed class DbProbedNode
     /// sweep. On-demand probes via the REST endpoint still go through
     /// — operators sometimes want to test an opted-out peer manually.</summary>
     public bool OptOut { get; set; }
+
+    /// <summary>How this row first ended up on our radar. Set on the
+    /// initial upsert and preserved across subsequent probe-result
+    /// updates. Plan B6.1 Phase 2 introduces <c>via:&lt;callsign&gt;</c>
+    /// to mark transitively-discovered rows (callsigns a probed peer
+    /// told us they forward to via the new <c>peers</c> command). The
+    /// dashboard surfaces the source so a sysop can tell a manual
+    /// neighbour apart from a hearsay candidate.
+    /// <list type="bullet">
+    /// <item><c>neighbour</c> — manual <see cref="DbNeighbour"/> row.</item>
+    /// <item><c>discovered</c> — heard via beacon
+    /// (<see cref="DbDiscoveredPeer"/>).</item>
+    /// <item><c>via:&lt;callsign&gt;</c> — learned from a peers query
+    /// addressed to that callsign.</item>
+    /// <item>Empty — pre-Phase-2 row written before the column existed.
+    /// Treated as <c>neighbour</c> for display purposes.</item>
+    /// </list></summary>
+    public string Source { get; set; } = "";
 }
