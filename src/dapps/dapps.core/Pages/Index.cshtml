@@ -170,6 +170,8 @@
         <label class="checkbox-label"><input name="ScheduledPollEnabled" type="checkbox" @(Model.Options.ScheduledPollEnabled ? "checked" : "") /> Schedule periodic mail polls (F3b) — for nodes that don't push often</label>
         <label>Poll interval (hours) <input name="PollIntervalHours" type="number" min="1" max="168" value="@Model.Options.PollIntervalHours" required /></label>
         <label>Discovery airtime budget (seconds/hour, 0 = unlimited) (B7) <input name="DiscoveryAirtimeBudgetSecondsPerHour" type="number" min="0" max="3600" value="@Model.Options.DiscoveryAirtimeBudgetSecondsPerHour" required /></label>
+        <label class="checkbox-label"><input name="HeartbeatEnabled" type="checkbox" @(Model.Options.HeartbeatEnabled ? "checked" : "") /> Publish operational heartbeat to MQTT (C3)</label>
+        <label>Heartbeat interval (seconds) <input name="HeartbeatIntervalSeconds" type="number" min="10" max="3600" value="@Model.Options.HeartbeatIntervalSeconds" required /></label>
         <button type="submit">Save</button>
     </form>
 </details>
@@ -1124,6 +1126,8 @@ else
             ScheduledPollEnabled: f.ScheduledPollEnabled.checked,
             PollIntervalHours: parseInt(f.PollIntervalHours.value, 10),
             DiscoveryAirtimeBudgetSecondsPerHour: parseInt(f.DiscoveryAirtimeBudgetSecondsPerHour.value, 10),
+            HeartbeatEnabled: f.HeartbeatEnabled.checked,
+            HeartbeatIntervalSeconds: parseInt(f.HeartbeatIntervalSeconds.value, 10),
         };
         if (await dappsPostJson('/Config', body)) location.reload();
     }

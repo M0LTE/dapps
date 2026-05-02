@@ -91,6 +91,8 @@ public static class DbStartup
         InsertIfNotPresent(db, options, "ProbeOvernightStartHour", "2", logger);
         InsertIfNotPresent(db, options, "ProbeOvernightEndHour", "6", logger);
         InsertIfNotPresent(db, options, "ProbeQuietWindowSeconds", "300", logger);
+        InsertIfNotPresent(db, options, "HeartbeatEnabled", "true", logger);
+        InsertIfNotPresent(db, options, "HeartbeatIntervalSeconds", "60", logger);
 
         ValidateRequiredConfig(db, logger);
 
