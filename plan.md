@@ -22,8 +22,8 @@ What's missing to call this complete is the parts that turn a single-node demo i
 
 ## Tom's scratchpad of ideas
 
-- when looking at long distance routing what about looking into the routing implementation in Meshcore?
-- what about using Meshcore as a transport?
+- ~~when looking at long distance routing what about looking into the routing implementation in Meshcore?~~ *(actioned — see B5.1; selectable alongside the default passive-flood stack)*
+- what about using Meshcore as a transport? *(separate question; tracked under Phase H1)*
 - I think we should look at shipping an actual usable app, ideally an actual phone app, maybe a messenger app. Or maybe a long form mail app so as not to conflict with whatsapp.
 - RHP (v2?) support
 - MCP server endpoint exposing some DAPPS surface to LLMs — could let an agent participate in routing decisions ("explore via this neighbour and report what you find"), help with network discovery / topology mapping, or surface a richer query interface than the dashboard JSON. Open question what the right tools are: read-only diagnostics, controlled probes, route hints, app-traffic synthesis for testing? Worth a short design pass when it gets pulled forward.

@@ -119,6 +119,8 @@ Two options remain after the NET/ROM/INP3 caveat above:
 
 **Decision: Option A** for the v0.x phase. The `IRoutingAlgorithm` interface is designed to fit Option B cleanly so we can revisit (the `Resolve` return type is `RouteDecision`, a discriminated union with `NextHop` and `Unreachable` initially, where future cases like `SourceRoute` slot in additively for MeshCore-style without breaking AODV-style). `RunAsync` is a first-class hook so a future proactive algorithm can ship without breaking existing implementations.
 
+**Update (B5.1):** Option B subsequently landed *alongside* Option A as a selectable choice rather than a replacement (`SystemOptions.RoutingAlgorithm = "meshcore"`). The two have legitimate trade-offs and the right pick depends on the deployment, not on the codebase: passive-flood is the safer default for primary-AX.25 networks (no path bytes per packet, fewer data on the wire) and is what cold-start tests against; meshcore is preferable when bearers are uniformly higher-bandwidth (MeshCore Companion, UDP-only mesh) or when path-aware decisions matter (load balancing across discovered alternatives, mid-flow path stability under churn). Algorithm choice is global per-node and applied at startup; both stacks wrap `StaticRoutingAlgorithm` so manual operator overrides always win regardless.
+
 ## Reading list
 
 - AODV — RFC 3561 (2003), Perkins/Belding-Royer/Das. ~30 pages. <https://www.rfc-editor.org/rfc/rfc3561>
