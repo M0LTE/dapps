@@ -62,4 +62,25 @@ public class DbMessage
     /// continues at the same hop budget.
     /// </summary>
     public byte? FloodHopsRemaining { get; init; }
+
+    /// <summary>
+    /// MeshCore-flavoured source route: comma-separated list of
+    /// remaining intermediate-hop callsigns between this node and
+    /// the destination. The forwarder picks the first entry as next
+    /// hop and strips it before encoding the outbound message.
+    /// Empty/null means the algorithm is free to pick a hop.
+    /// Stored as CSV because callsigns can't contain commas.
+    /// </summary>
+    public string? SourceRouteCsv { get; init; }
+
+    /// <summary>
+    /// MeshCore-flavoured flood-discovery path accumulator: comma-
+    /// separated ordered list of intermediate-hop callsigns the
+    /// message has visited so far (excluding originator and the
+    /// local node). Each forwarder appends its own callsign before
+    /// encoding the outbound copy. Carried only on flood-discovery
+    /// messages — the destination uses the inbound value reversed
+    /// to populate its <c>discoveredpaths</c> table.
+    /// </summary>
+    public string? TraversedHopsCsv { get; init; }
 }

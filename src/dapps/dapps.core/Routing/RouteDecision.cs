@@ -39,8 +39,14 @@ namespace dapps.core.Routing;
 /// </summary>
 public abstract record RouteDecision
 {
-    /// <summary>Forward to a single next-hop neighbour.</summary>
-    public sealed record NextHop(BackhaulRoute Route) : RouteDecision;
+    /// <summary>Forward to a single next-hop neighbour. When
+    /// <paramref name="SourceRoute"/> is set, the OMM stamps the
+    /// outbound message with that ordered list so each downstream
+    /// hop relays along the embedded path (DSR / MeshCore style).
+    /// Empty list (vs null) means "source-routed, no remaining
+    /// intermediates after this hop" — the next-hop IS the
+    /// destination.</summary>
+    public sealed record NextHop(BackhaulRoute Route, IReadOnlyList<string>? SourceRoute = null) : RouteDecision;
 
     /// <summary>No route currently known. OMM leaves message in the
     /// queue; the message will be retried on the next forwarder tick
@@ -54,6 +60,13 @@ public abstract record RouteDecision
     /// know they're handling a flood (not a regular routed message)
     /// and decrement appropriately. <see cref="HopBudget"/> of zero
     /// means "this is the last hop; deliver to local apps if applicable
-    /// but do not re-flood."</summary>
-    public sealed record FloodToNeighbours(IReadOnlyList<BackhaulRoute> Routes, byte HopBudget) : RouteDecision;
+    /// but do not re-flood."
+    ///
+    /// When <paramref name="TraversedHops"/> is set, the OMM stamps
+    /// the outbound message with that ordered list. The MeshCore-
+    /// flavoured algorithm uses this to accumulate the path during
+    /// flood-discovery — every transiting node appends its callsign
+    /// before re-flooding, and the destination derives the reverse
+    /// path from the inbound list.</summary>
+    public sealed record FloodToNeighbours(IReadOnlyList<BackhaulRoute> Routes, byte HopBudget, IReadOnlyList<string>? TraversedHops = null) : RouteDecision;
 }

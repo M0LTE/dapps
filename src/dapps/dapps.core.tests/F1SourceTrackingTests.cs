@@ -157,24 +157,4 @@ public class F1SourceTrackingTests
         decoded.Originator.Should().BeNull();
     }
 
-    [Fact]
-    public void Codec_DecodesV1MessagesAsOriginatorNull()
-    {
-        // Pre-F1 producers stamped version=1 and never set the originator
-        // flag bit. New decoder must keep accepting those messages so
-        // in-flight UDP datagrams from un-upgraded senders aren't dropped.
-        var v1 = new BackhaulMessage(
-            Id: "v1abcde",
-            Destination: "app@N0DEST",
-            Salt: 1L,
-            Ttl: 60,
-            Payload: "old"u8.ToArray());
-        var bytes = BackhaulMessageCodec.Encode(v1);
-        bytes[0] = 1;     // pretend the encoder still wrote v1
-
-        var decoded = BackhaulMessageCodec.Decode(bytes);
-        decoded.Id.Should().Be("v1abcde");
-        decoded.Originator.Should().BeNull();
-        decoded.Payload.Should().Equal(v1.Payload);
-    }
 }

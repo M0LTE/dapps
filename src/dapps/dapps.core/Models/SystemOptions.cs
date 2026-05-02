@@ -57,4 +57,29 @@ public class SystemOptions
     /// notification entirely. Plan C5.1.
     /// </summary>
     public bool UpdateCheckEnabled { get; set; } = true;
+
+    /// <summary>
+    /// Which routing algorithm composition to use. Two stacks are
+    /// shipped today; both wrap <see cref="dapps.core.Routing.StaticRoutingAlgorithm"/>
+    /// so operator overrides always win.
+    ///
+    /// <list type="bullet">
+    /// <item><c>passive-flood</c> (default) — AODV-flavoured passive
+    ///   learning of next-hop routes from F1 src= observations,
+    ///   with bounded-flood as cold-start fallback. Stores per-
+    ///   destination next-hop only.</item>
+    /// <item><c>meshcore</c> — DSR-style source routing with passive
+    ///   discovery. Stores the full path in
+    ///   <see cref="dapps.core.Models.DbDiscoveredPath"/> so
+    ///   subsequent sends embed the route on the wire instead of
+    ///   re-resolving at each hop. First send to an unknown
+    ///   destination triggers a flood-discovery whose accumulated
+    ///   TraversedHops give every transiting node a path back to
+    ///   the originator.</item>
+    /// </list>
+    ///
+    /// Algorithm choice is global per-node and applied at startup;
+    /// changing requires a restart.
+    /// </summary>
+    public string RoutingAlgorithm { get; set; } = "passive-flood";
 }

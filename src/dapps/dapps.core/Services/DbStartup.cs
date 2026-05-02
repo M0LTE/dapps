@@ -47,6 +47,7 @@ public class DbStartup(ILogger<DbStartup> logger) : IHostedService
         db.CreateTable<DbDroppedMessage>();
         db.CreateTable<DbLearnedRoute>();
         db.CreateTable<DbFloodSeen>();
+        db.CreateTable<DbDiscoveredPath>();
 
         var optionsTable = db.Table<DbSystemOption>().Table.TableName;
         var options = db.Query<DbSystemOption>($"select * from {optionsTable};");
@@ -64,6 +65,7 @@ public class DbStartup(ILogger<DbStartup> logger) : IHostedService
         InsertIfNotPresent(options, "UdpListenPort", "0");
         InsertIfNotPresent(options, "AuthRequired", "false");
         InsertIfNotPresent(options, "UpdateCheckEnabled", "true");
+        InsertIfNotPresent(options, "RoutingAlgorithm", "passive-flood");
 
         ValidateRequiredConfig();
 

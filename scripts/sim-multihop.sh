@@ -23,12 +23,17 @@
 # multi-hop chains; B5 will replace them with learned routes.
 #
 # Usage:
-#   scripts/sim-multihop.sh           # build, start, configure, send-tests
+#   scripts/sim-multihop.sh                       # passive-flood (default)
+#   SIM_ALGO=meshcore scripts/sim-multihop.sh     # meshcore-like
 #   scripts/sim-multihop.sh stop      # tear down
 #   scripts/sim-multihop.sh send X Y  # send a message X → Y
 #   scripts/sim-multihop.sh exercise  # run the canned non-trivial set
 #   scripts/sim-multihop.sh status    # ports, PIDs, queue counts
 #   scripts/sim-multihop.sh verify    # show every node's inbox
+#   scripts/sim-multihop.sh learned   # dump per-node learned-routes
+#   scripts/sim-multihop.sh discovered    # dump per-node discovered-paths
+#   scripts/sim-multihop.sh prove-learning   # passive-flood acceptance
+#   scripts/sim-multihop.sh prove-meshcore   # meshcore acceptance
 #
 # Requires: dotnet 8 SDK, curl, python3 (with stdlib sqlite3).
 set -euo pipefail
@@ -38,6 +43,12 @@ SIM_DIR="${SIM_DIR:-/tmp/dapps-sim}"
 BIN_DIR="$SIM_DIR/bin"
 PROJ="$REPO/src/dapps/dapps.core/dapps.core.csproj"
 SIM_PWD="${SIM_PWD:-simpassw0rd}"
+
+# Routing algorithm: passive-flood (default — AODV-flavoured passive
+# learning + bounded flood) or meshcore (DSR-style source routing
+# with passive discovery). Set via env: SIM_ALGO=meshcore. Picked up
+# by every node via DAPPS_ROUTING_ALGORITHM at startup.
+SIM_ALGO="${SIM_ALGO:-passive-flood}"
 
 NODES=(A B C D E F)
 
@@ -130,6 +141,7 @@ start_node() {
             DAPPS_UDP_LISTEN_PORT="${UDP_PORT[$n]}" \
             DAPPS_AUTH_REQUIRED=false \
             DAPPS_UPDATE_CHECK_ENABLED=false \
+            DAPPS_ROUTING_ALGORITHM="$SIM_ALGO" \
             ASPNETCORE_URLS="http://127.0.0.1:${HTTP_PORT[$n]}" \
             DOTNET_ENVIRONMENT=Production \
             "$BIN_DIR/app/dapps.core" >"$d/dapps.log" 2>&1 &
@@ -300,6 +312,61 @@ PY
     done
 }
 
+# Dump every node's discovered-paths table — the MeshCore-flavoured
+# algorithm's equivalent of learned-routes, but storing the FULL
+# ordered intermediate-hop list rather than just the next hop.
+# Populated as flood-discovery messages traverse the mesh.
+cmd_discovered() {
+    echo ">>> Discovered paths across the mesh:"
+    for n in "${NODES[@]}"; do
+        local d; d="$(node_dir "$n")/data/dapps.db"
+        echo "----- ${CALLSIGN[$n]} discovered paths -----"
+        if [ ! -f "$d" ]; then echo "(db not present)"; continue; fi
+        python3 - "$d" <<'PY'
+import sqlite3, sys
+con = sqlite3.connect(sys.argv[1])
+try:
+    rows = list(con.execute("select DestinationBaseCallsign, IntermediatesCsv, LastSeenAt, ConsecutiveFailures from discoveredpaths order by DestinationBaseCallsign"))
+except sqlite3.OperationalError as e:
+    print(f"  (no discoveredpaths table yet: {e})"); sys.exit()
+if not rows:
+    print("  (none)")
+for dest, mids, seen, fails in rows:
+    intermediates = mids if mids else "(direct)"
+    print(f"  → {dest} via [{intermediates}]  (failures={fails})")
+PY
+    done
+}
+
+# MeshCore equivalent of cmd_prove_learning. Wipe route-hints and
+# discovered-peers (leaving only the meshcore algorithm's discovered-
+# paths as the routing source) and send A→F. If discovery has done
+# its job, the message still delivers via source routing — proving
+# the algorithm self-organised the mesh without operator config.
+cmd_prove_meshcore() {
+    echo ">>> Wiping route-hints + discovered-peers on every node…"
+    for n in "${NODES[@]}"; do
+        local d; d="$(node_dir "$n")/data/dapps.db"
+        python3 - "$d" <<'PY'
+import sqlite3, sys
+con = sqlite3.connect(sys.argv[1])
+con.execute("delete from routehints"); con.execute("delete from discoveredpeers")
+con.commit()
+PY
+    done
+    echo ">>> A→F using ONLY discovered paths…"
+    submit_message A F "meshcore-only-$(date +%s)"
+    drain_queues
+    show_inbox F
+    echo
+    echo "═════════════════════════════════════════════════════════════"
+    echo "  MESHCORE ACCEPTANCE: above message arrived at F using ONLY"
+    echo "  paths discovered by the meshcore algorithm. No route-hints"
+    echo "  configured, no discovered peers seeded. If you see a row"
+    echo "  with origin=G0SIA-1, source-routed delivery is working."
+    echo "═════════════════════════════════════════════════════════════"
+}
+
 # Drop the route-hints table and the discovered-peer entries on every
 # node, leaving ONLY learned routes as the routing source. Then send
 # A→F again. If passive learning has done its job, the message still
@@ -393,10 +460,15 @@ cmd_exercise() {
     echo "═════════════════════════════════════════════════════════════"
 
     echo
-    cmd_learned
-
-    echo
-    cmd_prove_learning
+    if [ "$SIM_ALGO" = "meshcore" ]; then
+        cmd_discovered
+        echo
+        cmd_prove_meshcore
+    else
+        cmd_learned
+        echo
+        cmd_prove_learning
+    fi
 }
 
 cmd_status() {
@@ -441,5 +513,7 @@ case "${1:-up}" in
     verify)     cmd_verify ;;
     learned)    cmd_learned ;;
     prove-learning) cmd_prove_learning ;;
-    *)          echo "usage: $0 {up|stop|send <from> <to> [payload]|exercise|status|verify|learned|prove-learning}"; exit 2 ;;
+    discovered) cmd_discovered ;;
+    prove-meshcore) cmd_prove_meshcore ;;
+    *)          echo "usage: $0 {up|stop|send <from> <to> [payload]|exercise|status|verify|learned|prove-learning|discovered|prove-meshcore}"; echo "       SIM_ALGO=meshcore $0 up    # run with the MeshCore-like algorithm instead of passive-flood"; exit 2 ;;
 esac

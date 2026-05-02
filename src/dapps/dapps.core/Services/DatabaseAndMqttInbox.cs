@@ -75,7 +75,19 @@ public sealed class DatabaseAndMqttInbox(
             // remaining-hops level (decremented by FloodFallbackAlgorithm
             // when it picks this row up). For non-flood messages this
             // stays null.
-            floodHopsRemaining: message.FloodHopsRemaining);
+            floodHopsRemaining: message.FloodHopsRemaining,
+            // MeshCore-flavoured routing carries the remaining
+            // source route (already stripped by the previous sender)
+            // and the accumulated traversal record. Both are
+            // persisted so that the algorithm can act on them on the
+            // next forwarder tick — e.g. re-flood with the right
+            // accumulator after a process restart.
+            sourceRouteCsv: message.SourceRoute is { Count: > 0 }
+                ? string.Join(',', message.SourceRoute)
+                : (message.SourceRoute is null ? null : ""),
+            traversedHopsCsv: message.TraversedHops is null
+                ? null
+                : string.Join(',', message.TraversedHops));
 
         if (DestinationParser.IsLocal(message.Destination, options.CurrentValue.Callsign))
         {
