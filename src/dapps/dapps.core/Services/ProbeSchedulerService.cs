@@ -25,6 +25,7 @@ public sealed class ProbeSchedulerService(
     NodeProber prober,
     Database database,
     IOptionsMonitor<SystemOptions> options,
+    TimeProvider timeProvider,
     ILogger<ProbeSchedulerService> logger) : BackgroundService
 {
     /// <summary>Delay before the first sweep after startup. Long enough
@@ -51,7 +52,7 @@ public sealed class ProbeSchedulerService(
         // Startup grace. Tests use a tiny StartupDelay; production
         // defaults to 15 minutes so other hosted services have a
         // chance to settle.
-        try { await Task.Delay(StartupDelay, stoppingToken); }
+        try { await Task.Delay(StartupDelay, timeProvider, stoppingToken); }
         catch (OperationCanceledException) { return; }
 
         while (!stoppingToken.IsCancellationRequested)
@@ -59,7 +60,7 @@ public sealed class ProbeSchedulerService(
             var opts = options.CurrentValue;
             if (!opts.ProbingEnabled)
             {
-                try { await Task.Delay(DisabledPollInterval, stoppingToken); }
+                try { await Task.Delay(DisabledPollInterval, timeProvider, stoppingToken); }
                 catch (OperationCanceledException) { return; }
                 continue;
             }
@@ -78,7 +79,7 @@ public sealed class ProbeSchedulerService(
             }
 
             var hours = Math.Max(1, opts.ProbeIntervalHours);
-            try { await Task.Delay(TimeSpan.FromHours(hours), stoppingToken); }
+            try { await Task.Delay(TimeSpan.FromHours(hours), timeProvider, stoppingToken); }
             catch (OperationCanceledException) { return; }
         }
     }
@@ -105,7 +106,7 @@ public sealed class ProbeSchedulerService(
             if (i < targets.Count - 1)
             {
                 var jitter = RandomDelayMs(MinInterProbeDelay, MaxInterProbeDelay);
-                try { await Task.Delay(TimeSpan.FromMilliseconds(jitter), ct); }
+                try { await Task.Delay(TimeSpan.FromMilliseconds(jitter), timeProvider, ct); }
                 catch (OperationCanceledException) { return; }
             }
         }

@@ -19,6 +19,7 @@ namespace dapps.core.Services;
 /// </summary>
 public sealed class NodeProber(
     IDappsOutboundTransport transport,
+    TimeProvider timeProvider,
     ILoggerFactory loggerFactory,
     ILogger<NodeProber> logger)
 {
@@ -60,7 +61,7 @@ public sealed class NodeProber(
         CancellationToken ct,
         bool fetchPeers = false)
     {
-        var at = DateTime.UtcNow;
+        var at = timeProvider.GetUtcNow().UtcDateTime;
         IReadOnlyList<DappsProtocolClient.DiscoveredPeerInfo> peers = [];
         try
         {

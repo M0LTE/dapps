@@ -28,6 +28,9 @@
          (FA 8.x switched to a paid Xceed licence; AA continues the MIT
          lineage). API-compatible drop-in for FA. -->
     <PackageVersion Include="AwesomeAssertions" Version="9.4.0" />
+    <!-- FakeTimeProvider for cadence-sensitive tests. The non-test
+         abstraction (System.TimeProvider) ships with .NET 8 itself. -->
+    <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="8.10.0" />
   </ItemGroup>
 
 </Project>

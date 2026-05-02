@@ -25,7 +25,8 @@ WorkingDirectory=/var/lib/dapps
 
 # Hardening — the updater needs write access to /opt/dapps and
 # /var/lib/dapps and outbound HTTPS. Nothing else.
-NoNewPrivileges=false  # we ARE privileged on purpose
+# NoNewPrivileges stays false — we ARE privileged on purpose.
+NoNewPrivileges=false
 PrivateTmp=true
 ProtectSystem=strict
 ReadWritePaths=/opt/dapps /var/lib/dapps

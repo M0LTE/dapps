@@ -9,13 +9,19 @@ namespace dapps.core.Services;
 /// Rows with no ttl set are exempt — those are local app submissions
 /// without an expiry, or pre-A1 rows from before TTL was tracked.
 /// </summary>
-public class TtlSweeperService(Database database, ILogger<TtlSweeperService> logger) : BackgroundService
+public class TtlSweeperService(
+    Database database,
+    TimeProvider timeProvider,
+    ILogger<TtlSweeperService> logger) : BackgroundService
 {
-    private static readonly TimeSpan SweepInterval = TimeSpan.FromMinutes(1);
+    public TimeSpan SweepInterval { get; init; } = TimeSpan.FromMinutes(1);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        using var timer = new PeriodicTimer(SweepInterval);
+        // PeriodicTimer takes a TimeProvider in .NET 8 — FakeTimeProvider
+        // can drive the WaitForNextTickAsync loop deterministically in
+        // tests via Advance().
+        using var timer = new PeriodicTimer(SweepInterval, timeProvider);
 
         // Run immediately on startup so a freshly-restarted node clears
         // out anything that expired while it was down.
@@ -38,7 +44,7 @@ public class TtlSweeperService(Database database, ILogger<TtlSweeperService> log
     {
         try
         {
-            var deleted = await database.DeleteExpired(DateTime.UtcNow);
+            var deleted = await database.DeleteExpired(timeProvider.GetUtcNow().UtcDateTime);
             if (deleted > 0)
             {
                 logger.LogInformation("TTL sweeper deleted {0} expired row(s)", deleted);

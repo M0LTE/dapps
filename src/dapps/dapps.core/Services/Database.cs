@@ -24,8 +24,17 @@ public class OptionsRepo
     }
 }
 
-public class Database(ILogger<Database> logger, IOptionsMonitor<SystemOptions> options)
+public class Database(
+    ILogger<Database> logger,
+    IOptionsMonitor<SystemOptions> options,
+    TimeProvider? timeProviderOpt = null)
 {
+    // Default to the system clock when DI / tests don't supply one.
+    // Lets the existing test-fixture call sites
+    // (`new Database(NullLogger, opts)`) keep working — they get
+    // production semantics without each test having to construct a
+    // FakeTimeProvider. Cadence-sensitive tests inject one.
+    private readonly TimeProvider timeProvider = timeProviderOpt ?? TimeProvider.System;
     internal async Task DeleteOffer(string id)
     {
         await DbInfo.GetAsyncConnection().DeleteAsync<DbOffer>(id);
@@ -75,7 +84,7 @@ public class Database(ILogger<Database> logger, IOptionsMonitor<SystemOptions> o
     /// </summary>
     public async Task<string> SubmitOutboundMessage(string appName, string destCallsign, byte[] payload, int? ttlSeconds = null)
     {
-        var salt = (long)(DateTime.UtcNow - DateTime.UnixEpoch).TotalMilliseconds;
+        var salt = (long)(timeProvider.GetUtcNow().UtcDateTime - DateTime.UnixEpoch).TotalMilliseconds;
         var id = DappsMessage.ComputeHash(payload, salt)[..7];
         var destination = $"{appName}@{destCallsign}";
         var ourCall = options.CurrentValue.Callsign;
@@ -115,7 +124,7 @@ public class Database(ILogger<Database> logger, IOptionsMonitor<SystemOptions> o
             OriginatorCallsign = originatorCallsign,
             AdditionalProperties = additionalProperties,
             Ttl = ttl,
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = timeProvider.GetUtcNow().UtcDateTime,
             FloodHopsRemaining = floodHopsRemaining,
             SourceRouteCsv = sourceRouteCsv,
             TraversedHopsCsv = traversedHopsCsv,
@@ -144,7 +153,7 @@ public class Database(ILogger<Database> logger, IOptionsMonitor<SystemOptions> o
             OriginatorCallsign = offer.Originator ?? "",
             AdditionalProperties = JsonSerializer.Serialize(offer.AdditionalHeaders),
             Ttl = offer.Ttl,
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = timeProvider.GetUtcNow().UtcDateTime,
         });
 
         logger.LogInformation("Saved metadata for offer {0}", offer.Id);
@@ -195,7 +204,7 @@ public class Database(ILogger<Database> logger, IOptionsMonitor<SystemOptions> o
             LocallyDelivered = row.LocallyDelivered,
             Ttl = row.Ttl,
             CreatedAt = row.CreatedAt,
-            DroppedAt = DateTime.UtcNow,
+            DroppedAt = timeProvider.GetUtcNow().UtcDateTime,
             Reason = reason,
         });
         await c.DeleteAsync<DbMessage>(id);
