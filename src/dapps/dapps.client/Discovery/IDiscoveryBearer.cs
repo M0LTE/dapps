@@ -17,12 +17,27 @@ public sealed record DiscoveryChannelInfo(
     int CostHint);
 
 /// <summary>
-/// A beacon yielded by a bearer's listen stream, tagged with the channel
-/// it arrived on. The bearer is the authority on which channel a frame
-/// belongs to (it knows AGW port bytes / UDP groups / MeshCore radios);
-/// the daemon only joins by <see cref="DiscoveryChannelInfo.ChannelKey"/>.
+/// Base type for events the discovery service consumes off a bearer's
+/// listen stream. <see cref="ReceivedBeacon"/> is "I heard so-and-so
+/// announce themselves"; <see cref="ReceivedSolicit"/> is "someone is
+/// asking who's around" (Plan B6.2). Bearers stamp the
+/// <see cref="ChannelKey"/> based on which channel the frame arrived
+/// on — they're the authority since they know AGW port bytes / UDP
+/// groups / MeshCore radios.
 /// </summary>
-public sealed record ReceivedBeacon(BeaconFrame Beacon, string ChannelKey);
+public abstract record ReceivedDiscoveryFrame(string ChannelKey);
+
+/// <summary>A beacon yielded by a bearer's listen stream.</summary>
+public sealed record ReceivedBeacon(BeaconFrame Beacon, string ChannelKey)
+    : ReceivedDiscoveryFrame(ChannelKey);
+
+/// <summary>
+/// A solicit yielded by a bearer's listen stream. The discovery
+/// service responds with a delayed beacon if its policy allows
+/// (currently: respond if we beacon on the same channel anyway).
+/// </summary>
+public sealed record ReceivedSolicit(SolicitFrame Solicit, string ChannelKey)
+    : ReceivedDiscoveryFrame(ChannelKey);
 
 /// <summary>
 /// A channel over which DAPPS nodes announce themselves and overhear
@@ -49,7 +64,18 @@ public interface IDiscoveryBearer : IAsyncDisposable
     /// <see cref="DiscoveryChannelInfo.BeaconIntervalSeconds"/>.</summary>
     Task AnnounceAsync(BeaconFrame beacon, string channelKey, CancellationToken ct);
 
-    /// <summary>Stream of beacons heard on any of this bearer's
-    /// channels, each tagged with the channel key it arrived on.</summary>
-    IAsyncEnumerable<ReceivedBeacon> ListenAsync(CancellationToken ct);
+    /// <summary>
+    /// Plan B6.2 — emit a solicit on the named channel. Receivers
+    /// reply with their normal beacon after a small random delay.
+    /// Operators trigger this on-demand today (e.g. dashboard "ping
+    /// channel" button); a future cadence can have the discovery
+    /// service schedule them periodically on HF channels.
+    /// </summary>
+    Task SolicitAsync(SolicitFrame solicit, string channelKey, CancellationToken ct);
+
+    /// <summary>Stream of discovery frames heard on any of this
+    /// bearer's channels, each tagged with the channel key it arrived
+    /// on. Today: beacons and solicits; future: anything bearer-level
+    /// the service should react to.</summary>
+    IAsyncEnumerable<ReceivedDiscoveryFrame> ListenAsync(CancellationToken ct);
 }

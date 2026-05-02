@@ -65,8 +65,9 @@ public sealed class AgwUiDiscoveryTests
         var heard = new TaskCompletionSource<ReceivedBeacon>(TaskCreationOptions.RunContinuationsAsynchronously);
         var listenTask = Task.Run(async () =>
         {
-            await foreach (var rb in bearer.ListenAsync(cts.Token).WithCancellation(cts.Token))
+            await foreach (var frame in bearer.ListenAsync(cts.Token).WithCancellation(cts.Token))
             {
+                if (frame is not ReceivedBeacon rb) continue;
                 heard.TrySetResult(rb);
                 break;
             }
@@ -77,6 +78,67 @@ public sealed class AgwUiDiscoveryTests
         got.Beacon.Hops.Should().Be(1);
         got.Beacon.Bearer.Should().BeOfType<AgwBearerHint>();
         ((AgwBearerHint)got.Beacon.Bearer).BpqPort.Should().Be(1);
+        got.ChannelKey.Should().Be("1");
+    }
+
+    [Fact]
+    public async Task SolicitAsync_WritesUiFrameWithSolicitMagic()
+    {
+        // Plan B6.2 — emit side. Solicit goes out as a UI ('M') frame
+        // with the solicit codec's longer magic prefix, distinguishable
+        // from a beacon's payload at the codec layer.
+        using var server = new FakeAgwServer();
+        await using var bearer = new AgwUiDiscoveryBearer(
+            server.Host, server.Port, ourCallsign: "M0SEND", NullLoggerFactory.Instance);
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var serverTask = Task.Run(() => server.AcceptOneAsync(cts.Token), cts.Token);
+
+        await bearer.StartAsync([Channel(1, 0)], cts.Token);
+        await bearer.SolicitAsync(new SolicitFrame("M0SEND"), "0", cts.Token);
+
+        // X (register), m (monitor enable), M (solicit) — three frames,
+        // last one a UI emit with the solicit prefix.
+        var frames = await server.WaitForFramesAsync(3, TimeSpan.FromSeconds(3));
+        frames.Should().HaveCount(3);
+        frames[2].Kind.Should().Be('M');
+        Encoding.ASCII.GetString(frames[2].Payload).Should().StartWith("DAPPS v1 solicit ");
+    }
+
+    [Fact]
+    public async Task ListenAsync_YieldsReceivedSolicitWhenPeerSolicits()
+    {
+        // Plan B6.2 — receive side. An inbound UI frame whose payload
+        // matches the solicit codec must surface as a ReceivedSolicit,
+        // not a ReceivedBeacon, so DiscoveryService can dispatch the
+        // delayed-reply path instead of upserting a peer row.
+        using var server = new FakeAgwServer();
+        await using var bearer = new AgwUiDiscoveryBearer(
+            server.Host, server.Port, ourCallsign: "M0RECV", NullLoggerFactory.Instance);
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var serverTask = Task.Run(() => server.AcceptOneAsync(cts.Token), cts.Token);
+
+        await bearer.StartAsync([Channel(1, 1)], cts.Token);
+
+        await server.SendFrameToClientAsync(new AgwFrame(
+            Port: 1, Kind: 'U', Pid: 0xF0,
+            CallFrom: "G7XYZ-9", CallTo: "DAPPS",
+            Payload: Encoding.ASCII.GetBytes("DAPPS v1 solicit callsign=G7XYZ-9")));
+
+        var heard = new TaskCompletionSource<ReceivedSolicit>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var listenTask = Task.Run(async () =>
+        {
+            await foreach (var frame in bearer.ListenAsync(cts.Token).WithCancellation(cts.Token))
+            {
+                if (frame is not ReceivedSolicit rs) continue;
+                heard.TrySetResult(rs);
+                break;
+            }
+        }, cts.Token);
+
+        var got = await heard.Task.WaitAsync(TimeSpan.FromSeconds(3), cts.Token);
+        got.Solicit.Callsign.Should().Be("G7XYZ-9");
         got.ChannelKey.Should().Be("1");
     }
 
@@ -105,8 +167,9 @@ public sealed class AgwUiDiscoveryTests
         var seen = new List<ReceivedBeacon>();
         var listenTask = Task.Run(async () =>
         {
-            await foreach (var rb in bearer.ListenAsync(cts.Token).WithCancellation(cts.Token))
+            await foreach (var frame in bearer.ListenAsync(cts.Token).WithCancellation(cts.Token))
             {
+                if (frame is not ReceivedBeacon rb) continue;
                 lock (seen) seen.Add(rb);
                 if (seen.Count >= 2) break;
             }
@@ -154,8 +217,9 @@ public sealed class AgwUiDiscoveryTests
         var heard = new TaskCompletionSource<ReceivedBeacon>(TaskCreationOptions.RunContinuationsAsynchronously);
         var listenTask = Task.Run(async () =>
         {
-            await foreach (var rb in bearer.ListenAsync(cts.Token).WithCancellation(cts.Token))
+            await foreach (var frame in bearer.ListenAsync(cts.Token).WithCancellation(cts.Token))
             {
+                if (frame is not ReceivedBeacon rb) continue;
                 heard.TrySetResult(rb);
                 break;
             }

@@ -17,7 +17,7 @@ namespace dapps.core.Controllers;
 /// </summary>
 [ApiController]
 [Route("[controller]")]
-public class DiscoveryChannelsController(Database database) : ControllerBase
+public class DiscoveryChannelsController(Database database, DiscoveryService discovery) : ControllerBase
 {
     [HttpGet]
     public async Task<IEnumerable<DiscoveryChannelModel>> List()
@@ -64,6 +64,40 @@ public class DiscoveryChannelsController(Database database) : ControllerBase
     {
         var removed = await database.RemoveDiscoveryChannel(id);
         return removed ? NoContent() : NotFound();
+    }
+
+    /// <summary>
+    /// Plan B6.2 — fire a one-shot solicit on the named channel.
+    /// Receivers reply with their normal beacon after a small random
+    /// delay; replies arrive on the standard beacon path and populate
+    /// <c>DbDiscoveredPeer</c>. Useful for ad-hoc "anyone there?"
+    /// inspection from the dashboard, especially on HF where scheduled
+    /// beacons may have missed a propagation window.
+    /// </summary>
+    [HttpPost("{id}/solicit")]
+    public async Task<IActionResult> Solicit(int id, CancellationToken ct)
+    {
+        var channels = await database.GetDiscoveryChannels();
+        var channel = channels.FirstOrDefault(c => c.Id == id);
+        if (channel is null) return NotFound();
+        if (!channel.Enabled)
+        {
+            return BadRequest($"Channel {id} ({channel.Bearer}/{channel.ChannelKey}) is disabled");
+        }
+
+        try
+        {
+            await discovery.SolicitAsync(channel.Bearer, channel.ChannelKey, ct);
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            // Bearer not currently running — DiscoveryService either
+            // didn't start (no enabled channels at boot) or the bearer
+            // failed during init. Surface as 503 so a sysop knows the
+            // problem is transient/state, not a bad request.
+            return StatusCode(503, ex.Message);
+        }
     }
 }
 

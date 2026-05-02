@@ -88,8 +88,17 @@ public sealed class DiscoveryService(
         }
         if (bearers.Count == 0) return;
 
+        // Publish the running bearers so the on-demand SolicitAsync
+        // entry point can find them. Cleared in the finally below so
+        // a service-stop doesn't leave dangling references.
+        lock (_activeBearers)
+        {
+            _activeBearers.Clear();
+            foreach (var kv in bearers) _activeBearers[kv.Key] = kv.Value;
+        }
+
         var listenTasks = bearers.Select(kv =>
-            Task.Run(() => ListenLoopAsync(kv.Value, stoppingToken), stoppingToken)).ToList();
+            Task.Run(() => ListenLoopAsync(kv.Value, channelsByBearer[kv.Key], stoppingToken), stoppingToken)).ToList();
 
         try
         {
@@ -98,6 +107,7 @@ public sealed class DiscoveryService(
         finally
         {
             try { await Task.WhenAll(listenTasks); } catch { /* expected on shutdown */ }
+            lock (_activeBearers) _activeBearers.Clear();
             foreach (var b in bearers.Values)
             {
                 try { await b.DisposeAsync(); } catch { /* best effort */ }
@@ -197,7 +207,19 @@ public sealed class DiscoveryService(
         }
     }
 
-    private async Task ListenLoopAsync(IDiscoveryBearer bearer, CancellationToken ct)
+    /// <summary>
+    /// Plan B6.2 — bound on the random delay before responding to an
+    /// incoming solicit. Each receiver picks a uniform random duration
+    /// in [0, this] before emitting its beacon, so ten nodes hearing
+    /// the same solicit don't all reply at once and saturate the
+    /// channel. Tunable so tests can shrink it.
+    /// </summary>
+    public TimeSpan SolicitResponseMaxDelay { get; init; } = TimeSpan.FromSeconds(5);
+
+    private async Task ListenLoopAsync(
+        IDiscoveryBearer bearer,
+        IReadOnlyList<DiscoveryChannelInfo> channels,
+        CancellationToken ct)
     {
         try
         {
@@ -205,20 +227,114 @@ public sealed class DiscoveryService(
             {
                 try
                 {
-                    await UpsertAsync(bearer.Name, received);
-                    logger.LogInformation(
-                        "DiscoveryService: heard {0} via {1}/{2} (hops={3}, advertised-ttl={4}s)",
-                        received.Beacon.Callsign, bearer.Name, received.ChannelKey,
-                        received.Beacon.Hops, received.Beacon.Ttl);
+                    switch (received)
+                    {
+                        case ReceivedBeacon rb:
+                            await UpsertAsync(bearer.Name, rb);
+                            logger.LogInformation(
+                                "DiscoveryService: heard {0} via {1}/{2} (hops={3}, advertised-ttl={4}s)",
+                                rb.Beacon.Callsign, bearer.Name, rb.ChannelKey,
+                                rb.Beacon.Hops, rb.Beacon.Ttl);
+                            break;
+
+                        case ReceivedSolicit rs:
+                            logger.LogInformation(
+                                "DiscoveryService: solicit from {0} on {1}/{2} — scheduling reply",
+                                rs.Solicit.Callsign, bearer.Name, rs.ChannelKey);
+                            // Fire-and-forget: respond on a delay so the
+                            // listen loop keeps draining new frames.
+                            // Concurrent solicits each schedule their own
+                            // reply task; the channel naturally serialises
+                            // the actual writes via the bearer's framing.
+                            _ = RespondToSolicitAsync(bearer, channels, rs, ct);
+                            break;
+                    }
                 }
                 catch (Exception ex)
                 {
-                    logger.LogError(ex, "DiscoveryService: upsert failed for {0}", received.Beacon.Callsign);
+                    logger.LogError(ex, "DiscoveryService: failed to handle {0}", received.GetType().Name);
                 }
             }
         }
         catch (OperationCanceledException) { /* expected on shutdown */ }
     }
+
+    /// <summary>
+    /// Plan B6.2 — schedule a beacon emission in response to a solicit.
+    /// Random 0..<see cref="SolicitResponseMaxDelay"/> jitter avoids the
+    /// "ten nodes hear the same solicit, all reply at once" channel-
+    /// saturation case. Skips silently if we don't have the channel
+    /// configured (we shouldn't be receiving on a channel we didn't
+    /// configure, but be defensive).
+    /// </summary>
+    private async Task RespondToSolicitAsync(
+        IDiscoveryBearer bearer,
+        IReadOnlyList<DiscoveryChannelInfo> channels,
+        ReceivedSolicit rs,
+        CancellationToken ct)
+    {
+        var ch = channels.FirstOrDefault(c =>
+            string.Equals(c.ChannelKey, rs.ChannelKey, StringComparison.Ordinal));
+        if (ch is null) return;
+
+        var maxMs = (int)Math.Max(0, SolicitResponseMaxDelay.TotalMilliseconds);
+        var delayMs = maxMs > 0 ? Random.Shared.Next(0, maxMs) : 0;
+
+        try
+        {
+            if (delayMs > 0)
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(delayMs), ct);
+            }
+            var beacon = new BeaconFrame(
+                Callsign: options.CurrentValue.Callsign,
+                Hops: 0,
+                Ttl: ch.AdvertisedTtlSeconds,
+                Bearer: bearer.Name == "udp"
+                    ? new UdpBearerHint(ch.ChannelKey)
+                    : new AgwBearerHint(0));
+            await bearer.AnnounceAsync(beacon, ch.ChannelKey, ct);
+            logger.LogInformation(
+                "DiscoveryService: replied to solicit from {0} on {1}/{2} after {3}ms",
+                rs.Solicit.Callsign, bearer.Name, rs.ChannelKey, delayMs);
+        }
+        catch (OperationCanceledException) { /* shutdown */ }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex,
+                "DiscoveryService: failed to reply to solicit on {0}/{1}",
+                bearer.Name, rs.ChannelKey);
+        }
+    }
+
+    /// <summary>
+    /// Public entry point used by the controller to fire a one-shot
+    /// solicit. Bearer/channel must be currently configured and
+    /// running. Plan B6.2.
+    /// </summary>
+    public async Task SolicitAsync(string bearerName, string channelKey, CancellationToken ct)
+    {
+        IDiscoveryBearer? bearer;
+        lock (_activeBearers)
+        {
+            _activeBearers.TryGetValue(bearerName, out bearer);
+        }
+        if (bearer is null)
+        {
+            throw new InvalidOperationException(
+                $"No active discovery bearer named '{bearerName}'");
+        }
+        var solicit = new SolicitFrame(options.CurrentValue.Callsign);
+        await bearer.SolicitAsync(solicit, channelKey, ct);
+        logger.LogInformation(
+            "DiscoveryService: emitted solicit on {0}/{1}", bearerName, channelKey);
+    }
+
+    /// <summary>Bearers currently running; populated in
+    /// <see cref="ExecuteAsync"/> after start, cleared on shutdown.
+    /// Surfaces the on-demand <see cref="SolicitAsync"/> path without
+    /// a circular DI dependency between the service and the controller.</summary>
+    private readonly Dictionary<string, IDiscoveryBearer> _activeBearers = new(StringComparer.Ordinal);
 
     private async Task UpsertAsync(string bearerName, ReceivedBeacon received)
     {
