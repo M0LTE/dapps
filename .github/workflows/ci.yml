@@ -28,13 +28,6 @@ concurrency:
 permissions:
   contents: write   # release job creates a Release on master pushes
 
-env:
-  # GitHub announced Node 20's deprecation in actions; runners auto-
-  # promote v4 actions (upload-artifact, download-artifact) to Node 24
-  # when this flag is set. Without it every job emits a deprecation
-  # warning until those actions cut a v5.
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
-
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -71,7 +64,7 @@ jobs:
 
       - name: Upload test results on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: test-results
           path: src/dapps/dapps.core.tests/bin/Release/net8.0/TestResults/
@@ -164,7 +157,7 @@ jobs:
           cp "publish/dapps.core${{ matrix.ext }}" "dist/dapps-${{ matrix.rid }}${{ matrix.ext }}"
           test -s "dist/dapps-${{ matrix.rid }}${{ matrix.ext }}"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: dapps-${{ matrix.rid }}
           path: dist/dapps-${{ matrix.rid }}${{ matrix.ext }}
@@ -177,7 +170,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           path: dist
           merge-multiple: true

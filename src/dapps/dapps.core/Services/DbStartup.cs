@@ -48,6 +48,7 @@ public class DbStartup(ILogger<DbStartup> logger) : IHostedService
         db.CreateTable<DbLearnedRoute>();
         db.CreateTable<DbFloodSeen>();
         db.CreateTable<DbDiscoveredPath>();
+        db.CreateTable<DbProbedNode>();
 
         var optionsTable = db.Table<DbSystemOption>().Table.TableName;
         var options = db.Query<DbSystemOption>($"select * from {optionsTable};");
@@ -66,6 +67,8 @@ public class DbStartup(ILogger<DbStartup> logger) : IHostedService
         InsertIfNotPresent(options, "AuthRequired", "false");
         InsertIfNotPresent(options, "UpdateCheckEnabled", "true");
         InsertIfNotPresent(options, "RoutingAlgorithm", "passive-flood");
+        InsertIfNotPresent(options, "ProbingEnabled", "false");
+        InsertIfNotPresent(options, "ProbeIntervalHours", "24");
 
         ValidateRequiredConfig();
 

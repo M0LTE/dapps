@@ -27,6 +27,8 @@ What's missing to call this complete is the parts that turn a single-node demo i
 - I think we should look at shipping an actual usable app, ideally an actual phone app, maybe a messenger app. Or maybe a long form mail app so as not to conflict with whatsapp.
 - RHP (v2?) support
 - MCP server endpoint exposing some DAPPS surface to LLMs — could let an agent participate in routing decisions ("explore via this neighbour and report what you find"), help with network discovery / topology mapping, or surface a richer query interface than the dashboard JSON. Open question what the right tools are: read-only diagnostics, controlled probes, route hints, app-traffic synthesis for testing? Worth a short design pass when it gets pulled forward.
+- **Global airtime budget for discovery.** A single operator-tuneable cap on airtime consumed by *all* discovery-class transmissions — beacons (B1–B4), HF solicits (B6.2), connected-mode probes (B6.1). Today each subsystem has its own cadence knobs (per-channel `BeaconIntervalSeconds`, `ProbeIntervalHours`, future solicit cadence) and they don't know about each other. A frequency-coordinator's view of "this DAPPS node is using N% of channel time" is useful — especially on shared 1200-baud VHF — and the obvious knob is one budget that the schedulers compete for. Shape: `DiscoveryAirtimeBudgetSecondsPerHour` on `SystemOptions`, optionally per-channel; each subsystem reports its planned transmission length to a shared accountant before transmitting; the accountant defers or drops if the budget is exceeded. Worth designing properly before we add a third or fourth discovery-class subsystem.
+- **Probe strategies, not bare intervals.** The `ProbeIntervalHours` knob on B6.1 today is a placeholder shape — it picks a fixed cadence regardless of what the network's doing. Real options the operator wants: *run-overnight* (configurable local-time window, the obvious default), *run-when-quiet* (defer probes when the OutboundForwarderService is actively forwarding or AGW saw recent traffic), *fixed-interval* (today's behaviour, kept for tests / for sysops who want it deterministic). Strategy as an enum on `SystemOptions`, with a small dispatcher in `ProbeSchedulerService`. Pairs naturally with the airtime-budget idea above — "run when quiet" is a special case of "share the budget gracefully." Probably done together when the time-of-day work lands.
 
 ## Open tasks (issues filed)
 
@@ -239,16 +241,15 @@ B1-B4 are passive discovery (beacon, listen). B5 is the routing graph on top. B6
 
 Two sub-mechanisms, distinct because they target different propagation realities:
 
-#### B6.1 — Connected-mode probe-and-map
+#### B6.1 — Connected-mode probe-and-map *(Phase 1 done; Phase 2 still queued)*
 
-Automate what a curious sysop does manually. Pick a known peer; connect at L2; at the remote's node prompt try the conventional alias (`DAPPS` — already what the README example uses). If it connects to a DAPPSv1 prompt, that node's mapped. While we're there, ask for its neighbour table (new `who` / `peers` command on the DAPPSv1 protocol, or just look at the destination addresses we've seen it forward to). Pick a different random path each run.
+Phase 1 of B6.1 ships a **direct-connect liveness probe** for every callsign DAPPS already knows about. Sources: manual `DbNeighbour` rows (skipping UDP-routed ones) and AGW-bearer `DbDiscoveredPeer` rows, deduped by callsign with neighbour port winning over peer port. The probe AGW-connects to the target callsign on the chosen port, looks for the `DAPPSv1>` banner (reusing `DappsProtocolClient.ReadInitialPromptAsync`), and disconnects. The result lands in a new `DbProbedNode` row keyed by callsign — `LastProbedAt`, `LastSuccessAt`, `LastError`, `ConsecutiveFailures`, `SuccessCount`, plus an operator `OptOut` flag.
 
-Implementation notes:
-- **Cadence**: overnight by default (configurable); on-demand button on the dashboard. Low-rate, randomised delay between probes — this uses other operators' airtime and their L4 stack.
-- **Politeness**: per-neighbour opt-out ("don't probe me through here"). Skip during local-time daytime hours by default if neighbour metadata indicates it. Hard cap on probes per night.
-- **Convention**: "DAPPS lives here" = an `APPLICATION` line whose alias is `DAPPS` (typing `DAPPS` at the node prompt connects to the local DAPPSv1 instance). Already what we recommend; document it as the discoverability hook.
-- **Storage**: new `DbProbedNode` table parallel to `DbDiscoveredPeer`. Fields: callsign, has-dapps, last-probed-at, last-reachable-via (the path we used when we last found them), last-error. Different from `DbDiscoveredPeer` (which is "I heard their beacon on this channel") — this is "I successfully reached them via this connected-mode path."
-- **Feeds B5**: probed-node data is exactly what B5's routing graph wants. Order suggests B5 lands first; B6.1 lands once there's a graph to populate.
+A `ProbeSchedulerService` (`BackgroundService`) drives the cadence: 15-minute startup grace, then a sweep every `ProbeIntervalHours` (default 24h). Within a sweep, individual probes are spaced by 5–30s of random jitter so two nodes on the same cron offset don't dial the same BPQ simultaneously. Off by default — `SystemOptions.ProbingEnabled` opts in. REST surface at `/Probes`: list, run-sweep, run-one, set-opt-out, forget-row. On-demand probes bypass the opt-out filter so a sysop can still test a peer they've muted. Dashboard panel sits between "Discovered peers" and "Recently dropped" with a "Probe all now" button, per-row probe / forget actions, and an opt-out toggle. Settings panel grows two new fields. 23 unit tests across `NodeProberTests`, `ProbedNodeCrudTests`, `ProbeSchedulerServiceTests`.
+
+**What's deliberately not in Phase 1:** node-prompt-then-`DAPPS` discovery (probing AX.25 nodes that aren't yet known to be DAPPS-capable, by connecting to their NODECALL and typing `DAPPS` at the node prompt) — needs an AGW state machine that can read a BPQ node prompt and react to it. **And the inquisitive `peers` / `who` command on the DAPPSv1 protocol** — once connected, ask the remote DAPPS who *they* know about, populating `DbDiscoveredPeer` with peers we've never directly heard. That's a spec extension and bigger surface; Phase 2 of B6.1 gets it. Also out of scope: per-channel daylight-hours politeness on HF, hard caps per night, and feeding probe results into B5's learned-route graph (probed-node data could promote a peer's eligibility independently of the AODV passive-learning path; haven't decided where that wiring belongs yet).
+
+**Convention:** "DAPPS lives here" = an `APPLICATION` line whose alias is `DAPPS` (typing `DAPPS` at the node prompt connects to the local DAPPSv1 instance). Already what we recommend; documented in the install README. Phase 2 of B6.1 leans on this.
 
 #### B6.2 — HF NVIS solicit-and-listen
 
@@ -299,13 +300,9 @@ Manual `curl` + `install` + `systemctl restart` is workable for the operator run
 
 Three phases by complexity / risk; ship in order, evaluate before moving on.
 
-#### C5.1 — Visibility
-Cheapest, highest-value-per-line. dapps polls `https://api.github.com/repos/M0LTE/dapps/releases/latest` on a slow cadence (a few hours, randomised offset) and surfaces "v0.X.Y available" with the changelog link in the dashboard. No moving parts that need root; sysop still runs the upgrade recipe. Just stops people running ancient builds because nobody told them.
+#### C5.1 — Visibility *(done)*
 
-- New `UpdateChecker` hosted service, polls + caches latest release info.
-- Dashboard banner / "Update available" pill in the header.
-- Setting to opt out (some sysops will pin to a specific version on purpose).
-- All platforms (Linux / Windows / macOS) get this — it's just a polling loop and a UI string.
+`UpdateChecker` (a `BackgroundService`) polls `https://api.github.com/repos/M0LTE/dapps/releases/latest` every 6 hours after a 15s startup delay, caches the result, and exposes `Current` / `Latest` / `IsAvailable` / `IsDevBuild`. `Current` is resolved from `AssemblyInformationalVersion`; `dev-<sha>` builds are flagged so the dashboard never claims a dev build is "out of date". Compared via a tolerant dotted-decimal semver comparator. `SystemOptions.UpdateCheckEnabled` (default true, seeded by `DbStartup`, editable in the dashboard's settings panel) is the opt-out for sysops who pin a version on purpose. `EventsController` exposes the snapshot at `GET /Events/version`. The dashboard's `#version-pill` in the header polls that endpoint on load + every 10 minutes and renders one of three states: dev build (info pill), up-to-date (muted pill, `vX.Y.Z`), update available (warn pill, `vX.Y.Z → vX.Y.W available`, links to the GitHub release). Cross-platform — pure polling + UI.
 
 #### C5.2 — Triggered update (Linux / systemd)
 Sysop clicks a dashboard button (or POSTs `/Config/update`); dapps signals a separate privileged `dapps-updater.service` to do the swap. dapps itself stays unprivileged.
@@ -488,10 +485,10 @@ Roughly:
 3. **C1 + C2 + C4** (docker image, config tooling, install docs) — gets the thing into one sysop's hands.
 4. **A4** (per-app auth) — *done*.
 5. **D1 + D2** (web UI inspection + exercise) — *MVP done*. SSE inbound feed + ihave terminal still pending.
-6. **B1–B4** (channels-first-class discovery + cost-based resolver) — *done*. **B5** (learned-graph routing inside DAPPS, bearer-agnostic) remains, then **B6** (active discovery — connected-mode probe-and-map + HF NVIS solicit) on top.
+6. **B1–B4** (channels-first-class discovery + cost-based resolver) — *done*. **B5** (learned-graph routing inside DAPPS, bearer-agnostic) — *done*. **B6.1** Phase 1 (direct-connect liveness probes) — *done*. **B6.1** Phase 2 (node-prompt discovery + `peers` command) and **B6.2** (HF NVIS solicit-and-listen) still queued.
 7. **E1–E4** (concepts + tutorial + reference + sample-app gallery) — *done*. Developer guide is complete; third-party app development is unlocked.
 8. **H** (concrete bearer integrations — MeshCore Companion, MeshCore KISS, RHP, …) on its own track, doesn't gate the routing or developer-guide work.
-9. **A3** — *done*. **C3, C5 (self-update), D3, D4, F1–F4** in parallel as polish — though C5.1 (update-availability banner) is cheap and unblocks the deployed-estate-staying-current concern, so worth pulling forward.
+9. **A3** — *done*. **C5.1** (update-availability banner) — *done*. **C3, C5.2/C5.3 (triggered + scheduled self-update), D3, D4, F1–F4** in parallel as polish.
 10. **Phase G** (second-language reference impl) once the spec has been exercised by enough first-party apps that the ambiguities are likely to surface.
 
 Phases A and C can ship as a single "v0.1.0 — runnable" release. Phase D as "v0.2.0 — operable". Phase B + E as "v1.0.0 — networked + developable".

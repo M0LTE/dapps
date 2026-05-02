@@ -1,0 +1,118 @@
+using System.Text;
+using AwesomeAssertions;
+using dapps.client.Transport;
+using dapps.core.Services;
+using Microsoft.Extensions.Logging.Abstractions;
+
+namespace dapps.core.tests;
+
+/// <summary>
+/// Unit tests for <see cref="NodeProber"/>. Drives the prober with a
+/// fake transport that hands back canned receiver bytes, the same
+/// pattern as <c>Dappsv1SessionBackhaulTests</c>. Each path corresponds
+/// to a distinct ProbeResult shape the dashboard cares about.
+/// </summary>
+public sealed class NodeProberTests
+{
+    [Fact]
+    public async Task ProbeAsync_DappsPromptObserved_ReturnsSuccess()
+    {
+        // The prober reads up to the prompt then closes. Anything after
+        // the prompt is ignored; the trailing newline triggers the prompt
+        // recogniser. (See DappsProtocolClient.ReadInitialPromptAsync.)
+        var transport = new FakeOutboundTransport(Encoding.UTF8.GetBytes("DAPPSv1>\n"));
+        var prober = MakeProber(transport);
+
+        var result = await prober.ProbeAsync("N0US", "N0THEM-9", bpqPort: 1, CancellationToken.None);
+
+        result.Success.Should().BeTrue();
+        result.Error.Should().BeEmpty();
+        result.Callsign.Should().Be("N0THEM-9");
+        result.BpqPort.Should().Be(1);
+        result.At.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
+    }
+
+    [Fact]
+    public async Task ProbeAsync_NoPrompt_ReturnsFailureWithReason()
+    {
+        var transport = new FakeOutboundTransport("garbage no prompt"u8.ToArray());
+        var prober = MakeProber(transport);
+
+        var result = await prober.ProbeAsync("N0US", "N0THEM-9", 0, CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Error.Should().Contain("DAPPSv1>");
+    }
+
+    [Fact]
+    public async Task ProbeAsync_TransportThrows_ReturnsFailureWithMessage()
+    {
+        var prober = MakeProber(new ThrowingTransport(new InvalidOperationException("AGW connect rejected")));
+
+        var result = await prober.ProbeAsync("N0US", "N0THEM-9", 0, CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Error.Should().Be("AGW connect rejected");
+    }
+
+    [Fact]
+    public async Task ProbeAsync_TransportTimesOut_ReturnsTimeoutError()
+    {
+        // TimeoutException gets a leading "timeout: " prefix so dashboard
+        // operators can distinguish a wedged peer from a flat-out reject.
+        var prober = MakeProber(new ThrowingTransport(new TimeoutException("AGW: no frame from BPQ for 3 minutes")));
+
+        var result = await prober.ProbeAsync("N0US", "N0THEM-9", 0, CancellationToken.None);
+
+        result.Success.Should().BeFalse();
+        result.Error.Should().StartWith("timeout: ");
+        result.Error.Should().Contain("3 minutes");
+    }
+
+    [Fact]
+    public async Task ProbeAsync_CancellationFromCaller_PropagatesAsTaskCanceled()
+    {
+        // Caller-driven cancellation is a shutdown signal; the scheduler
+        // needs the exception to bubble so it can exit ExecuteAsync. Use
+        // a transport that blocks indefinitely — the only way out is the
+        // cancellation token.
+        var prober = MakeProber(new BlockingTransport());
+        using var cts = new CancellationTokenSource();
+        cts.CancelAfter(TimeSpan.FromMilliseconds(50));
+
+        Func<Task> act = () => prober.ProbeAsync("N0US", "N0THEM-9", 0, cts.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    private static NodeProber MakeProber(IDappsOutboundTransport transport)
+        => new(transport, NullLoggerFactory.Instance, NullLogger<NodeProber>.Instance);
+
+    private sealed class FakeOutboundTransport(byte[] cannedReceiverBytes) : IDappsOutboundTransport
+    {
+        public Task<IDappsConnection> ConnectAsync(string localCallsign, string remoteCallsign, int bpqPortNumber, CancellationToken stoppingToken)
+            => Task.FromResult<IDappsConnection>(new FakeConnection(new MemoryStream(cannedReceiverBytes)));
+
+        private sealed class FakeConnection(Stream stream) : IDappsConnection
+        {
+            public Stream Stream { get; } = stream;
+            public ValueTask DisposeAsync() { Stream.Dispose(); return ValueTask.CompletedTask; }
+        }
+    }
+
+    private sealed class ThrowingTransport(Exception toThrow) : IDappsOutboundTransport
+    {
+        public Task<IDappsConnection> ConnectAsync(string localCallsign, string remoteCallsign, int bpqPortNumber, CancellationToken stoppingToken)
+            => Task.FromException<IDappsConnection>(toThrow);
+    }
+
+    private sealed class BlockingTransport : IDappsOutboundTransport
+    {
+        public Task<IDappsConnection> ConnectAsync(string localCallsign, string remoteCallsign, int bpqPortNumber, CancellationToken stoppingToken)
+        {
+            var tcs = new TaskCompletionSource<IDappsConnection>();
+            stoppingToken.Register(() => tcs.TrySetCanceled(stoppingToken));
+            return tcs.Task;
+        }
+    }
+}

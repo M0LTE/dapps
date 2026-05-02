@@ -610,6 +610,8 @@ public class Database(ILogger<Database> logger, IOptionsMonitor<SystemOptions> o
         await Upsert(connection, options, systemOptions.MqttPort.ToString(), nameof(systemOptions.MqttPort));
         await Upsert(connection, options, systemOptions.UpdateCheckEnabled.ToString(), nameof(systemOptions.UpdateCheckEnabled));
         await Upsert(connection, options, systemOptions.RoutingAlgorithm, nameof(systemOptions.RoutingAlgorithm));
+        await Upsert(connection, options, systemOptions.ProbingEnabled.ToString(), nameof(systemOptions.ProbingEnabled));
+        await Upsert(connection, options, systemOptions.ProbeIntervalHours.ToString(), nameof(systemOptions.ProbeIntervalHours));
     }
 
     private static async Task Upsert(SQLiteAsyncConnection connection, List<DbSystemOption> options, string value, string field)
@@ -640,6 +642,53 @@ public class Database(ILogger<Database> logger, IOptionsMonitor<SystemOptions> o
             RoutingAlgorithm = options.TryGetValue(nameof(SystemOptions.RoutingAlgorithm), out var ra) && !string.IsNullOrEmpty(ra)
                 ? ra
                 : "passive-flood",
+            ProbingEnabled = options.TryGetValue(nameof(SystemOptions.ProbingEnabled), out var pe)
+                && bool.TryParse(pe, out var peParsed) && peParsed,
+            ProbeIntervalHours = options.TryGetValue(nameof(SystemOptions.ProbeIntervalHours), out var pih)
+                && int.TryParse(pih, out var pihParsed) && pihParsed > 0
+                ? pihParsed
+                : 24,
         };
+    }
+
+    // ── Probed nodes (B6.1) ──────────────────────────────────────────
+
+    /// <summary>List every <see cref="DbProbedNode"/> row, newest probe first.</summary>
+    public async Task<IReadOnlyList<DbProbedNode>> GetProbedNodes()
+    {
+        var connection = DbInfo.GetAsyncConnection();
+        return await connection.QueryAsync<DbProbedNode>(
+            "select * from probednodes order by " +
+            "case when LastProbedAt is null then 1 else 0 end, " +
+            "LastProbedAt desc, Callsign asc");
+    }
+
+    public async Task<DbProbedNode?> GetProbedNode(string callsign)
+        => await DbInfo.GetAsyncConnection().FindAsync<DbProbedNode>(callsign);
+
+    /// <summary>Idempotent upsert of a probed-node row. Used both by the
+    /// scheduler when recording results, and by the controller when an
+    /// operator pre-creates an opt-out entry.</summary>
+    internal async Task UpsertProbedNode(DbProbedNode node)
+    {
+        var connection = DbInfo.GetAsyncConnection();
+        var existing = await connection.FindAsync<DbProbedNode>(node.Callsign);
+        if (existing is null)
+        {
+            await connection.InsertAsync(node);
+        }
+        else
+        {
+            await connection.UpdateAsync(node);
+        }
+    }
+
+    /// <summary>Remove a probed-node row by callsign. Returns true if a
+    /// row was actually deleted.</summary>
+    internal async Task<bool> RemoveProbedNode(string callsign)
+    {
+        var deleted = await DbInfo.GetAsyncConnection().ExecuteAsync(
+            "delete from probednodes where callsign=?", callsign);
+        return deleted > 0;
     }
 }
