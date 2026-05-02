@@ -187,6 +187,7 @@
         <div class="label">Action</div>
         <div class="value">
             <button id="upd-apply-btn" type="button" onclick="dappsApplyUpdate()" disabled>Apply update</button>
+            <button id="upd-check-btn" type="button" onclick="dappsCheckNow()">Check now</button>
         </div>
         <div class="caption" id="upd-apply-caption">Need an available release to apply</div>
     </div>
@@ -270,7 +271,28 @@
             }
             poll();
         }
+        async function dappsCheckNowFn() {
+            // Force-refresh the cache. Cheap one-shot HTTPS to GitHub —
+            // operators who just shipped a release hit this to see the
+            // node notice within seconds rather than up to an hour.
+            const btn = document.getElementById('upd-check-btn');
+            btn.disabled = true;
+            btn.textContent = 'Checking…';
+            try {
+                const res = await fetch('/Update/check', { method: 'POST' });
+                if (!res.ok) {
+                    const text = await res.text();
+                    alert(`Check failed (${res.status}): ${text}`);
+                    return;
+                }
+                await poll();
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Check now';
+            }
+        }
         window.dappsApplyUpdate = dappsApplyUpdateFn;
+        window.dappsCheckNow = dappsCheckNowFn;
         poll();
         setInterval(poll, 5000);
     })();
