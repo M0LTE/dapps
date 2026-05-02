@@ -22,14 +22,12 @@ using System.Net.Sockets;
 if (UpdaterCli.TryHandle(args, out var cliExitCode)) return cliExitCode;
 
 // Seed the systemoptions table BEFORE host build. The
-// SystemOptions Configure callback (line ~34 below) fires during
-// eager hosted-service DI graph materialisation — UdpDatagramListener
-// → IBackhaulInbox → IRoutingAlgorithm → IOptionsMonitor.CurrentValue.
-// If DbStartup ran first as a hosted service it would race the
-// configurator and lose: hosted services are CONSTRUCTED in one
-// pass before any of their StartAsync runs. Pre-seeding here makes
-// the order guarantee explicit; DbStartup's own StartAsync is then
-// a no-op belt-and-braces second pass.
+// SystemOptions Configure callback (just below) fires during eager
+// hosted-service DI graph materialisation — UdpDatagramListener →
+// IBackhaulInbox → IRoutingAlgorithm → IOptionsMonitor.CurrentValue —
+// which would race a hosted-service seeder and lose, since hosted
+// services are CONSTRUCTED in one pass before any of their StartAsync
+// runs.
 DbStartup.EnsureSchemaAndSeed();
 
 var builder = WebApplication.CreateBuilder(args);
@@ -37,7 +35,6 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 builder.Services.AddControllers();
 builder.Services.AddRazorPages();
-builder.Services.AddHostedService<DbStartup>();
 // Sync — Configure expects an Action, so an `async` lambda would
 // compile as async-void, fire-and-forget the GetOptions read, and
 // hand callers a SystemOptions instance with un-populated values.
@@ -227,11 +224,9 @@ builder.Services.AddSingleton<NodePoller>();
 builder.Services.AddSingleton<PollSchedulerService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<PollSchedulerService>());
 
-// DiscoveryService constructs its bearers itself in StartAsync (rather
-// than receiving them via IEnumerable<IDiscoveryBearer>), because the
-// bearer factory needs to dereference SystemOptions, which queries the
-// systemoptions table — which DbStartup hasn't created at the moment
-// the DI container materialises hosted services.
+// DiscoveryService constructs its bearers itself in StartAsync rather
+// than receiving them via IEnumerable<IDiscoveryBearer>, so the bearer
+// factory's SystemOptions read happens after the host is fully running.
 //
 // Registered as a singleton so the /DiscoveryChannels controller can
 // inject it for B6.2 on-demand solicits. AddHostedService binds the

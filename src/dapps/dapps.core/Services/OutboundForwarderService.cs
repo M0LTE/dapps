@@ -41,12 +41,10 @@ public sealed class OutboundForwarderService(
         try { await Task.Delay(StartupDelay, timeProvider, stoppingToken); }
         catch (OperationCanceledException) { return; }
 
-        // Resolve OutboundMessageManager lazily on first tick, NOT in
-        // the ctor. Eager construction would chain through to the
-        // IDappsOutboundTransport factory, which reads SystemOptions
-        // at construction — that needs DbStartup to have finished
-        // first, and DbStartup hasn't been run when hosted-service ctors
-        // fire during DI resolution.
+        // Resolve OutboundMessageManager lazily on first tick rather
+        // than via the ctor — IDappsOutboundTransport's factory reads
+        // SystemOptions at construction, which is fine post-build but
+        // gratuitous to chain through during DI graph materialisation.
         var outbound = services.GetRequiredService<OutboundMessageManager>();
 
         while (!stoppingToken.IsCancellationRequested)

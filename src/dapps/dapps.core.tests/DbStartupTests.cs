@@ -7,10 +7,10 @@ using SQLite;
 namespace dapps.core.tests;
 
 /// <summary>
-/// DbStartup is the system's first-run config seam: it creates schema,
-/// seeds defaults from env vars (Plan C2), and refuses to start on a
-/// placeholder callsign. These tests drive each path against a fresh
-/// SQLite file.
+/// DbStartup.EnsureSchemaAndSeed is the system's first-run config seam:
+/// it creates schema, seeds defaults from env vars (Plan C2), and
+/// refuses to start on a placeholder callsign. These tests drive each
+/// path against a fresh SQLite file.
 /// </summary>
 [Collection(SqliteOverridePathCollection.Name)]
 public sealed class DbStartupTests : IAsyncLifetime
@@ -54,24 +54,21 @@ public sealed class DbStartupTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task StartAsync_NoEnvVars_ThrowsOnPlaceholderCallsign()
+    public void EnsureSchemaAndSeed_NoEnvVars_ThrowsOnPlaceholderCallsign()
     {
-        var startup = new DbStartup(NullLogger<DbStartup>.Instance);
+        var act = () => DbStartup.EnsureSchemaAndSeed();
 
-        var act = async () => await startup.StartAsync(TestContext.Current.CancellationToken);
-
-        var ex = await act.Should().ThrowAsync<InvalidOperationException>();
+        var ex = act.Should().Throw<InvalidOperationException>();
         ex.Which.Message.Should().Contain("Callsign", "the error must point the operator at the actual missing config");
         ex.Which.Message.Should().Contain("DAPPS_CALLSIGN");
     }
 
     [Fact]
-    public async Task StartAsync_CallsignFromEnvVar_SeedsAndStarts()
+    public void EnsureSchemaAndSeed_CallsignFromEnvVar_SeedsAndStarts()
     {
         Environment.SetEnvironmentVariable("DAPPS_CALLSIGN", "G0TST");
-        var startup = new DbStartup(NullLogger<DbStartup>.Instance);
 
-        await startup.StartAsync(TestContext.Current.CancellationToken);
+        DbStartup.EnsureSchemaAndSeed();
 
         using var c = DbInfo.GetConnection();
         var row = c.Find<DbSystemOption>("Callsign");
@@ -80,7 +77,7 @@ public sealed class DbStartupTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task StartAsync_AllEnvVars_SeedsEachOption()
+    public void EnsureSchemaAndSeed_AllEnvVars_SeedsEachOption()
     {
         Environment.SetEnvironmentVariable("DAPPS_CALLSIGN", "G0TST");
         Environment.SetEnvironmentVariable("DAPPS_NODE_HOST", "bpq.local");
@@ -88,8 +85,7 @@ public sealed class DbStartupTests : IAsyncLifetime
         Environment.SetEnvironmentVariable("DAPPS_DEFAULT_BPQ_PORT", "2");
         Environment.SetEnvironmentVariable("DAPPS_MQTT_PORT", "1884");
 
-        var startup = new DbStartup(NullLogger<DbStartup>.Instance);
-        await startup.StartAsync(TestContext.Current.CancellationToken);
+        DbStartup.EnsureSchemaAndSeed();
 
         using var c = DbInfo.GetConnection();
         c.Find<DbSystemOption>("Callsign")!.Value.Should().Be("G0TST");
@@ -100,7 +96,7 @@ public sealed class DbStartupTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task StartAsync_ExistingRow_NotOverwrittenByEnv()
+    public void EnsureSchemaAndSeed_ExistingRow_NotOverwrittenByEnv()
     {
         // Pre-seed a manually-configured callsign as if /Config POST had set it.
         using (var c = DbInfo.GetConnection())
@@ -110,8 +106,7 @@ public sealed class DbStartupTests : IAsyncLifetime
         }
         Environment.SetEnvironmentVariable("DAPPS_CALLSIGN", "DIFFERENT-CALL");
 
-        var startup = new DbStartup(NullLogger<DbStartup>.Instance);
-        await startup.StartAsync(TestContext.Current.CancellationToken);
+        DbStartup.EnsureSchemaAndSeed();
 
         using var conn = DbInfo.GetConnection();
         conn.Find<DbSystemOption>("Callsign")!.Value.Should().Be("M0LTE-3",
@@ -119,7 +114,7 @@ public sealed class DbStartupTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task StartAsync_ExistingPlaceholderCallsign_StillThrows()
+    public void EnsureSchemaAndSeed_ExistingPlaceholderCallsign_StillThrows()
     {
         // Operator left N0CALL in the DB somehow — must still error,
         // not silently transmit on it.
@@ -129,10 +124,8 @@ public sealed class DbStartupTests : IAsyncLifetime
             c.Insert(new DbSystemOption { Option = "Callsign", Value = "N0CALL" });
         }
 
-        var startup = new DbStartup(NullLogger<DbStartup>.Instance);
+        var act = () => DbStartup.EnsureSchemaAndSeed();
 
-        var act = async () => await startup.StartAsync(TestContext.Current.CancellationToken);
-
-        await act.Should().ThrowAsync<InvalidOperationException>();
+        act.Should().Throw<InvalidOperationException>();
     }
 }
