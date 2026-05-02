@@ -26,7 +26,7 @@ What's missing to call this complete is the parts that turn a single-node demo i
 - what about using Meshcore as a transport? *(separate question; tracked under Phase H1)*
 - I think we should look at shipping an actual usable app, ideally an actual phone app, maybe a messenger app. Or maybe a long form mail app so as not to conflict with whatsapp.
 - RHP (v2?) support
-- MCP server endpoint exposing some DAPPS surface to LLMs — could let an agent participate in routing decisions ("explore via this neighbour and report what you find"), help with network discovery / topology mapping, or surface a richer query interface than the dashboard JSON. Open question what the right tools are: read-only diagnostics, controlled probes, route hints, app-traffic synthesis for testing? Worth a short design pass when it gets pulled forward.
+- ~~MCP server endpoint exposing some DAPPS surface to LLMs~~ *(in progress — see Phase M)*
 - ~~**Global airtime budget for discovery.**~~ *(actioned — see B7 below)*
 - ~~**Probe strategies, not bare intervals.**~~ *(actioned — see B7 below)*
 
@@ -529,6 +529,22 @@ The README already says "multiple compatible implementations is healthy." Once t
 - Release notes / changelog discipline so implementers know what's changed.
 
 Probably also worth a public conversation about whether DAPPS sits under OARC (the original RFC venue) or stays as a personal project — has implications for spec governance and license expectations.
+
+## Phase M — MCP server endpoint *(bootstrap landed; PR-A → PR-D ahead)*
+
+An operator-assistant interface: expose DAPPS state and supervised actions to MCP clients (Claude Desktop, Claude Code, Cursor) so an LLM can compose diagnostic narratives, propose topology fixes, and run controlled probes on the operator's behalf. Sysop catches up after a week away with "what happened?" instead of grep'ing journals.
+
+In-process: the dapps daemon hosts the MCP server at `/mcp` via `ModelContextProtocol.AspNetCore`. Same Kestrel listener, same DI graph as the rest of the daemon, so tools have direct access to `OperationalSnapshotBuilder`, `Database`, `OperationalMetrics`, etc. without the round-trip through REST. AdminAuthMiddleware allowlists `/mcp` alongside `/Health` and `/Operational` — clients (Claude / Cursor) don't carry an admin cookie. An MCP-specific token model can come later.
+
+Bootstrap (this PR) registers a single tool `get_operational_snapshot` that wraps the existing snapshot builder. Subsequent PRs:
+- **PR-A** — Full read-only toolset: per-callsign probe / poll state, learned-routes graph, message lookup by id, recent-events filter, dropped-message log.
+- **PR-B** — Action tools: `run_probe`, `run_solicit`, `run_sweep`, `run_poll`, `run_poll_sweep`, `send_test_message`, plus `Config` setters.
+- **PR-C** — Composite diagnostic tools (the actual point): `explain_why_message_failed(id)`, `diagnose_silent_neighbour(callsign)`, `summarize_last_24h`, `find_path_to(destination)`, `propose_topology_changes`. Each composes 3–5 of the read tools internally and returns a narrative.
+- **PR-D** — Supervised exploration: `explore_via(neighbour, target)`, `opinion_on_route(destination)`. Riskier — agent reaching out across the network — so explicit operator-confirms-before-acts shape.
+
+What's explicitly out: autonomous routing-participation (algorithm stays deterministic; agent suggests, operator decides), anything that mutates other operators' nodes, long-term memory baked into the server (let the client own conversation context).
+
+Package versioning side-effect: `ModelContextProtocol.AspNetCore` 1.2.0 transitively pulls Microsoft.Extensions.Logging.Abstractions 10.0.5 and System.IO.Pipelines 10.0.5. Both target net8.0 explicitly — they load fine on the LTS runtime; the version number is just the .NET 10 release train. Bumped accordingly in `Directory.Packages.props`.
 
 ## Cross-cutting: licensing housekeeping
 

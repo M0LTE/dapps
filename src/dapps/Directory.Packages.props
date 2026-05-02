@@ -12,10 +12,15 @@
          still in the wild. .NET 8 LTS targets glibc 2.23 — broad Pi
          compatibility, supported through Nov 2026. -->
     <PackageVersion Include="Microsoft.Extensions.Logging" Version="8.0.1" />
-    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="8.0.3" />
+    <!-- Logging.Abstractions + System.IO.Pipelines tracked on the
+         .NET 10 cadence because the MCP SDK transitively requires
+         a 10.x version. Both packages target net8.0 explicitly so
+         they load cleanly on the LTS runtime — the version number
+         is just the release train, not the runtime baseline. -->
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.5" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Console" Version="8.0.1" />
 
-    <PackageVersion Include="System.IO.Pipelines" Version="8.0.0" />
+    <PackageVersion Include="System.IO.Pipelines" Version="10.0.5" />
 
     <!-- Storage / messaging -->
     <PackageVersion Include="sqlite-net-pcl" Version="1.9.172" />
@@ -36,6 +41,12 @@
          (m0lte/linbpq:latest), generous wait strategy on AGW port
          readiness so BPQ's slow startup bind doesn't trip readiness. -->
     <PackageVersion Include="Testcontainers" Version="4.1.0" />
+
+    <!-- Model Context Protocol C# SDK — exposes operator-facing
+         tools to Claude / other MCP clients via /mcp on the dapps
+         daemon's HTTP listener. ASP.NET Core hosting variant, since
+         we're already in-process with Kestrel. Plan G (MCP). -->
+    <PackageVersion Include="ModelContextProtocol.AspNetCore" Version="1.2.0" />
   </ItemGroup>
 
 </Project>

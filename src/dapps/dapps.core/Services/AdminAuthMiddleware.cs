@@ -36,6 +36,9 @@ public sealed class AdminAuthMiddleware(RequestDelegate next)
         //   /Operational    — C3 metrics aggregate; same posture as
         //                     /Events/health which the dashboard JS
         //                     polls without auth context anyway
+        //   /mcp            — Plan G MCP endpoint; clients (Claude,
+        //                     Cursor) don't have admin cookies. An
+        //                     MCP-specific token model can come later.
         //   static asset paths Razor's StaticFiles middleware serves
         if (IsPassThrough(path))
         {
@@ -71,6 +74,7 @@ public sealed class AdminAuthMiddleware(RequestDelegate next)
             || path.StartsWith("/Logout", StringComparison.OrdinalIgnoreCase)
             || path.StartsWith("/Health", StringComparison.OrdinalIgnoreCase)
             || path.StartsWith("/Operational", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith("/mcp", StringComparison.OrdinalIgnoreCase)
             || path.StartsWith("/lib/", StringComparison.OrdinalIgnoreCase)
             || path.StartsWith("/css/", StringComparison.OrdinalIgnoreCase)
             || path.StartsWith("/js/", StringComparison.OrdinalIgnoreCase)

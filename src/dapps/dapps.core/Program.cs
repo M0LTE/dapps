@@ -148,6 +148,17 @@ builder.Services.AddSingleton<OutboundActivityTracker>();
 builder.Services.AddSingleton<OperationalSnapshotBuilder>();
 builder.Services.AddHostedService<HeartbeatPublisher>();
 
+// Plan G (MCP) — Model Context Protocol server, exposing operator-
+// facing tools to Claude / other MCP clients on /mcp. Bootstrap
+// registers a single tool wrapping the operational snapshot;
+// subsequent PRs add the full read / action / diagnostic toolkits.
+// AdminAuthMiddleware allowlists /mcp the same way it does /Health
+// — these endpoints are designed for clients that don't have the
+// admin cookie.
+builder.Services.AddMcpServer()
+    .WithHttpTransport()
+    .WithTools<dapps.core.Mcp.DappsHealthTools>();
+
 builder.Services.AddSingleton<UpdateChecker>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<UpdateChecker>());
 
@@ -295,6 +306,10 @@ app.UseMiddleware<BearerAuthMiddleware>();
 app.UseMiddleware<AdminAuthMiddleware>();
 app.MapControllers();
 app.MapRazorPages();
+// Plan G — mount the MCP endpoint at /mcp. The MCP transport
+// negotiates streamable-HTTP / SSE itself; we just need the route
+// reachable. Allowlisted in AdminAuthMiddleware alongside /Health.
+app.MapMcp("/mcp");
 
 try
 {

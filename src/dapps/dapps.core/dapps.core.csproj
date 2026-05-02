@@ -8,6 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="ModelContextProtocol.AspNetCore" />
     <PackageReference Include="MQTTnet" />
     <PackageReference Include="sqlite-net-pcl" />
   </ItemGroup>
