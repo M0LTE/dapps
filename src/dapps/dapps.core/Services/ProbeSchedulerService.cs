@@ -113,22 +113,45 @@ public sealed class ProbeSchedulerService(
 
     /// <summary>Run a single probe and persist the outcome into
     /// <see cref="DbProbedNode"/>. Used by the scheduler and by the
-    /// on-demand REST endpoint. Returns the row as written.</summary>
+    /// on-demand REST endpoint. Returns the row as written.
+    /// <paramref name="fetchPeers"/> controls Plan B6.1 Phase 2
+    /// transitive discovery — when true, a successful probe asks the
+    /// remote for its peers and stores any new callsigns as candidate
+    /// rows for future sweeps. The default is true; opt out by
+    /// passing false (e.g. in unit tests that don't model the response).
+    /// </summary>
     public async Task<DbProbedNode> ProbeAndRecordAsync(
-        string localCallsign, string remoteCallsign, int bpqPort, CancellationToken ct)
+        string localCallsign, string remoteCallsign, int bpqPort, CancellationToken ct,
+        bool fetchPeers = true)
     {
-        var result = await prober.ProbeAsync(localCallsign, remoteCallsign, bpqPort, ct);
-        return await RecordResultAsync(result);
+        var result = await prober.ProbeAsync(localCallsign, remoteCallsign, bpqPort, ct, fetchPeers);
+        var row = await RecordResultAsync(result);
+        if (result.Success && result.DiscoveredPeers.Count > 0)
+        {
+            await PersistTransitiveDiscoveriesAsync(result);
+        }
+        return row;
     }
 
     /// <summary>Apply a probe result to the persisted row (insert if
     /// missing, update otherwise). Preserves <see cref="DbProbedNode.OptOut"/>
     /// across updates and bumps <c>ConsecutiveFailures</c> /
-    /// <c>SuccessCount</c>.</summary>
+    /// <c>SuccessCount</c>. Sets <see cref="DbProbedNode.Source"/> on
+    /// first insert (defaulting to <c>neighbour</c>); never overwrites
+    /// it on update — the row's origin is a fact about how we first
+    /// heard about the callsign and shouldn't drift over time.</summary>
     public async Task<DbProbedNode> RecordResultAsync(NodeProber.ProbeResult result)
     {
         var existing = await database.GetProbedNode(result.Callsign);
-        var row = existing ?? new DbProbedNode { Callsign = result.Callsign };
+        var row = existing ?? new DbProbedNode
+        {
+            Callsign = result.Callsign,
+            // First time we've ever recorded this callsign — assume
+            // it's a neighbour-class probe target. Transitively-
+            // discovered candidates set their own Source explicitly
+            // before the first probe runs (see PersistTransitiveDiscoveriesAsync).
+            Source = "neighbour",
+        };
         row.LastBpqPort = result.BpqPort;
         row.LastProbedAt = result.At;
         if (result.Success)
@@ -148,12 +171,54 @@ public sealed class ProbeSchedulerService(
     }
 
     /// <summary>
+    /// Plan B6.1 Phase 2 — record transitively-discovered callsigns as
+    /// candidate <see cref="DbProbedNode"/> rows. Skips callsigns we
+    /// already track (we don't want hearsay overwriting fresher first-
+    /// hand probe state) and skips ourselves (the remote always reports
+    /// us as a peer, since we just talked to them — recording that is
+    /// noise). Records the asking peer's callsign in <c>Source</c> so a
+    /// sysop can tell where each candidate came from. Best guess for
+    /// the port is the same port we just probed the source peer on —
+    /// usually right when the network is one shared frequency, often
+    /// wrong otherwise; the next sweep surfaces the mismatch as a
+    /// regular probe failure.
+    /// </summary>
+    private async Task PersistTransitiveDiscoveriesAsync(NodeProber.ProbeResult result)
+    {
+        var ourCallsign = options.CurrentValue.Callsign;
+        foreach (var p in result.DiscoveredPeers)
+        {
+            if (string.IsNullOrWhiteSpace(p.Callsign)) continue;
+            if (string.Equals(p.Callsign, ourCallsign, StringComparison.OrdinalIgnoreCase)) continue;
+
+            var existing = await database.GetProbedNode(p.Callsign);
+            if (existing is not null) continue;   // we already track this — don't clobber direct state
+
+            await database.UpsertProbedNode(new DbProbedNode
+            {
+                Callsign = p.Callsign.ToUpperInvariant(),
+                LastBpqPort = p.BpqPort ?? result.BpqPort,
+                Source = $"via:{result.Callsign}",
+                // No probe attempt yet — leave LastProbedAt / LastSuccessAt
+                // null; the scheduler picks it up on the next sweep.
+            });
+            logger.LogInformation(
+                "Transitive discovery: {0} via {1} (port {2})",
+                p.Callsign, result.Callsign, p.BpqPort ?? result.BpqPort);
+        }
+    }
+
+    /// <summary>
     /// Build the eligible target list for a sweep. Sources:
     /// <see cref="DbNeighbour"/> rows without a UDP endpoint (AGW-routable),
-    /// and <see cref="DbDiscoveredPeer"/> rows on the AGW bearer. Per-
-    /// callsign opt-outs from <see cref="DbProbedNode.OptOut"/> are
-    /// honoured. Port preference (highest precedence first):
-    /// neighbour's <c>BpqPort</c>, peer's observed <c>BpqPort</c>,
+    /// AGW-bearer <see cref="DbDiscoveredPeer"/> rows, and Phase-2
+    /// transitive candidates — <see cref="DbProbedNode"/> rows whose
+    /// <c>Source</c> starts with <c>via:</c> (i.e. learned from another
+    /// peer's <c>peers</c> response, not yet on either of the other
+    /// two surfaces). Per-callsign opt-outs from
+    /// <see cref="DbProbedNode.OptOut"/> are honoured. Port preference
+    /// (highest precedence first): neighbour's <c>BpqPort</c>, peer's
+    /// observed <c>BpqPort</c>, candidate's stored <c>LastBpqPort</c>,
     /// <see cref="SystemOptions.DefaultBpqPort"/>.
     /// </summary>
     public async Task<IReadOnlyList<ProbeTarget>> EnumerateTargets(SystemOptions opts)
@@ -185,6 +250,19 @@ public sealed class ProbeSchedulerService(
             // Don't overwrite a manual neighbour's port with a guessed one.
             if (targets.ContainsKey(p.Callsign)) continue;
             targets[p.Callsign] = new ProbeTarget(p.Callsign, p.BpqPort ?? opts.DefaultBpqPort);
+        }
+
+        // Phase 2 transitive candidates — DbProbedNode rows whose Source
+        // says they were learned via someone else's peers list. Without
+        // this, a transitively-discovered callsign would sit in the
+        // table forever waiting for an operator to manually probe it.
+        foreach (var c in probed)
+        {
+            if (c.OptOut) continue;
+            if (string.IsNullOrWhiteSpace(c.Callsign)) continue;
+            if (!c.Source.StartsWith("via:", StringComparison.OrdinalIgnoreCase)) continue;
+            if (targets.ContainsKey(c.Callsign)) continue;
+            targets[c.Callsign] = new ProbeTarget(c.Callsign, c.LastBpqPort ?? opts.DefaultBpqPort);
         }
 
         return targets.Values

@@ -255,6 +255,139 @@ public sealed class ProbeSchedulerServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task EnumerateTargets_TransitiveCandidate_IncludedAsTarget()
+    {
+        // A B6.1 Phase 2 transitive candidate sits in DbProbedNode with
+        // Source="via:..." and no neighbour / discovered-peer row. The
+        // sweep must pick it up — otherwise transitively-learned
+        // callsigns sit in the table forever waiting for an operator.
+        await database.UpsertProbedNode(new DbProbedNode
+        {
+            Callsign = "N0VIA-9",
+            LastBpqPort = 3,
+            Source = "via:N0SRC-9",
+        });
+
+        var sched = MakeScheduler(new RecordingTransport());
+        var targets = await sched.EnumerateTargets(new SystemOptions { Callsign = "N0US", DefaultBpqPort = 7 });
+
+        targets.Should().ContainSingle().Which.Should().BeEquivalentTo(
+            new ProbeSchedulerService.ProbeTarget("N0VIA-9", 3));
+    }
+
+    [Fact]
+    public async Task EnumerateTargets_TransitiveCandidate_FallsBackToDefaultPortWhenMissing()
+    {
+        await database.UpsertProbedNode(new DbProbedNode
+        {
+            Callsign = "N0VIA-9",
+            LastBpqPort = null,
+            Source = "via:N0SRC-9",
+        });
+
+        var sched = MakeScheduler(new RecordingTransport());
+        var targets = await sched.EnumerateTargets(new SystemOptions { Callsign = "N0US", DefaultBpqPort = 7 });
+
+        targets.Should().ContainSingle().Which.BpqPort.Should().Be(7);
+    }
+
+    [Fact]
+    public async Task ProbeAndRecord_FetchPeersTrue_RecordsTransitiveCandidatesWithSource()
+    {
+        await database.UpsertNeighbour("N0SRC-9", bpqPort: 1);
+        // The fake transport hands back a DAPPSv1> + a peers response
+        // listing two callsigns; ProbeAndRecordAsync should both record
+        // the probe success and persist the two peers as candidates.
+        var sched = MakeScheduler(new RecordingTransport(("N0SRC-9",
+            "DAPPSv1>\n" +
+            "peer N0AAA-9 source=n port=2\n" +
+            "peer N0BBB-9 source=d\n" +
+            "end\n")));
+
+        await sched.ProbeAndRecordAsync("N0US", "N0SRC-9", 1, CancellationToken.None);
+
+        var rows = (await database.GetProbedNodes()).ToDictionary(r => r.Callsign);
+        rows.Should().ContainKey("N0SRC-9");
+        rows["N0SRC-9"].Source.Should().Be("neighbour");
+        rows["N0SRC-9"].LastSuccessAt.Should().NotBeNull();
+
+        rows.Should().ContainKey("N0AAA-9");
+        rows["N0AAA-9"].Source.Should().Be("via:N0SRC-9");
+        rows["N0AAA-9"].LastBpqPort.Should().Be(2);     // server-supplied port preferred
+        rows["N0AAA-9"].LastProbedAt.Should().BeNull(); // candidate, not probed yet
+
+        rows.Should().ContainKey("N0BBB-9");
+        rows["N0BBB-9"].Source.Should().Be("via:N0SRC-9");
+        rows["N0BBB-9"].LastBpqPort.Should().Be(1);     // fell back to source's port
+    }
+
+    [Fact]
+    public async Task ProbeAndRecord_PeersIncludesOurselves_NotRecordedAsCandidate()
+    {
+        // The remote will list us in its peers (we just sent traffic to
+        // them). Recording ourselves as a probe target is meaningless
+        // and would generate a self-probe — explicitly filtered.
+        await database.UpsertNeighbour("N0SRC-9", bpqPort: 1);
+        var sched = MakeScheduler(new RecordingTransport(("N0SRC-9",
+            "DAPPSv1>\n" +
+            "peer N0US source=n\n" +
+            "peer N0OTHER-9 source=n\n" +
+            "end\n")));
+
+        await sched.ProbeAndRecordAsync("N0US", "N0SRC-9", 1, CancellationToken.None);
+
+        var rows = await database.GetProbedNodes();
+        rows.Select(r => r.Callsign).Should().Contain("N0SRC-9");
+        rows.Select(r => r.Callsign).Should().Contain("N0OTHER-9");
+        rows.Select(r => r.Callsign).Should().NotContain("N0US");
+    }
+
+    [Fact]
+    public async Task ProbeAndRecord_PeersIncludesExistingNeighbour_DoesNotClobberSource()
+    {
+        // If a remote tells us about a callsign we already track as a
+        // direct neighbour, the existing row's Source must not get
+        // rewritten as "via:...". We trust direct evidence over hearsay.
+        await database.UpsertNeighbour("N0SRC-9", bpqPort: 1);
+        await database.UpsertNeighbour("N0EXIST-9", bpqPort: 2);
+        // Run a probe of N0EXIST-9 first to establish a "neighbour" Source.
+        var sched = MakeScheduler(new RecordingTransport(
+            ("N0EXIST-9", "DAPPSv1>\nend\n"),     // probe of N0EXIST -- empty peers
+            ("N0SRC-9",
+                "DAPPSv1>\n" +
+                "peer N0EXIST-9 source=n port=2\n" +
+                "end\n")));
+
+        await sched.ProbeAndRecordAsync("N0US", "N0EXIST-9", 2, CancellationToken.None);
+        await sched.ProbeAndRecordAsync("N0US", "N0SRC-9", 1, CancellationToken.None);
+
+        var existRow = await database.GetProbedNode("N0EXIST-9");
+        existRow.Should().NotBeNull();
+        existRow!.Source.Should().Be("neighbour", "direct probe state must outrank hearsay");
+    }
+
+    [Fact]
+    public async Task ProbeAndRecord_FetchPeersFalse_DoesNotRequestPeers()
+    {
+        // Test seam used by other unit tests that don't model a peers
+        // response. Verifies that suppressing fetchPeers really avoids
+        // the second exchange — otherwise the prober would hang on a
+        // missing "end" line in the canned bytes.
+        await database.UpsertNeighbour("N0SRC-9", bpqPort: 1);
+        var transport = new RecordingTransport(("N0SRC-9", "DAPPSv1>\n"));
+        var sched = MakeScheduler(transport);
+
+        await sched.ProbeAndRecordAsync("N0US", "N0SRC-9", 1, CancellationToken.None, fetchPeers: false);
+
+        var row = await database.GetProbedNode("N0SRC-9");
+        row.Should().NotBeNull();
+        row!.LastSuccessAt.Should().NotBeNull();
+        // Only one connect, and the bytes the prober wrote don't
+        // include "peers".
+        transport.Connects.Should().ContainSingle();
+    }
+
+    [Fact]
     public async Task SweepAsync_SuccessAfterFailure_ResetsCounter()
     {
         await database.UpsertNeighbour("N0FLAP-9", bpqPort: 1);
@@ -303,7 +436,10 @@ public sealed class ProbeSchedulerServiceTests : IAsyncLifetime
 
     /// <summary>Test transport that hands back a different canned byte
     /// stream per <paramref name="cannedByCallsign"/> entry, in order.
-    /// Records each connect attempt for assertions.</summary>
+    /// Records each connect attempt for assertions. Uses a duplex stream
+    /// with separate read and write buffers — a single MemoryStream
+    /// would let the prober's writes ("peers\n") overwrite the canned
+    /// bytes it's about to read.</summary>
     private sealed class RecordingTransport(params (string Remote, string Reply)[] cannedByCallsign) : IDappsOutboundTransport
     {
         private readonly Queue<(string Remote, string Reply)> _queue = new(cannedByCallsign);
@@ -323,8 +459,7 @@ public sealed class ProbeSchedulerServiceTests : IAsyncLifetime
                     ? next.Reply
                     : $"no canned reply for {remoteCallsign}";
             }
-            var bytes = Encoding.UTF8.GetBytes(reply);
-            return Task.FromResult<IDappsConnection>(new FakeConnection(new MemoryStream(bytes)));
+            return Task.FromResult<IDappsConnection>(new FakeConnection(new FakeDuplexStream(Encoding.UTF8.GetBytes(reply))));
         }
 
         private sealed class FakeConnection(Stream stream) : IDappsConnection

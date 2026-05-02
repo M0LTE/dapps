@@ -607,6 +607,7 @@ else
     <thead>
         <tr>
             <th>Callsign</th>
+            <th>Source</th>
             <th>Last port</th>
             <th>Last probed</th>
             <th>Last success</th>
@@ -618,7 +619,7 @@ else
         </tr>
     </thead>
     <tbody id="probes-body">
-        <tr><td colspan="9" class="muted" style="text-align:center;">No probes recorded yet.</td></tr>
+        <tr><td colspan="10" class="muted" style="text-align:center;">No probes recorded yet.</td></tr>
     </tbody>
 </table>
 
@@ -644,7 +645,7 @@ else
                 const rows = await res.json();
                 const body = document.getElementById('probes-body');
                 if (!rows.length) {
-                    body.innerHTML = '<tr><td colspan="9" class="muted" style="text-align:center;">No probes recorded yet.</td></tr>';
+                    body.innerHTML = '<tr><td colspan="10" class="muted" style="text-align:center;">No probes recorded yet.</td></tr>';
                     return;
                 }
                 body.innerHTML = rows.map(r => {
@@ -654,9 +655,17 @@ else
                         ? `<span class="pill ok">${escape(r.callsign)}</span>`
                         : (stale ? `<span class="pill warn">${escape(r.callsign)}</span>`
                                  : `<code>${escape(r.callsign)}</code>`);
+                    // Source pill: "neighbour" / "discovered" plain;
+                    // "via:CALLSIGN" gets an info pill so transitive
+                    // candidates stand out in the table.
+                    const src = r.source || 'neighbour';
+                    const srcPill = src.startsWith('via:')
+                        ? `<span class="pill info" title="learned from ${escape(src.substring(4))}'s peers list">${escape(src)}</span>`
+                        : `<span class="muted">${escape(src)}</span>`;
                     const callQs = encodeURIComponent(r.callsign);
                     return `<tr>` +
                         `<td>${callPill}</td>` +
+                        `<td>${srcPill}</td>` +
                         `<td class="numeric">${r.lastBpqPort ?? '—'}</td>` +
                         `<td class="muted">${fmtAgo(r.lastProbedAt)}</td>` +
                         `<td class="muted">${fmtAgo(r.lastSuccessAt)}</td>` +
