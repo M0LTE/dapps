@@ -31,6 +31,11 @@ public sealed class AdminAuthMiddleware(RequestDelegate next)
         //   /Setup          — first-use password creation; gated by
         //                     state, not auth (see PageModel)
         //   /Login, /Logout — the auth UX itself
+        //   /Health         — C3 liveness; systemd watchdog units +
+        //                     external uptime monitors can't log in
+        //   /Operational    — C3 metrics aggregate; same posture as
+        //                     /Events/health which the dashboard JS
+        //                     polls without auth context anyway
         //   static asset paths Razor's StaticFiles middleware serves
         if (IsPassThrough(path))
         {
@@ -64,6 +69,8 @@ public sealed class AdminAuthMiddleware(RequestDelegate next)
             || path.StartsWith("/Setup", StringComparison.OrdinalIgnoreCase)
             || path.StartsWith("/Login", StringComparison.OrdinalIgnoreCase)
             || path.StartsWith("/Logout", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith("/Health", StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith("/Operational", StringComparison.OrdinalIgnoreCase)
             || path.StartsWith("/lib/", StringComparison.OrdinalIgnoreCase)
             || path.StartsWith("/css/", StringComparison.OrdinalIgnoreCase)
             || path.StartsWith("/js/", StringComparison.OrdinalIgnoreCase)
