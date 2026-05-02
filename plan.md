@@ -540,7 +540,7 @@ Bootstrap (this PR) registers a single tool `get_operational_snapshot` that wrap
 - **PR-A** — Full read-only toolset: per-callsign probe / poll state, learned-routes graph, message lookup by id, recent-events filter, dropped-message log.
 - **PR-B** — Action tools: `run_probe`, `run_solicit`, `run_sweep`, `run_poll`, `run_poll_sweep`, `send_test_message`, plus `Config` setters.
 - **PR-C** — Composite diagnostic tools (the actual point): `explain_why_message_failed(id)`, `diagnose_silent_neighbour(callsign)`, `summarize_last_24h`, `find_path_to(destination)`, `propose_topology_changes`. Each composes 3–5 of the read tools internally and returns a narrative.
-- **PR-D** — Supervised exploration: `explore_via(neighbour, target)`, `opinion_on_route(destination)`. Riskier — agent reaching out across the network — so explicit operator-confirms-before-acts shape.
+- **PR-D** — Supervised exploration: `explore_via_neighbour(callsign)` returns the neighbour's `peers` response annotated for what's NEW vs. KNOWN to us; `opinion_on_route(destination)` ranks every routing-table candidate plus B6.1 Phase 2 transitive `via:CALLSIGN` candidates with a confidence band and a recommended next-action string. Pure read-only proposals — the agent suggests, the operator runs the recommended action tool to actually act.
 
 What's explicitly out: autonomous routing-participation (algorithm stays deterministic; agent suggests, operator decides), anything that mutates other operators' nodes, long-term memory baked into the server (let the client own conversation context).
 

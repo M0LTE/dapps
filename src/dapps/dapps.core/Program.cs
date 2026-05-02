@@ -163,7 +163,8 @@ builder.Services.AddMcpServer()
     .WithTools<dapps.core.Mcp.DappsMessageTools>()
     .WithTools<dapps.core.Mcp.DappsActionTools>()
     .WithTools<dapps.core.Mcp.DappsConfigTools>()
-    .WithTools<dapps.core.Mcp.DappsDiagnosticTools>();
+    .WithTools<dapps.core.Mcp.DappsDiagnosticTools>()
+    .WithTools<dapps.core.Mcp.DappsExplorationTools>();
 
 builder.Services.AddSingleton<UpdateChecker>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<UpdateChecker>());
