@@ -40,6 +40,13 @@ builder.Services.AddOptions<SystemOptions>().Configure<OptionsRepo, ILogger<Syst
         is { Length: > 0 } ra
         ? ra
         : "passive-flood";
+    o.ProbingEnabled = bool.TryParse(
+        options.SingleOrDefault(opt => opt.Option == "ProbingEnabled")?.Value, out var probing) && probing;
+    o.ProbeIntervalHours = int.TryParse(
+        options.SingleOrDefault(opt => opt.Option == "ProbeIntervalHours")?.Value, out var probeInterval)
+        && probeInterval > 0
+        ? probeInterval
+        : 24;
 
     logger.LogInformation($"Callsign: {o.Callsign}");
     logger.LogInformation($"BPQ AGW: {o.NodeHost}:{o.AgwPort} (default port byte {o.DefaultBpqPort})");
@@ -48,6 +55,7 @@ builder.Services.AddOptions<SystemOptions>().Configure<OptionsRepo, ILogger<Syst
     logger.LogInformation($"App-interface auth required: {o.AuthRequired}");
     logger.LogInformation($"Update check: {(o.UpdateCheckEnabled ? "enabled" : "disabled")}");
     logger.LogInformation($"Routing algorithm: {o.RoutingAlgorithm}");
+    logger.LogInformation($"Connected-mode probing: {(o.ProbingEnabled ? $"enabled (every {o.ProbeIntervalHours}h)" : "disabled")}");
 });
 
 builder.Services.AddHttpClient();
@@ -144,6 +152,13 @@ builder.Services.AddSingleton<IDappsBackhaul>(sp => sp.GetRequiredService<UdpDat
 builder.Services.AddSingleton<IDappsBackhaul, Dappsv1SessionBackhaul>();
 builder.Services.AddSingleton<IBackhaulInbox, DatabaseAndMqttInbox>();
 builder.Services.AddHostedService<UdpDatagramListener>();
+
+// B6.1 — connected-mode probe-and-map. NodeProber is stateless and
+// reuses the singleton AGW transport; the scheduler drives it on a
+// slow cadence when SystemOptions.ProbingEnabled is true.
+builder.Services.AddSingleton<NodeProber>();
+builder.Services.AddSingleton<ProbeSchedulerService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<ProbeSchedulerService>());
 
 // DiscoveryService constructs its bearers itself in StartAsync (rather
 // than receiving them via IEnumerable<IDiscoveryBearer>), because the

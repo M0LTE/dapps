@@ -1,0 +1,134 @@
+using dapps.core.Models;
+using dapps.core.Services;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
+
+namespace dapps.core.Controllers;
+
+/// <summary>
+/// Plan B6.1 — connected-mode probe-and-map REST surface.
+///
+/// <list type="bullet">
+/// <item><c>GET /Probes</c> — current state of every probed-node row.</item>
+/// <item><c>POST /Probes/run</c> — kick a full sweep now (off-cadence).</item>
+/// <item><c>POST /Probes/run/{callsign}</c> — probe one callsign now.
+///   Unlike the scheduled sweep, on-demand probes go through even when
+///   the row is opt-out — a sysop wants the option to test a specific
+///   peer without un-flipping the opt-out toggle.</item>
+/// <item><c>POST /Probes/{callsign}/optout</c> — set/clear opt-out.</item>
+/// <item><c>DELETE /Probes/{callsign}</c> — forget a row entirely
+///   (next sweep will recreate it for non-opted-out targets).</item>
+/// </list>
+/// </summary>
+[ApiController]
+[Route("[controller]")]
+public class ProbesController(
+    Database database,
+    ProbeSchedulerService scheduler,
+    IOptionsMonitor<SystemOptions> options) : ControllerBase
+{
+    [HttpGet]
+    public async Task<IEnumerable<ProbedNodeModel>> List()
+    {
+        var rows = await database.GetProbedNodes();
+        return rows.Select(ToModel);
+    }
+
+    [HttpPost("run")]
+    public async Task<IActionResult> RunSweep(CancellationToken ct)
+    {
+        await scheduler.SweepAsync(options.CurrentValue, ct);
+        return NoContent();
+    }
+
+    [HttpPost("run/{callsign}")]
+    public async Task<ActionResult<ProbedNodeModel>> RunOne(string callsign, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(callsign)) return BadRequest("Callsign is required");
+        var normalized = callsign.Trim().ToUpperInvariant();
+
+        var (port, hasRoute) = await ResolvePort(normalized);
+        if (!hasRoute)
+        {
+            return BadRequest(
+                $"No AGW route to {normalized} — add a /Neighbours row or wait for a beacon.");
+        }
+
+        var row = await scheduler.ProbeAndRecordAsync(
+            options.CurrentValue.Callsign, normalized, port, ct);
+        return ToModel(row);
+    }
+
+    [HttpPost("{callsign}/optout")]
+    public async Task<IActionResult> SetOptOut(string callsign, [FromBody] OptOutBody body)
+    {
+        if (string.IsNullOrWhiteSpace(callsign)) return BadRequest("Callsign is required");
+        var normalized = callsign.Trim().ToUpperInvariant();
+
+        var row = await database.GetProbedNode(normalized) ?? new DbProbedNode { Callsign = normalized };
+        row.OptOut = body.OptOut;
+        await database.UpsertProbedNode(row);
+        return NoContent();
+    }
+
+    [HttpDelete("{callsign}")]
+    public async Task<IActionResult> Forget(string callsign)
+    {
+        var removed = await database.RemoveProbedNode(callsign.Trim().ToUpperInvariant());
+        return removed ? NoContent() : NotFound();
+    }
+
+    /// <summary>Resolve the BPQ port byte to use for an on-demand
+    /// probe of <paramref name="callsign"/>. Mirrors the precedence
+    /// the scheduler uses: explicit neighbour > AGW-bearer discovered
+    /// peer > <see cref="SystemOptions.DefaultBpqPort"/>. Returns
+    /// (port, true) when at least one source matched, or
+    /// (default, false) when the callsign isn't known anywhere — the
+    /// caller surfaces that as a 400 rather than blindly trying the
+    /// default port and emitting a probe to a stranger.</summary>
+    private async Task<(int Port, bool HasRoute)> ResolvePort(string callsign)
+    {
+        var neighbour = await database.GetNeighbour(callsign);
+        if (neighbour is not null && neighbour.UdpEndpoint is null)
+        {
+            return (neighbour.BpqPort ?? options.CurrentValue.DefaultBpqPort, true);
+        }
+
+        var peers = await database.GetDiscoveredPeers();
+        var match = peers.FirstOrDefault(p =>
+            string.Equals(p.Bearer, "agw", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(p.Callsign, callsign, StringComparison.OrdinalIgnoreCase));
+        if (match is not null)
+        {
+            return (match.BpqPort ?? options.CurrentValue.DefaultBpqPort, true);
+        }
+
+        return (options.CurrentValue.DefaultBpqPort, false);
+    }
+
+    private static ProbedNodeModel ToModel(DbProbedNode r) => new(
+        Callsign: r.Callsign,
+        LastBpqPort: r.LastBpqPort,
+        LastProbedAt: r.LastProbedAt,
+        LastSuccessAt: r.LastSuccessAt,
+        LastError: r.LastError,
+        ConsecutiveFailures: r.ConsecutiveFailures,
+        SuccessCount: r.SuccessCount,
+        OptOut: r.OptOut);
+}
+
+/// <summary>Wire shape returned by the /Probes endpoints. Mirrors
+/// <see cref="DbProbedNode"/> 1:1 — keeping a separate model lets the
+/// row evolve without breaking the wire shape.</summary>
+public sealed record ProbedNodeModel(
+    string Callsign,
+    int? LastBpqPort,
+    DateTime? LastProbedAt,
+    DateTime? LastSuccessAt,
+    string LastError,
+    int ConsecutiveFailures,
+    int SuccessCount,
+    bool OptOut);
+
+/// <summary>Body for <c>POST /Probes/{callsign}/optout</c>.</summary>
+public sealed record OptOutBody(bool OptOut);

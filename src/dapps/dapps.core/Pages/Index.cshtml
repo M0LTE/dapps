@@ -151,6 +151,8 @@
         <label>UDP listener port (0 = disabled) <input name="UdpListenPort" type="number" min="0" max="65535" value="@Model.Options.UdpListenPort" required /></label>
         <label class="checkbox-label"><input name="AuthRequired" type="checkbox" @(Model.Options.AuthRequired ? "checked" : "") /> App-interface auth required</label>
         <label class="checkbox-label"><input name="UpdateCheckEnabled" type="checkbox" @(Model.Options.UpdateCheckEnabled ? "checked" : "") /> Check GitHub for new releases</label>
+        <label class="checkbox-label"><input name="ProbingEnabled" type="checkbox" @(Model.Options.ProbingEnabled ? "checked" : "") /> Probe known peers on a slow cadence (B6.1)</label>
+        <label>Probe interval (hours) <input name="ProbeIntervalHours" type="number" min="1" max="168" value="@Model.Options.ProbeIntervalHours" required /></label>
         <button type="submit">Save</button>
     </form>
 </details>
@@ -596,6 +598,87 @@ else
     </table>
 }
 
+<h2>Probed nodes <span id="probes-state" class="pill @(Model.Options.ProbingEnabled ? "ok" : "")">@(Model.Options.ProbingEnabled ? $"every {Model.Options.ProbeIntervalHours}h" : "off")</span></h2>
+<p class="muted-inline">Plan B6.1 — connected-mode probe-and-map. Walks known peers (manual neighbours + AGW-bearer discovered peers) and confirms <code>DAPPSv1&gt;</code> is reachable. <span class="muted">Off by default; enable in <em>Edit configuration</em>. Auto-refreshes every 30s.</span></p>
+<div class="probes-toolbar">
+    <button type="button" onclick="dappsRunSweep()">Probe all now</button>
+</div>
+<table id="probes-table">
+    <thead>
+        <tr>
+            <th>Callsign</th>
+            <th>Last port</th>
+            <th>Last probed</th>
+            <th>Last success</th>
+            <th class="numeric">Fails</th>
+            <th class="numeric">Successes</th>
+            <th>Last error</th>
+            <th>Opt-out</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody id="probes-body">
+        <tr><td colspan="9" class="muted" style="text-align:center;">No probes recorded yet.</td></tr>
+    </tbody>
+</table>
+
+<script>
+    (function () {
+        const fmtAt = (iso) => iso ? new Date(iso).toISOString().replace('T', ' ').substring(0, 19) : '—';
+        const fmtAgo = (iso) => {
+            if (!iso) return '—';
+            const s = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+            if (s < 90) return `${s}s ago`;
+            const m = Math.floor(s / 60);
+            if (m < 90) return `${m}m ago`;
+            const h = Math.floor(s / 3600);
+            if (h < 36) return `${h}h ago`;
+            return `${Math.floor(s / 86400)}d ago`;
+        };
+        const escape = (s) => String(s ?? '').replace(/[&<>"']/g, c =>
+            ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        async function poll() {
+            try {
+                const res = await fetch('/Probes', { credentials: 'same-origin' });
+                if (!res.ok) return;
+                const rows = await res.json();
+                const body = document.getElementById('probes-body');
+                if (!rows.length) {
+                    body.innerHTML = '<tr><td colspan="9" class="muted" style="text-align:center;">No probes recorded yet.</td></tr>';
+                    return;
+                }
+                body.innerHTML = rows.map(r => {
+                    const reachable = r.lastSuccessAt && r.consecutiveFailures === 0;
+                    const stale = r.lastProbedAt && !reachable;
+                    const callPill = reachable
+                        ? `<span class="pill ok">${escape(r.callsign)}</span>`
+                        : (stale ? `<span class="pill warn">${escape(r.callsign)}</span>`
+                                 : `<code>${escape(r.callsign)}</code>`);
+                    const callQs = encodeURIComponent(r.callsign);
+                    return `<tr>` +
+                        `<td>${callPill}</td>` +
+                        `<td class="numeric">${r.lastBpqPort ?? '—'}</td>` +
+                        `<td class="muted">${fmtAgo(r.lastProbedAt)}</td>` +
+                        `<td class="muted">${fmtAgo(r.lastSuccessAt)}</td>` +
+                        `<td class="numeric">${r.consecutiveFailures}</td>` +
+                        `<td class="numeric">${r.successCount}</td>` +
+                        `<td class="muted">${escape(r.lastError || '—')}</td>` +
+                        `<td><input type="checkbox" ${r.optOut ? 'checked' : ''} onchange="dappsSetOptOut('${callQs}', this.checked)" /></td>` +
+                        `<td>` +
+                        `<button type="button" onclick="dappsProbeOne('${callQs}')">Probe</button> ` +
+                        `<button type="button" onclick="dappsForgetProbe('${callQs}')">Forget</button>` +
+                        `</td>` +
+                        `</tr>`;
+                }).join('');
+            } catch { /* try again next tick */ }
+        }
+        poll();
+        setInterval(poll, 30000);
+        // expose poll() for action handlers below
+        window.dappsRefreshProbes = poll;
+    })();
+</script>
+
 <h2>Recently dropped <span id="dropped-count" class="pill">—</span></h2>
 <p class="muted-inline">Messages DAPPS threw away (TTL expired in queue, etc.) instead of forwarding or delivering. Soft-deleted from the active queues so you can see what happened during RF testing. <span class="muted">Auto-refreshes every 5s.</span></p>
 <table id="dropped-table">
@@ -776,6 +859,8 @@ else
             UdpListenPort: parseInt(f.UdpListenPort.value, 10),
             AuthRequired: f.AuthRequired.checked,
             UpdateCheckEnabled: f.UpdateCheckEnabled.checked,
+            ProbingEnabled: f.ProbingEnabled.checked,
+            ProbeIntervalHours: parseInt(f.ProbeIntervalHours.value, 10),
         };
         if (await dappsPostJson('/Config', body)) location.reload();
     }
@@ -822,6 +907,39 @@ else
         if (!confirm(`Remove discovery channel ${id}?`)) return;
         if (await dappsPostJson('/DiscoveryChannels/' + id, null, 'DELETE')) {
             location.reload();
+        }
+    }
+
+    async function dappsRunSweep() {
+        if (!confirm('Probe every known peer now? Uses other operators\' airtime.')) return;
+        if (await dappsPostJson('/Probes/run', null)) {
+            window.dappsRefreshProbes && window.dappsRefreshProbes();
+        }
+    }
+
+    async function dappsProbeOne(callsign) {
+        // /Probes/run/{callsign} returns the row JSON, but a simple
+        // POST + refresh is fine for the dashboard — we don't need to
+        // surface a per-probe banner.
+        const url = '/Probes/run/' + callsign;
+        const res = await fetch(url, { method: 'POST' });
+        if (!res.ok && res.status !== 200 && res.status !== 204) {
+            const text = await res.text();
+            alert(`Probe failed (${res.status}): ${text}`);
+            return;
+        }
+        window.dappsRefreshProbes && window.dappsRefreshProbes();
+    }
+
+    async function dappsSetOptOut(callsign, optOut) {
+        await dappsPostJson('/Probes/' + callsign + '/optout', { OptOut: optOut });
+        // No reload — the checkbox already shows the new state.
+    }
+
+    async function dappsForgetProbe(callsign) {
+        if (!confirm(`Forget probe row for ${decodeURIComponent(callsign)}?`)) return;
+        if (await dappsPostJson('/Probes/' + callsign, null, 'DELETE')) {
+            window.dappsRefreshProbes && window.dappsRefreshProbes();
         }
     }
 </script>

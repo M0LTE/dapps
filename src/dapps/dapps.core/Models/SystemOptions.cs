@@ -59,6 +59,23 @@ public class SystemOptions
     public bool UpdateCheckEnabled { get; set; } = true;
 
     /// <summary>
+    /// Plan B6.1 — connected-mode probe-and-map. When true, the
+    /// <c>ProbeSchedulerService</c> walks known peers (manual
+    /// neighbours + AGW-bearer discovered peers, less opt-outs) on
+    /// a slow cadence and records reachability in
+    /// <see cref="dapps.core.Models.DbProbedNode"/>. Off by default —
+    /// probing uses other operators' airtime, so opt-in.
+    /// </summary>
+    public bool ProbingEnabled { get; set; } = false;
+
+    /// <summary>
+    /// Interval between full sweeps when <see cref="ProbingEnabled"/>
+    /// is true. Default 24 hours — once a day is enough to spot a
+    /// neighbour going dark without saturating slow links.
+    /// </summary>
+    public int ProbeIntervalHours { get; set; } = 24;
+
+    /// <summary>
     /// Which routing algorithm composition to use. Two stacks are
     /// shipped today; both wrap <see cref="dapps.core.Routing.StaticRoutingAlgorithm"/>
     /// so operator overrides always win.
