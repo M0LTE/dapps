@@ -1,0 +1,104 @@
+@page
+@model InboundModel
+@{
+    ViewData["Title"] = $"DAPPS — inbound feed (@{Model.Options.Callsign})";
+}
+
+<header class="app-header">
+    <span class="brand">
+        <span class="dot"></span>
+        DAPPS
+        <span class="callsign">@Model.Options.Callsign</span>
+        <span style="color: var(--text-muted); font-weight: 500; margin-left: 0.4rem;">→ inbound feed</span>
+    </span>
+    <span class="spacer"></span>
+    <a href="/">dashboard</a>
+    <a href="/IHave">ihave</a>
+    @if (User.Identity?.IsAuthenticated == true)
+    {
+        <a href="/Logout" class="signout">sign out</a>
+    }
+</header>
+
+<main>
+    <h2>Live inbound stream
+        <span id="sse-status" class="pill">connecting…</span>
+    </h2>
+    <p class="muted-inline">
+        Server-sent events from <code>/Events/inbound</code>. Every message landed by the inbox layer
+        (after persist + MQTT inject) appears here in real time. Newest first. Reload the page to
+        clear; the feed itself is bounded by the dashboard's session, not the server.
+    </p>
+
+    <table id="inbound-table">
+        <thead>
+            <tr>
+                <th style="width: 11rem;">Received (UTC)</th>
+                <th style="width: 7rem;">Id</th>
+                <th style="width: 9rem;">Source</th>
+                <th>Destination</th>
+                <th class="numeric" style="width: 6rem;">Bytes</th>
+                <th class="numeric" style="width: 5rem;">TTL</th>
+            </tr>
+        </thead>
+        <tbody id="inbound-body">
+            <tr><td colspan="6" class="muted" style="text-align: center;">waiting for events…</td></tr>
+        </tbody>
+    </table>
+
+    <p class="muted-inline" style="margin-top: 1rem;">
+        Showing the last <span id="inbound-count">0</span> event(s) since this tab opened.
+    </p>
+</main>
+
+<script>
+    (function () {
+        const tbody = document.getElementById('inbound-body');
+        const status = document.getElementById('sse-status');
+        const counter = document.getElementById('inbound-count');
+        let count = 0;
+        let cleared = false;
+
+        const fmtAt = (iso) => {
+            try { return new Date(iso).toISOString().replace('T', ' ').substring(0, 19); }
+            catch { return iso ?? '—'; }
+        };
+        const escape = (s) => String(s ?? '').replace(/[&<>"']/g, c =>
+            ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+        const es = new EventSource('/Events/inbound');
+        es.onopen = () => {
+            status.textContent = 'live';
+            status.className = 'pill ok';
+        };
+        es.onerror = () => {
+            // EventSource auto-reconnects; surface the gap.
+            status.textContent = 'reconnecting';
+            status.className = 'pill warn';
+        };
+        es.addEventListener('inbound', (ev) => {
+            if (!cleared) { tbody.innerHTML = ''; cleared = true; }
+            try {
+                const d = JSON.parse(ev.data);
+                const row = document.createElement('tr');
+                row.innerHTML =
+                    '<td>' + escape(fmtAt(d.receivedAt)) + '</td>' +
+                    '<td><code>' + escape(d.id) + '</code></td>' +
+                    '<td>' + escape(d.sourceCallsign) + '</td>' +
+                    '<td>' + escape(d.destination) + '</td>' +
+                    '<td class="numeric">' + escape(d.payloadLength) + '</td>' +
+                    '<td class="numeric">' + (d.ttl == null ? '—' : escape(d.ttl)) + '</td>';
+                tbody.insertBefore(row, tbody.firstChild);
+                count += 1;
+                counter.textContent = count;
+                // Cap the visible rows so the DOM doesn't grow unbounded
+                // on a busy node.
+                while (tbody.children.length > 500) {
+                    tbody.removeChild(tbody.lastChild);
+                }
+            } catch (e) {
+                console.error('inbound parse failed', e);
+            }
+        });
+    })();
+</script>
