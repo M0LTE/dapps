@@ -227,6 +227,12 @@ The decisions made:
 
 The result is closest to AODV in shape (RFC 3561) but with control-plane traffic stripped — passive learning replaces RREQ/RREP. NET/ROM and INP3 explicitly off the table per operator experience (see `docs/routing-prior-art.md`).
 
+#### B5.1 — MeshCore-flavoured DSR alternative *(done)*
+
+A second algorithm stack ships alongside the default — selectable via `SystemOptions.RoutingAlgorithm = "meshcore"`. Source routing with passive discovery: cold-start floods accumulate a `TraversedHops` list at each transit node; arriving floods give every node along the path a discovered-path entry back to the originator (stored in `DbDiscoveredPath` with the full intermediate-hop list, not just next-hop). Subsequent sends embed the path in `BackhaulMessage.SourceRoute`; each hop strips the head before re-encoding. Codec bumped to v5 with new `SourceRoute` and `TraversedHops` fields (plus the long-overdue strip of v1/v2/v3 backward compatibility — we're pre-shipping, the version mechanism stays so future format changes hard-fail cleanly). Algorithm choice is global per-node and applied at startup.
+
+This isn't a replacement for the default — both stacks have legitimate trade-offs (path bytes per packet vs. per-flow next-hop lookup; AODV's mid-flow path repair vs. DSR's ability to load-balance across discovered alternatives). Picking is an operator decision.
+
 ### B6. Active discovery — DAPPS goes asking
 
 B1-B4 are passive discovery (beacon, listen). B5 is the routing graph on top. B6 is the third mode: DAPPS proactively explores the network on a slow cadence, building topology that beacons can't see (peers behind a hop, peers on a propagation path that's open right now).
