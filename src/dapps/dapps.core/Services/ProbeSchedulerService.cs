@@ -29,7 +29,8 @@ public sealed class ProbeSchedulerService(
     TimeProvider timeProvider,
     ILogger<ProbeSchedulerService> logger,
     AirtimeAccountant? airtime = null,
-    OutboundActivityTracker? activityTracker = null) : BackgroundService
+    OutboundActivityTracker? activityTracker = null,
+    OperationalMetrics? metrics = null) : BackgroundService
 {
     /// <summary>
     /// Plan B7 — clock the strategy dispatcher consults for "what time
@@ -284,6 +285,7 @@ public sealed class ProbeSchedulerService(
             row.ConsecutiveFailures = unchecked(row.ConsecutiveFailures + 1);
         }
         await database.UpsertProbedNode(row);
+        metrics?.RecordProbeOutcome(result.Callsign, result.Success, result.Error);
         return row;
     }
 

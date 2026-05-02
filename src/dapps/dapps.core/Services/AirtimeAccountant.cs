@@ -28,7 +28,8 @@ namespace dapps.core.Services;
 public sealed class AirtimeAccountant(
     IOptionsMonitor<SystemOptions> options,
     TimeProvider timeProvider,
-    ILogger<AirtimeAccountant> logger)
+    ILogger<AirtimeAccountant> logger,
+    OperationalMetrics? metrics = null)
 {
     private static readonly TimeSpan WindowSize = TimeSpan.FromHours(1);
     private readonly object _lock = new();
@@ -75,6 +76,7 @@ public sealed class AirtimeAccountant(
                     logger.LogInformation(
                         "Airtime budget exhausted (global) — refusing {Reason} ({Estimate:0.000}s); consumed {Consumed:0.000}s of {Budget}s/hour",
                         reason, estimatedSeconds, globalConsumed, globalBudget);
+                    metrics?.RecordBudgetRefused($"global cap: {reason}");
                     return false;
                 }
             }
@@ -89,6 +91,7 @@ public sealed class AirtimeAccountant(
                     logger.LogInformation(
                         "Airtime budget exhausted (channel {Channel}) — refusing {Reason} ({Estimate:0.000}s); consumed {Consumed:0.000}s of {Budget}s/hour",
                         channelKey, reason, estimatedSeconds, channelConsumed, channelBudgetSecondsPerHour);
+                    metrics?.RecordBudgetRefused($"{channelKey} cap: {reason}");
                     return false;
                 }
             }

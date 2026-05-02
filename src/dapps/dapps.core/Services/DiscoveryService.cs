@@ -29,7 +29,8 @@ public sealed class DiscoveryService(
     TimeProvider timeProvider,
     ILoggerFactory loggerFactory,
     ILogger<DiscoveryService> logger,
-    AirtimeAccountant? airtime = null) : BackgroundService
+    AirtimeAccountant? airtime = null,
+    OperationalMetrics? metrics = null) : BackgroundService
 {
     private static readonly TimeSpan SweepInterval = TimeSpan.FromMinutes(1);
 
@@ -258,7 +259,14 @@ public sealed class DiscoveryService(
                 try
                 {
                     var aged = await database.AgeOutDiscoveredPeers(now);
-                    if (aged > 0) logger.LogInformation("DiscoveryService: aged out {0} stale peer(s)", aged);
+                    if (aged.Count > 0)
+                    {
+                        logger.LogInformation("DiscoveryService: aged out {0} stale peer(s)", aged.Count);
+                        foreach (var p in aged)
+                        {
+                            metrics?.RecordPeerAgedOut(p.Callsign, p.Bearer, p.ChannelKey);
+                        }
+                    }
                 }
                 catch (Exception ex)
                 {

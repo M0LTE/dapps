@@ -408,8 +408,9 @@ public class Database(
     }
 
     /// <summary>Remove discovered-peer rows whose freshness window has
-    /// elapsed. Returns the number of rows deleted.</summary>
-    internal async Task<int> AgeOutDiscoveredPeers(DateTime now)
+    /// elapsed. Returns the rows that were deleted so callers can
+    /// record per-peer observability events without re-querying.</summary>
+    internal async Task<IReadOnlyList<DbDiscoveredPeer>> AgeOutDiscoveredPeers(DateTime now)
     {
         var connection = DbInfo.GetAsyncConnection();
         var stale = (await connection.QueryAsync<DbDiscoveredPeer>(
@@ -420,7 +421,7 @@ public class Database(
         {
             await connection.DeleteAsync<DbDiscoveredPeer>(p.PeerKey);
         }
-        return stale.Count;
+        return stale;
     }
 
     /// <summary>

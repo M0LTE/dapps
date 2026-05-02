@@ -156,7 +156,7 @@ public class OutboundMessageManager(
         if (result.Accepted)
         {
             logger.LogInformation("Remote end accepted message {0} (via {1})", message.Id, backhaul.GetType().Name);
-            metrics.RecordForwardSuccess(route.Callsign, message.Payload.Length);
+            metrics.RecordForwardSuccess(message.Id, route.Callsign, message.Payload.Length);
             activityTracker?.RecordTransmission();
             await database.MarkMessageAsForwarded(message.Id);
         }
@@ -164,7 +164,7 @@ public class OutboundMessageManager(
         {
             logger.LogError("Failed to forward message {0} to {1} via {2}: {3}",
                 message.Id, route.Callsign, backhaul.GetType().Name, result.Error);
-            metrics.RecordForwardFailure(route.Callsign, message.Payload.Length, result.Error);
+            metrics.RecordForwardFailure(message.Id, route.Callsign, message.Payload.Length, result.Error);
         }
     }
 
@@ -203,12 +203,12 @@ public class OutboundMessageManager(
             await routingAlgorithm.ObserveForwardOutcomeAsync(message, route, result, routingContext, stoppingToken);
             if (result.Accepted)
             {
-                metrics.RecordForwardSuccess(route.Callsign, message.Payload.Length);
+                metrics.RecordForwardSuccess(message.Id, route.Callsign, message.Payload.Length);
                 activityTracker?.RecordTransmission();
             }
             else
             {
-                metrics.RecordForwardFailure(route.Callsign, message.Payload.Length, result.Error);
+                metrics.RecordForwardFailure(message.Id, route.Callsign, message.Payload.Length, result.Error);
             }
         }
 

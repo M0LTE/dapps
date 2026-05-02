@@ -301,11 +301,11 @@ Direction: native single-file binaries published as GitHub Release assets, not a
 
 `DbStartup` now seeds missing `systemoptions` rows from `DAPPS_*` environment variables (`DAPPS_CALLSIGN`, `DAPPS_NODE_HOST`, `DAPPS_AGW_PORT`, `DAPPS_DEFAULT_BPQ_PORT`, `DAPPS_MQTT_PORT`, `DAPPS_NODE_TYPE`). Once a row exists, env vars stop mattering — no surprise overwrites of operator-set values on restart. After seed, the startup refuses to run with the placeholder `N0CALL` callsign and logs a clear error pointing the operator at `DAPPS_CALLSIGN` or `/Config`. The originally-listed `dapps configure` CLI subcommand is unnecessary given env-var seeding plus the existing `/Config` REST endpoint; deferred unless a real need surfaces.
 
-### C3. Health, logs, observability
+### C3. Health, logs, observability *(PR-A landed; PR-B queued)*
 
-- `/Health` endpoint with subsystem checks (BPQ AGW reachable, MQTT broker port listening, DB writable).
-- Structured log output (JSON option) so sysops who want to ingest into Loki / Elastic can.
-- A simple metrics endpoint (Prometheus format) covering: queue depth, messages forwarded last hour, neighbours seen, failed forward attempts.
+**PR-A — `/Health` + decision-events ring + journal mirror + `/Operational/recent`.** New `/Health` endpoint returns lightweight liveness JSON (callsign, version, uptime, BPQ-reachable, MQTT-up, last-forward-at, pending-outbound) with HTTP 200 / 503 semantics so systemd watchdog units and external uptime monitors have a clean signal. Existing `OperationalMetrics` (which already had a 100-entry recent-events ring and the `/Events/health` dashboard endpoint) gains six new categories — `probe.ok`/`probe.fail`, `poll.ok`/`poll.fail`, `route.learned`, `peer.aged`, `budget.refused` — with corresponding counters in `Snapshot`, plus a `LastForwardSuccessAt` accessor used by `/Health`. Every event recorded into the ring is *also* emitted as a structured `ILogger.Information("event {Kind} {Summary}", …)` line so systemd journal captures it for retrospective greps: `journalctl -u dapps -g 'forward.fail.*abc1234'` finds a specific message's failure 10 days later, even though the in-memory ring only holds the last 100. New `/Operational/recent` REST endpoint surfaces the ring as JSON for external scrapers. Forward-event recorders gained the message id as a parameter so the journal line carries it (`event forward.ok abc1234 → G0CALL (123 B)`). `Database.AgeOutDiscoveredPeers` now returns the deleted rows so per-peer `peer.aged` events can be fired. `DatabaseRoutingContext` does a get-then-upsert diff for both learned-routes and discovered-paths so `route.learned` only fires on new-or-changed entries (refresh ticks would otherwise drown the journal in noise).
+
+PR-B (queued) covers the operator-facing aggregate snapshot at `/Operational` and the periodic MQTT heartbeat publish to `dapps/metrics/heartbeat` reusing the same JSON shape.
 
 ### C4. Install / upgrade docs *(done)*
 
