@@ -22,28 +22,13 @@ public static class DbInfo
     public static SQLiteAsyncConnection GetAsyncConnection() => new(GetPath());
 }
 
-public class DbStartup(ILogger<DbStartup> logger) : IHostedService
+public static class DbStartup
 {
     /// <summary>Sentinel callsign in the seeded defaults. If the resolved
     /// value still matches this after seed it means the operator never
     /// configured a real one — refuse to start rather than transmit
     /// frames stamped with it.</summary>
     private const string PlaceholderCallsign = "N0CALL";
-
-    public Task StartAsync(CancellationToken cancellationToken)
-    {
-        // Idempotent — Program.cs already calls EnsureSchemaAndSeed
-        // before builder.Build() so that the SystemOptions Configure
-        // callback (which fires during eager hosted-service DI graph
-        // materialisation) sees a fully-seeded systemoptions table
-        // regardless of hosted-service start order. We re-invoke here
-        // as a belt-and-braces second line of defence; CreateTable is
-        // CREATE-IF-NOT-EXISTS and InsertIfNotPresent skips rows that
-        // already exist, so the second call is a no-op on a clean
-        // boot.
-        EnsureSchemaAndSeed(logger);
-        return Task.CompletedTask;
-    }
 
     /// <summary>
     /// Create every table the daemon needs and seed the first-run
@@ -166,10 +151,5 @@ public class DbStartup(ILogger<DbStartup> logger) : IHostedService
             sb.Append(char.ToUpperInvariant(c));
         }
         return sb.ToString();
-    }
-
-    public Task StopAsync(CancellationToken cancellationToken)
-    {
-        return Task.CompletedTask;
     }
 }
