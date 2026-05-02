@@ -94,6 +94,56 @@ public sealed class AirtimeAccountantTests
     }
 
     [Fact]
+    public void TryReserve_PerChannelBudget_EnforcedSeparatelyFromGlobal()
+    {
+        // Global budget = 100 s/h; channel "udp/A" budget = 20 s/h.
+        // Five 5-s reservations on channel A fit (25? — no wait, 4 of 5
+        // = 20 fits, 5th would push to 25). Then the 6th gets refused on
+        // the channel cap; meanwhile a transmission on a different
+        // channel still fits because IT has no per-channel cap.
+        var (acct, _) = NewAccountant(budget: 100);
+
+        for (var i = 0; i < 4; i++)
+        {
+            acct.TryReserve(5, $"a-{i}", channelKey: "udp/A", channelBudgetSecondsPerHour: 20)
+                .Should().BeTrue();
+        }
+        acct.TryReserve(5, "a-5", channelKey: "udp/A", channelBudgetSecondsPerHour: 20)
+            .Should().BeFalse("would push channel total to 25 over the 20s/h channel cap");
+
+        // Different channel with no per-channel cap — still has 80 s of
+        // global budget left (100 - 20).
+        acct.TryReserve(50, "b-1", channelKey: "udp/B", channelBudgetSecondsPerHour: 0)
+            .Should().BeTrue();
+    }
+
+    [Fact]
+    public void TryReserve_GlobalCapBlocksEvenIfChannelHasRoom()
+    {
+        // Channel cap loose, global cap tight — a single big reservation
+        // gets refused on the global cap regardless of room in the
+        // per-channel bucket.
+        var (acct, _) = NewAccountant(budget: 30);
+
+        acct.TryReserve(40, "big-on-loose-channel", channelKey: "udp/A", channelBudgetSecondsPerHour: 1000)
+            .Should().BeFalse("global 30s cap is tight even though per-channel allows 1000s");
+    }
+
+    [Fact]
+    public void ConsumedSecondsLastHourFor_FiltersByChannel()
+    {
+        var (acct, _) = NewAccountant(budget: 0);
+
+        acct.TryReserve(3, "a", channelKey: "udp/A").Should().BeTrue();
+        acct.TryReserve(7, "b", channelKey: "udp/B").Should().BeTrue();
+        acct.TryReserve(2, "probe", channelKey: null).Should().BeTrue();
+
+        acct.ConsumedSecondsLastHourFor("udp/A").Should().BeApproximately(3, 0.001);
+        acct.ConsumedSecondsLastHourFor("udp/B").Should().BeApproximately(7, 0.001);
+        acct.ConsumedSecondsLastHourFor(null).Should().BeApproximately(12, 0.001, "global total includes every channel + null-keyed entries");
+    }
+
+    [Fact]
     public void ConsumedSecondsLastHour_DropsAgedEntries()
     {
         var (acct, clock) = NewAccountant(budget: 0);

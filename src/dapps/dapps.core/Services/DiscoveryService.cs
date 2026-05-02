@@ -72,7 +72,8 @@ public sealed class DiscoveryService(
             }
             var info = group.Select(r => new DiscoveryChannelInfo(
                 r.Id, r.Bearer, r.ChannelKey, r.LinkClass,
-                r.BeaconIntervalSeconds, r.AdvertisedTtlSeconds, r.CostHint)).ToList();
+                r.BeaconIntervalSeconds, r.AdvertisedTtlSeconds, r.CostHint,
+                r.AirtimeBudgetSecondsPerHour)).ToList();
             try
             {
                 await bearer.StartAsync(info, stoppingToken);
@@ -167,7 +168,7 @@ public sealed class DiscoveryService(
                     // accountant (DI hasn't supplied one in tests, or
                     // budget is 0) TryReserve always returns true.
                     var beaconCost = LinkClassDefaults.AirtimeSecondsEstimate(ch.LinkClass, AirtimeKind.Beacon);
-                    if (airtime is { } acct && !acct.TryReserve(beaconCost, $"beacon {kv.Key}/{ch.ChannelKey}"))
+                    if (airtime is { } acct && !acct.TryReserve(beaconCost, $"beacon {kv.Key}/{ch.ChannelKey}", ch.ChannelKey, ch.AirtimeBudgetSecondsPerHour))
                     {
                         // Try again in a quarter of the regular interval —
                         // budgets free up as old entries roll out of the
@@ -309,7 +310,7 @@ public sealed class DiscoveryService(
             // scheduled beacons. Skip the reply if the budget says no;
             // we'll catch the soliciting peer on the next regular beacon.
             var solicitCost = LinkClassDefaults.AirtimeSecondsEstimate(ch.LinkClass, AirtimeKind.Solicit);
-            if (airtime is { } acct && !acct.TryReserve(solicitCost, $"solicit-reply {bearer.Name}/{ch.ChannelKey}"))
+            if (airtime is { } acct && !acct.TryReserve(solicitCost, $"solicit-reply {bearer.Name}/{ch.ChannelKey}", ch.ChannelKey, ch.AirtimeBudgetSecondsPerHour))
             {
                 logger.LogInformation(
                     "DiscoveryService: budget exhausted, NOT replying to solicit from {0} on {1}/{2}",

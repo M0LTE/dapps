@@ -19,6 +19,12 @@ namespace dapps.core.Updater;
 /// <item><c>--rollback</c> — privileged: restore <c>dapps.previous</c>
 /// over <c>dapps</c> + restart. Manual operator rescue from SSH when
 /// the dashboard isn't enough.</item>
+/// <item><c>--show-config</c> — print the persisted
+/// <see cref="dapps.core.Models.SystemOptions"/> rows from
+/// <c>data/dapps.db</c> in <c>DAPPS_SCREAMING_SNAKE=value</c> form,
+/// exit 0. Useful for confirming what the daemon will resolve at
+/// boot when /Config has been edited live and the persisted values
+/// diverge from the operator's <c>EnvironmentFile</c>.</item>
 /// </list>
 /// All four exit before any host plumbing runs, so they work even
 /// when the on-disk dapps.db is incompatible / a port is wedged / the
@@ -47,6 +53,10 @@ public static class UpdaterCli
 
             case "--rollback":
                 exitCode = RollBackAsync(CancellationToken.None).GetAwaiter().GetResult();
+                return true;
+
+            case "--show-config":
+                exitCode = ConfigCli.ShowConfig();
                 return true;
 
             default:

@@ -14,7 +14,8 @@ public sealed record DiscoveryChannelInfo(
     LinkClass LinkClass,
     int BeaconIntervalSeconds,
     int AdvertisedTtlSeconds,
-    int CostHint);
+    int CostHint,
+    int AirtimeBudgetSecondsPerHour = 0);
 
 /// <summary>
 /// Base type for events the discovery service consumes off a bearer's

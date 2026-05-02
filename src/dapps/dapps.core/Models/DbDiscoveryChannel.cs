@@ -64,6 +64,17 @@ public sealed class DbDiscoveryChannel
     /// 144.800 channel, don't beacon faster than once an hour".</summary>
     public string Notes { get; set; } = "";
 
+    /// <summary>
+    /// Plan B7 follow-up — per-channel airtime ceiling that overrides
+    /// <see cref="SystemOptions.DiscoveryAirtimeBudgetSecondsPerHour"/>
+    /// for transmissions tagged with this channel's key. 0 (default)
+    /// means "use the global budget"; a positive value means this
+    /// channel has a tighter (or looser) per-channel cap. The accountant
+    /// enforces both ceilings — a transmission must fit under BOTH the
+    /// per-channel and the global cap when both are set.
+    /// </summary>
+    public int AirtimeBudgetSecondsPerHour { get; set; } = 0;
+
     /// <summary>Apply <see cref="LinkClassDefaults"/> to any field still
     /// at its zero value. Lets controllers write a row with just
     /// (Bearer, ChannelKey, LinkClass) and pick up sensible defaults

@@ -16,9 +16,12 @@ namespace dapps.core.Pages;
 public sealed class IndexModel(
     Database database,
     IOptionsMonitor<SystemOptions> options,
+    AirtimeAccountant airtime,
     ILogger<IndexModel> logger) : PageModel
 {
     public SystemOptions Options { get; private set; } = new();
+    public double DiscoveryAirtimeConsumedSecondsLastHour { get; private set; }
+    public int DiscoveryAirtimeBudgetSecondsPerHour => airtime.BudgetSecondsPerHour;
 
     public bool BpqAgwReachable { get; private set; }
 
@@ -108,6 +111,7 @@ public sealed class IndexModel(
             .ToList();
         DiscoveredPeers = await database.GetDiscoveredPeers();
         DiscoveryChannels = await database.GetDiscoveryChannels();
+        DiscoveryAirtimeConsumedSecondsLastHour = airtime.ConsumedSecondsLastHour;
 
         BpqAgwReachable = await ProbeTcp(Options.NodeHost, Options.AgwPort);
     }
