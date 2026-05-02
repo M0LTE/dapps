@@ -459,7 +459,40 @@ sudo journalctl -u dapps.service -f       # live logs
 
 A correct startup looks like the same lines you saw in §3 — `BPQ AGW: ...`, `MQTT broker: ...`, `Now listening on: ...` — followed by the AGW dispatcher reporting it's connected.
 
-**Upgrades** are a binary swap:
+### 6.1 Optional: triggered self-update
+
+Plan C5.2 ships a privileged companion service that lets a sysop click "Apply update" on the dashboard instead of running the binary-swap recipe by hand. The update logic lives in the same dapps binary (`dapps --apply-update`); the companion just provides the privilege boundary.
+
+```sh
+sudo curl -L --fail \
+    -o /etc/systemd/system/dapps-updater.service \
+    https://raw.githubusercontent.com/M0LTE/dapps/master/scripts/dapps-updater.service
+sudo curl -L --fail \
+    -o /etc/systemd/system/dapps-updater.timer \
+    https://raw.githubusercontent.com/M0LTE/dapps/master/scripts/dapps-updater.timer
+sudo systemctl daemon-reload
+sudo systemctl enable --now dapps-updater.timer
+```
+
+The timer fires `dapps-updater.service` every 60 s. Each tick: if `/var/lib/dapps/update-requested` exists, the service runs `dapps --apply-update` as root — downloads the latest release for this RID, atomic-swaps `/opt/dapps/dapps`, restarts the dapps service, and watches it for a 60 s health window. Any failure (download, swap, restart, or new binary not staying up) auto-rolls back to `/opt/dapps/dapps.previous` and restarts on the previous binary.
+
+Without the marker file, the worker exits in <100 ms — the timer is cheap.
+
+The updater never auto-updates on its own — it only acts on an explicit request from the dashboard. C5.3 (scheduled auto-update) is a future item.
+
+**CLI side-doors** for SSH-from-the-shell use, all of which exit before the host boots:
+
+```sh
+/opt/dapps/dapps --version           # print the running version
+/opt/dapps/dapps --check-update      # poll GitHub Releases, print result
+sudo touch /var/lib/dapps/update-requested && sudo /opt/dapps/dapps --apply-update
+                                     # force a one-shot apply outside the dashboard
+sudo /opt/dapps/dapps --rollback     # restore /opt/dapps/dapps.previous and restart dapps
+```
+
+`--apply-update` is marker-gated either way — without `/var/lib/dapps/update-requested` it exits in <100 ms with no work. `--rollback` is unconditional and is the manual rescue path when an apply went sideways and the auto-rollback didn't (e.g. the timer hadn't fired yet).
+
+**Upgrades the manual way** (still supported, useful on hosts without the companion):
 
 ```sh
 sudo curl -L --fail \

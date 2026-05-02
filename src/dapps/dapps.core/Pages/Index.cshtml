@@ -165,6 +165,110 @@
     <p class="muted">Existing session stays valid until logout or 90-day expiry — only future logins use the new password.</p>
 </details>
 
+<h2>Update <span id="upd-phase" class="pill">—</span></h2>
+<p class="muted-inline">Plan C5.2 — triggered self-update via the privileged <code>dapps-updater.service</code>. Click <em>Apply update</em>; the unprivileged dapps writes a request marker to <code>/var/lib/dapps/update-requested</code> which the updater picks up on its next 60 s tick. The updater downloads the latest release for this RID, swaps it in, restarts dapps, watches for 60 s, and rolls back to <code>dapps.previous</code> if the new binary fails to stay up. <span class="muted">Status auto-refreshes every 5 s during a run.</span></p>
+<div class="grid">
+    <div class="card">
+        <div class="label">Running</div>
+        <div class="value mono"><span id="upd-current">—</span></div>
+        <div class="caption" id="upd-rid-line">RID detected at build time</div>
+    </div>
+    <div class="card">
+        <div class="label">Latest on GitHub</div>
+        <div class="value mono"><span id="upd-latest">—</span></div>
+        <div class="caption" id="upd-fetched">Update check has not run yet</div>
+    </div>
+    <div class="card">
+        <div class="label">Last apply</div>
+        <div class="value"><span id="upd-last">never</span></div>
+        <div class="caption" id="upd-last-error"></div>
+    </div>
+    <div class="card">
+        <div class="label">Action</div>
+        <div class="value">
+            <button id="upd-apply-btn" type="button" onclick="dappsApplyUpdate()" disabled>Apply update</button>
+        </div>
+        <div class="caption" id="upd-apply-caption">Need an available release to apply</div>
+    </div>
+</div>
+
+<script>
+    (function () {
+        const phase = document.getElementById('upd-phase');
+        const cur = document.getElementById('upd-current');
+        const lat = document.getElementById('upd-latest');
+        const fetched = document.getElementById('upd-fetched');
+        const last = document.getElementById('upd-last');
+        const lastErr = document.getElementById('upd-last-error');
+        const btn = document.getElementById('upd-apply-btn');
+        const cap = document.getElementById('upd-apply-caption');
+        const fmtAgo = (iso) => {
+            if (!iso) return '—';
+            const s = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+            if (s < 90) return `${s}s ago`;
+            const m = Math.floor(s / 60);
+            if (m < 90) return `${m}m ago`;
+            const h = Math.floor(s / 3600);
+            if (h < 36) return `${h}h ago`;
+            return `${Math.floor(s / 86400)}d ago`;
+        };
+        const escape = (s) => String(s ?? '').replace(/[&<>"']/g, c =>
+            ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        const inProgress = (p) => ['Checking','Downloading','Swapping','Restarting','Verifying'].includes(p);
+        async function poll() {
+            try {
+                const res = await fetch('/Update/status', { credentials: 'same-origin' });
+                if (!res.ok) return;
+                const s = await res.json();
+                cur.textContent = s.isDevBuild ? `${s.current} (dev)` : `v${s.current}`;
+                lat.textContent = s.latest ? `v${s.latest}` : '—';
+                fetched.textContent = s.fetchedAt ? `last checked ${fmtAgo(s.fetchedAt)}` : 'Update check has not run yet';
+
+                const lr = s.lastRun;
+                if (!lr) {
+                    last.textContent = 'never';
+                    lastErr.textContent = '';
+                    phase.className = 'pill';
+                    phase.textContent = '—';
+                } else {
+                    last.textContent = `${lr.phase} · ${fmtAgo(lr.updated_at)}`;
+                    lastErr.textContent = lr.error ? `error: ${escape(lr.error)}` : '';
+                    if (lr.phase === 'Success') { phase.className = 'pill ok'; phase.textContent = 'success'; }
+                    else if (lr.phase === 'RolledBack') { phase.className = 'pill warn'; phase.textContent = 'rolled back'; }
+                    else if (lr.phase === 'Failed') { phase.className = 'pill warn'; phase.textContent = 'failed'; }
+                    else if (inProgress(lr.phase)) { phase.className = 'pill info'; phase.textContent = lr.phase.toLowerCase(); }
+                    else { phase.className = 'pill'; phase.textContent = lr.phase.toLowerCase(); }
+                }
+
+                // Apply-button gating: needs a release available, and
+                // not already running, and not already requested.
+                const running = lr && inProgress(lr.phase);
+                const canApply = s.isAvailable && !running && !s.requestPending;
+                btn.disabled = !canApply;
+                if (running) cap.textContent = 'Update in progress…';
+                else if (s.requestPending) cap.textContent = 'Request queued — updater fires on next 60 s tick';
+                else if (s.isDevBuild) cap.textContent = 'Dev builds do not auto-update';
+                else if (!s.isAvailable && s.latest) cap.textContent = 'Already on the latest release';
+                else if (!s.latest) cap.textContent = 'Need an available release to apply';
+                else cap.textContent = 'Click to download + swap + restart';
+            } catch { /* try again next tick */ }
+        }
+        async function dappsApplyUpdateFn() {
+            if (!confirm('Apply the latest available update? Dapps will restart; if it fails to come up the previous binary is restored automatically.')) return;
+            const res = await fetch('/Update/apply', { method: 'POST' });
+            if (!res.ok && res.status !== 202 && res.status !== 204) {
+                const text = await res.text();
+                alert(`Apply failed (${res.status}): ${text}`);
+                return;
+            }
+            poll();
+        }
+        window.dappsApplyUpdate = dappsApplyUpdateFn;
+        poll();
+        setInterval(poll, 5000);
+    })();
+</script>
+
 <h2>Health</h2>
 <p class="muted-inline">Process-lifetime counters + per-neighbour link state + a ring of recent forwarder / AGW / inbound-validation events. Resets on restart.</p>
 <div class="grid">

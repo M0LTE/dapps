@@ -308,12 +308,25 @@ Three phases by complexity / risk; ship in order, evaluate before moving on.
 
 `UpdateChecker` (a `BackgroundService`) polls `https://api.github.com/repos/M0LTE/dapps/releases/latest` every 6 hours after a 15s startup delay, caches the result, and exposes `Current` / `Latest` / `IsAvailable` / `IsDevBuild`. `Current` is resolved from `AssemblyInformationalVersion`; `dev-<sha>` builds are flagged so the dashboard never claims a dev build is "out of date". Compared via a tolerant dotted-decimal semver comparator. `SystemOptions.UpdateCheckEnabled` (default true, seeded by `DbStartup`, editable in the dashboard's settings panel) is the opt-out for sysops who pin a version on purpose. `EventsController` exposes the snapshot at `GET /Events/version`. The dashboard's `#version-pill` in the header polls that endpoint on load + every 10 minutes and renders one of three states: dev build (info pill), up-to-date (muted pill, `vX.Y.Z`), update available (warn pill, `vX.Y.Z → vX.Y.W available`, links to the GitHub release). Cross-platform — pure polling + UI.
 
-#### C5.2 — Triggered update (Linux / systemd)
-Sysop clicks a dashboard button (or POSTs `/Config/update`); dapps signals a separate privileged `dapps-updater.service` to do the swap. dapps itself stays unprivileged.
+#### C5.2 — Triggered update (Linux / systemd) *(done)*
 
-- Companion `dapps-updater.service` + `.timer` that runs as root, polls a "ready to update" signal file written by dapps in `/var/lib/dapps/`, downloads the binary, atomic-swaps `/opt/dapps/dapps` (keeping `/opt/dapps/dapps.previous` as a rollback), `systemctl restart dapps.service`. If the new binary fails to start within a window, the updater restores `.previous` and restarts again.
-- The companion ships in a `scripts/dapps-updater/` directory with its own systemd unit + a one-line install recipe in the README.
-- API: `GET /Update/status` (current version, latest available, last check), `POST /Update/apply` (writes the signal file → updater picks up next tick).
+Sysop clicks "Apply update" on the dashboard (or POSTs `/Update/apply`); the unprivileged dapps writes `/var/lib/dapps/update-requested`. The privileged `dapps-updater.service` (paired with `dapps-updater.timer` firing every 60 s) sees the marker on its next tick and invokes `dapps --apply-update` — the same dapps binary in a side-door mode that runs the orchestration, then exits, without booting the host. dapps itself stays unprivileged.
+
+The orchestration: poll GitHub Releases for the latest tag → download the asset for our RID into `/opt/dapps/dapps.new` → atomic-swap (`/opt/dapps/dapps` ↔ `/opt/dapps/dapps.previous`, then `dapps.new` → `dapps`) → `systemctl restart dapps.service` → watch `is-active` for the 60 s health window. Auto-rollback on any failure (non-zero restart, is-active false during the window, swap exception): restore `dapps.previous` and restart. Status is persisted as JSON to `/var/lib/dapps/update-status` at every phase transition; the dashboard polls `/Update/status` every 5 s during a run.
+
+Code shape: `UpdaterOrchestrator` is a pure state machine over `IUpdaterFileSystem` / `IUpdaterDownloader` / `IUpdaterProcess`. 11 unit tests cover the happy path plus every rollback path (download fail, swap fail, restart fail, is-active flips false mid-window, no-marker no-op, already-on-latest, missing previous binary). Real implementations (`RealUpdaterFileSystem`, `RealUpdaterDownloader`, `RealUpdaterProcess`) handle the actual disk / HTTP / systemctl calls.
+
+CLI side-doors that exit before the host boots — **a key part of the design** so they work even when dapps.db is incompatible / a port is wedged / the callsign is unset:
+- `dapps --version` — print version, exit.
+- `dapps --check-update` — poll GitHub Releases, print `current=… latest=… status=…`, exit.
+- `dapps --apply-update` — privileged; marker-gated (`/var/lib/dapps/update-requested`). Runs the orchestrator. Exit 0 on success / no-update-needed / no-marker, 1 on rolled-back, 2 on outright failure.
+- `dapps --rollback` — privileged; unconditional manual rescue. Restores `dapps.previous`, restarts. The "self-rescue" the operator runs from SSH if the dashboard isn't reachable.
+
+Systemd units live in `scripts/dapps-updater.service` + `.timer`. README install recipe added under §6.1.
+
+**Operator UX:** dashboard's `#upd-phase` pill flips through `checking` → `downloading` → `swapping` → `restarting` → `verifying` → `success` (or `rolled back` / `failed`). Apply button is gated on `(release available) AND (no in-progress run) AND (no pending request)`. Dev builds never auto-update.
+
+**What's NOT in this PR (deferred):** scheduled auto-update (C5.3), Windows/macOS triggered-update path, channel pinning, signature verification.
 
 #### C5.3 — Auto-update on a schedule
 Off by default. Operator opts in: "auto-update during quiet hours, randomised offset within a window."
