@@ -76,7 +76,7 @@ public sealed class MeshCoreSourceRoutedForwardingTests : IAsyncLifetime
 
         inbox = new DatabaseAndMqttInbox(
             database, broker, events, optionsMonitor,
-            meshcore, routingContext,
+            meshcore, routingContext, TimeProvider.System,
             NullLogger<DatabaseAndMqttInbox>.Instance);
 
         outbound = new OutboundMessageManager(

@@ -99,6 +99,53 @@ public class DappsProtocolClientTests
     }
 
     [Fact]
+    public async Task OfferMessageAsync_F2Fragment_EmitsMidAndFragHeaders()
+    {
+        // Plan F2 — when the caller passes masterId + fragmentIndex +
+        // fragmentTotal, the wire form gets `mid=…` and `frag=N/M`
+        // appended after src= (or after ttl= when src is absent).
+        var canned = Encoding.UTF8.GetBytes("send abc\n");
+        var stream = new FakeDuplexStream(canned);
+        var client = new DappsProtocolClient(stream, NullLoggerFactory.Instance);
+
+        await client.OfferMessageAsync(
+            id: "abc",
+            salt: 42L,
+            format: DappsMessage.MessageFormat.Plain,
+            destination: "x@y",
+            length: 100,
+            ct: CancellationToken.None,
+            masterId: "def5678",
+            fragmentIndex: 2,
+            fragmentTotal: 5);
+
+        var written = Encoding.UTF8.GetString(stream.WriteCapture.ToArray());
+        written.Should().Be("ihave abc len=100 fmt=p dst=x@y s=42 mid=def5678 frag=2/5\n");
+    }
+
+    [Fact]
+    public async Task OfferMessageAsync_PartialFragmentParams_Throws()
+    {
+        // mid set without fragment index/total → reject before hitting
+        // the wire. The receiver-side validator would also reject,
+        // but catching it here keeps malformed lines off the link.
+        var stream = new FakeDuplexStream([]);
+        var client = new DappsProtocolClient(stream, NullLoggerFactory.Instance);
+
+        var act = async () => await client.OfferMessageAsync(
+            id: "abc",
+            salt: null,
+            format: DappsMessage.MessageFormat.Plain,
+            destination: "x@y",
+            length: 5,
+            ct: CancellationToken.None,
+            masterId: "def5678" /* no fragmentIndex/Total */);
+
+        await act.Should().ThrowAsync<ArgumentException>()
+            .WithMessage("*all be set together*");
+    }
+
+    [Fact]
     public async Task OfferMessageAsync_ReturnsFalseWhenReplyIsntSend()
     {
         var canned = Encoding.UTF8.GetBytes("error abc\n");

@@ -76,6 +76,27 @@ public class SystemOptions
     public int ProbeIntervalHours { get; set; } = 24;
 
     /// <summary>
+    /// Plan F2 — payloads strictly larger than this byte count are
+    /// fragmented into chunks at submit time. The originator splits
+    /// a 50 KB payload into ⌈50 KB / threshold⌉ rows; the receiver
+    /// reassembles. End-to-end (intermediate hops forward fragments
+    /// as opaque single messages). Bearers do their own framing
+    /// underneath, so this knob is about *resumability* — the unit of
+    /// retransmission after a link drop or crash mid-transfer — not
+    /// about MTU adaptation. 0 disables fragmentation entirely.
+    /// </summary>
+    public int FragmentThresholdBytes { get; set; } = 4096;
+
+    /// <summary>
+    /// Plan F2 — drop incomplete reassembly buffer rows older than
+    /// this. Default 7 days because HF / mesh propagation gaps can
+    /// cleanly close for multiple days mid-transmission and we'd
+    /// rather hold the partial work than throw it away. Operators on
+    /// always-on links can shorten this aggressively.
+    /// </summary>
+    public int FragmentReassemblyTimeoutSeconds { get; set; } = 7 * 24 * 3600;
+
+    /// <summary>
     /// Which routing algorithm composition to use. Two stacks are
     /// shipped today; both wrap <see cref="dapps.core.Routing.StaticRoutingAlgorithm"/>
     /// so operator overrides always win.

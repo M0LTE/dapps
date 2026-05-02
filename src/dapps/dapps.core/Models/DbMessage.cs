@@ -83,4 +83,20 @@ public class DbMessage
     /// to populate its <c>discoveredpaths</c> table.
     /// </summary>
     public string? TraversedHopsCsv { get; init; }
+
+    /// <summary>F2 multi-part: <c>mid=</c> from the on-air <c>ihave</c>,
+    /// or set at submit time when local fragmentation kicks in. Null
+    /// for non-fragmented messages. Carried on every fragment row of
+    /// a logical multi-part message so the forwarder can re-emit
+    /// <c>mid=</c> on outbound and the destination's inbox can group
+    /// them for reassembly.</summary>
+    public string? MasterId { get; init; }
+
+    /// <summary>F2 multi-part: 1-based fragment index. Null when not
+    /// fragmented; non-null only when <see cref="MasterId"/> is set.</summary>
+    public int? FragmentIndex { get; init; }
+
+    /// <summary>F2 multi-part: total fragment count for the master id.
+    /// Null when not fragmented; ≥ 2 when set.</summary>
+    public int? FragmentTotal { get; init; }
 }

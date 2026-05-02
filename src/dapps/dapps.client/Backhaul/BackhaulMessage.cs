@@ -23,7 +23,10 @@ public sealed record BackhaulMessage(
     string? LinkSourceCallsign = null,
     byte? FloodHopsRemaining = null,
     IReadOnlyList<string>? SourceRoute = null,
-    IReadOnlyList<string>? TraversedHops = null);
+    IReadOnlyList<string>? TraversedHops = null,
+    string? MasterId = null,
+    int? FragmentIndex = null,
+    int? FragmentTotal = null);
 
 // LinkSourceCallsign: the *immediate sender's* callsign, distinct from
 // Originator (the F1 end-to-end source). Carried on bearers that don't
@@ -60,3 +63,12 @@ public sealed record BackhaulMessage(
 // node) can derive the reverse path back to the originator —
 // MeshCoreLikeRoutingAlgorithm uses this to populate its discovered-
 // paths table without explicit RREP frames.
+//
+// MasterId / FragmentIndex / FragmentTotal (F2 multi-part): when
+// MasterId is set, this BackhaulMessage is one fragment of a larger
+// logical payload that the originator chunked. Intermediate hops
+// forward fragments as opaque messages; only the final destination's
+// inbox reassembles. Set together (all-or-none on the wire as
+// `mid=…` + `frag=N/M` headers); the receiver's IHaveValidator
+// rejects any mismatched-presence combination. FragmentTotal ≥ 2;
+// single-fragment messages just omit all three fields.

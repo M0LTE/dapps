@@ -349,7 +349,10 @@ public class InboundConnectionHandler(
                 Ttl: offer.Ttl,
                 Payload: buffer,
                 Headers: headers,
-                Originator: string.IsNullOrEmpty(offer.OriginatorCallsign) ? null : offer.OriginatorCallsign);
+                Originator: string.IsNullOrEmpty(offer.OriginatorCallsign) ? null : offer.OriginatorCallsign,
+                MasterId: offer.MasterId,
+                FragmentIndex: offer.FragmentIndex,
+                FragmentTotal: offer.FragmentTotal);
 
             await inbox.DeliverAsync(backhaulMessage, sourceCallsign, stoppingToken);
             await database.DeleteOffer(id);

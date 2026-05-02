@@ -84,11 +84,27 @@ public class DappsProtocolClient(Stream stream, ILoggerFactory loggerFactory)
         int length,
         CancellationToken ct,
         int? ttl = null,
-        string? originator = null)
+        string? originator = null,
+        string? masterId = null,
+        int? fragmentIndex = null,
+        int? fragmentTotal = null)
     {
         if (format != DappsMessage.MessageFormat.Plain)
         {
             throw new NotImplementedException("Deflate format not yet wired through outbound");
+        }
+
+        // F2 multi-part: mid= and frag=N/M either both present or both
+        // absent. Belt-and-braces — the receiver's parser also enforces
+        // this — but catching it sender-side prevents a malformed line
+        // from reaching the wire in the first place.
+        var hasFragHeaders = !string.IsNullOrEmpty(masterId)
+            && fragmentIndex.HasValue && fragmentTotal.HasValue;
+        if (!hasFragHeaders
+            && (!string.IsNullOrEmpty(masterId) || fragmentIndex.HasValue || fragmentTotal.HasValue))
+        {
+            throw new ArgumentException(
+                "masterId, fragmentIndex, fragmentTotal must all be set together (multi-part) or all be null");
         }
 
         var sb = new StringBuilder($"ihave {id} len={length} fmt=p dst={destination}");
@@ -106,6 +122,15 @@ public class DappsProtocolClient(Stream stream, ILoggerFactory loggerFactory)
         if (!string.IsNullOrEmpty(originator))
         {
             sb.Append($" src={originator}");
+        }
+        // F2 multi-part headers. Receiver groups fragments by mid=.
+        // A pre-F2 receiver sees these as unknown KVs and (per spec)
+        // ignores them — but with no reassembly it'll just deliver each
+        // fragment to the app individually. F2 receivers route to the
+        // reassembly buffer.
+        if (hasFragHeaders)
+        {
+            sb.Append($" mid={masterId} frag={fragmentIndex}/{fragmentTotal}");
         }
         sb.Append('\n');
 

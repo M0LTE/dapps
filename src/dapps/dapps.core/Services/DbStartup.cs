@@ -49,6 +49,7 @@ public class DbStartup(ILogger<DbStartup> logger) : IHostedService
         db.CreateTable<DbFloodSeen>();
         db.CreateTable<DbDiscoveredPath>();
         db.CreateTable<DbProbedNode>();
+        db.CreateTable<DbFragment>();
 
         var optionsTable = db.Table<DbSystemOption>().Table.TableName;
         var options = db.Query<DbSystemOption>($"select * from {optionsTable};");
@@ -69,6 +70,8 @@ public class DbStartup(ILogger<DbStartup> logger) : IHostedService
         InsertIfNotPresent(options, "RoutingAlgorithm", "passive-flood");
         InsertIfNotPresent(options, "ProbingEnabled", "false");
         InsertIfNotPresent(options, "ProbeIntervalHours", "24");
+        InsertIfNotPresent(options, "FragmentThresholdBytes", "4096");
+        InsertIfNotPresent(options, "FragmentReassemblyTimeoutSeconds", "604800");
 
         ValidateRequiredConfig();
 

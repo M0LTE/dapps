@@ -418,9 +418,29 @@ Items deferred from earlier discussions, mostly "we know it'll need to happen, j
 
 `ihave` gained an optional `src=<callsign>` field carrying the originating callsign — distinct from the link source. Originators set it; relays preserve it verbatim across re-forwards. Receivers expose it as the `dapps-origin` MQTT user property and the REST `OriginatorCallsign` field. Pre-F1 senders that omit `src=` round-trip cleanly with originator unknown. `BackhaulMessageCodec` bumped to v2 with a `HasOriginator` flag bit; v1 messages still decode. The 6-node multi-hop simulator's five canned exercises validate it end-to-end across path lengths 1-4 and branching.
 
-### F2. Multi-part messages
+### F2. Multi-part messages *(done)*
 
-Messages today are atomic. For payloads larger than a comfortable AX.25 paclen (say 5 KB+), apps would benefit from native chunking with reassembly on the receiver side. Possible spec extension: `frag=N/M` headers on `ihave` + a small reassembly buffer in DAPPS.
+Spec extension: `ihave` lines may carry `mid=<7hex>` (master id, the originator's grouping handle) and `frag=N/M` (1-based, M ≥ 2). Both fields together mean "this is one fragment of a multi-part logical message"; absence of both means "single-part" (backward compat). Pre-F2 receivers seeing the new headers ignore them per the spec's forward-compat rule — they'll deliver each fragment to the app as a separate message, which is the wrong outcome but not a corruption.
+
+The win isn't MTU adaptation (bearers do their own framing — AGW/AX.25 paclen, A0.4's UDP packetiser, MeshCore link layers all handle MTU below DAPPS) but **resumability**: if a 50 KB transmission drops at fragment 3 of 5, the next forward attempt picks up at fragment 4 rather than restarting the 50 KB session. Same across crashes — already-received fragment rows persist; only missing ones retry.
+
+End-to-end: originator fragments at submit time when payload > `SystemOptions.FragmentThresholdBytes` (default 4096). Each fragment is a complete `DbMessage` row with shared `MasterId` and distinct `FragmentIndex` (1..N). The forwarder picks them up individually and re-emits `mid=` + `frag=N/M` on the wire. Intermediate hops just forward fragments as opaque single messages (no buffering, no reassembly). Final destination's `DatabaseAndMqttInbox` detects the F2 headers, routes to a new `DbFragment` reassembly buffer, and on completion concatenates by `FragmentIndex`, persists the assembled bytes as one `DbMessage` row, and injects to MQTT exactly as a single-part arrival would have. Fragment rows are dropped on success.
+
+Stale-fragment sweep: `TtlSweeperService` drops `DbFragment` rows older than `SystemOptions.FragmentReassemblyTimeoutSeconds` (default 7 days — long because HF / mesh propagation gaps legitimately last days, and we'd rather hold partial work on disk than throw it away).
+
+Apps never see fragments — the MQTT/REST surface only emits the assembled message. The originator's `SubmitOutboundMessage` returns the master id rather than per-fragment ids; the dashboard's queue panel lists fragments individually so an operator can spot a lost-in-transit chunk.
+
+20 new tests across `F2WireFormatTests` (10 — parse + reject paths for `mid=` / `frag=N/M`), `F2FragmentationTests` (8 — sender chunking, in-order reassembly, out-of-order reassembly, idempotent re-delivery, incomplete-buffer hold, stale sweep, transit-fragment passthrough), and `DappsProtocolClientTests` (+2 — wire-emit shape with F2 headers, partial-args reject). 455/455.
+
+### F2.5. Fountain codes for broadcast / HF / multi-path
+
+Future option, not in F2's scope. A fountain code (LT, Raptor) lets the originator emit an unbounded stream of random-combination packets; any recipient who collects K(1+ε) of them reconstructs the source. No back-channel retransmission protocol; the sender just keeps emitting and recipients tune in until they've collected enough.
+
+Where this shines is the corner DAPPS is most under-served on today: HF broadcast and multi-path mesh delivery on lossy / asymmetric links. A bulletin-style "broadcast a digest, any of N listening nodes builds it up over a propagation pass" feature is the natural home — completely different transport profile from F2's acknowledged unicast resumability.
+
+**Why not now**: DAPPSv1 is acknowledged point-to-point (`ihave → send → data → ack`); fountain codes' natural home is unacknowledged broadcast — the wrong primitive to retrofit. Decoder is 500+ lines we'd own forever; LT is tractable on a Pi, Raptor is faster but the patent situation is murky. We also don't yet have the broadcast shape (B6.2 HF solicit is on-demand request/reply; nothing today is multicast-mesh-shaped).
+
+**Where it'd land**: alongside a real broadcast surface — e.g. "DAPPS bulletin" one-to-many, no-ack, fountain-coded over HF — as its own transport profile coexisting with F2's classic chunking. F2's `frag=N/M` doesn't preclude this; they're different shapes for different jobs.
 
 ### F3. `rev` polling
 
