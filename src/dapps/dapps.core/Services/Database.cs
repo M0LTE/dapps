@@ -662,6 +662,8 @@ public class Database(
         await Upsert(connection, options, systemOptions.FragmentThresholdBytes.ToString(), nameof(systemOptions.FragmentThresholdBytes));
         await Upsert(connection, options, systemOptions.FragmentReassemblyTimeoutSeconds.ToString(), nameof(systemOptions.FragmentReassemblyTimeoutSeconds));
         await Upsert(connection, options, systemOptions.OpportunisticPollEnabled.ToString(), nameof(systemOptions.OpportunisticPollEnabled));
+        await Upsert(connection, options, systemOptions.ScheduledPollEnabled.ToString(), nameof(systemOptions.ScheduledPollEnabled));
+        await Upsert(connection, options, systemOptions.PollIntervalHours.ToString(), nameof(systemOptions.PollIntervalHours));
     }
 
     private static async Task Upsert(SQLiteAsyncConnection connection, List<DbSystemOption> options, string value, string field)
@@ -708,6 +710,12 @@ public class Database(
                 : 7 * 24 * 3600,
             OpportunisticPollEnabled = !options.TryGetValue(nameof(SystemOptions.OpportunisticPollEnabled), out var oppp)
                 || !bool.TryParse(oppp, out var oppParsed) || oppParsed,
+            ScheduledPollEnabled = options.TryGetValue(nameof(SystemOptions.ScheduledPollEnabled), out var sp)
+                && bool.TryParse(sp, out var spParsed) && spParsed,
+            PollIntervalHours = options.TryGetValue(nameof(SystemOptions.PollIntervalHours), out var polli)
+                && int.TryParse(polli, out var polliParsed) && polliParsed > 0
+                ? polliParsed
+                : 6,
         };
     }
 
@@ -864,5 +872,40 @@ public class Database(
         var destCall = destination[(at + 1)..];
         var destBase = destCall.Split('-')[0];
         return string.Equals(destBase, callerBase, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // ── Polled nodes (F3b) ─────────────────────────────────────────
+
+    public async Task<IReadOnlyList<DbPolledNode>> GetPolledNodes()
+    {
+        var connection = DbInfo.GetAsyncConnection();
+        return await connection.QueryAsync<DbPolledNode>(
+            "select * from polledNodes order by " +
+            "case when LastPolledAt is null then 1 else 0 end, " +
+            "LastPolledAt desc, Callsign asc");
+    }
+
+    public async Task<DbPolledNode?> GetPolledNode(string callsign)
+        => await DbInfo.GetAsyncConnection().FindAsync<DbPolledNode>(callsign);
+
+    internal async Task UpsertPolledNode(DbPolledNode node)
+    {
+        var connection = DbInfo.GetAsyncConnection();
+        var existing = await connection.FindAsync<DbPolledNode>(node.Callsign);
+        if (existing is null)
+        {
+            await connection.InsertAsync(node);
+        }
+        else
+        {
+            await connection.UpdateAsync(node);
+        }
+    }
+
+    internal async Task<bool> RemovePolledNode(string callsign)
+    {
+        var deleted = await DbInfo.GetAsyncConnection().ExecuteAsync(
+            "delete from polledNodes where callsign=?", callsign);
+        return deleted > 0;
     }
 }

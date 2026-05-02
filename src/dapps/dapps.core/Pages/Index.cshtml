@@ -153,6 +153,9 @@
         <label class="checkbox-label"><input name="UpdateCheckEnabled" type="checkbox" @(Model.Options.UpdateCheckEnabled ? "checked" : "") /> Check GitHub for new releases</label>
         <label class="checkbox-label"><input name="ProbingEnabled" type="checkbox" @(Model.Options.ProbingEnabled ? "checked" : "") /> Probe known peers on a slow cadence (B6.1)</label>
         <label>Probe interval (hours) <input name="ProbeIntervalHours" type="number" min="1" max="168" value="@Model.Options.ProbeIntervalHours" required /></label>
+        <label class="checkbox-label"><input name="OpportunisticPollEnabled" type="checkbox" @(Model.Options.OpportunisticPollEnabled ? "checked" : "") /> Opportunistic poll on every push (F3a) — drain peers' mail at the end of every push session</label>
+        <label class="checkbox-label"><input name="ScheduledPollEnabled" type="checkbox" @(Model.Options.ScheduledPollEnabled ? "checked" : "") /> Schedule periodic mail polls (F3b) — for nodes that don't push often</label>
+        <label>Poll interval (hours) <input name="PollIntervalHours" type="number" min="1" max="168" value="@Model.Options.PollIntervalHours" required /></label>
         <button type="submit">Save</button>
     </form>
 </details>
@@ -824,6 +827,83 @@ else
     })();
 </script>
 
+<h2>Polled nodes <span id="polls-state" class="pill @(Model.Options.ScheduledPollEnabled ? "ok" : "")">@(Model.Options.ScheduledPollEnabled ? $"every {Model.Options.PollIntervalHours}h" : "off")</span></h2>
+<p class="muted-inline">Plan F3b — scheduled poll. Walks AGW-reachable manual neighbours, sends <code>rev</code>, drains queued mail. Off by default; opportunistic poll on every push (<code>OpportunisticPollEnabled</code>) covers most cases for free. Enable in <em>Edit configuration</em> for nodes that don't push often. <span class="muted">Auto-refreshes every 30s.</span></p>
+<div class="probes-toolbar">
+    <button type="button" onclick="dappsRunPollSweep()">Poll all now</button>
+</div>
+<table id="polls-table">
+    <thead>
+        <tr>
+            <th>Callsign</th>
+            <th>Last polled</th>
+            <th>Last success</th>
+            <th class="numeric">Fails</th>
+            <th class="numeric">Drained (total)</th>
+            <th>Last error</th>
+            <th>Opt-out</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody id="polls-body">
+        <tr><td colspan="8" class="muted" style="text-align:center;">No polls recorded yet.</td></tr>
+    </tbody>
+</table>
+
+<script>
+    (function () {
+        const fmtAgo = (iso) => {
+            if (!iso) return '—';
+            const s = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+            if (s < 90) return `${s}s ago`;
+            const m = Math.floor(s / 60);
+            if (m < 90) return `${m}m ago`;
+            const h = Math.floor(s / 3600);
+            if (h < 36) return `${h}h ago`;
+            return `${Math.floor(s / 86400)}d ago`;
+        };
+        const escape = (s) => String(s ?? '').replace(/[&<>"']/g, c =>
+            ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        async function poll() {
+            try {
+                const res = await fetch('/Polls', { credentials: 'same-origin' });
+                if (!res.ok) return;
+                const rows = await res.json();
+                const body = document.getElementById('polls-body');
+                if (!rows.length) {
+                    body.innerHTML = '<tr><td colspan="8" class="muted" style="text-align:center;">No polls recorded yet.</td></tr>';
+                    return;
+                }
+                body.innerHTML = rows.map(r => {
+                    const reachable = r.lastSuccessAt && r.consecutiveFailures === 0;
+                    const stale = r.lastPolledAt && !reachable;
+                    const callPill = reachable
+                        ? `<span class="pill ok">${escape(r.callsign)}</span>`
+                        : (stale ? `<span class="pill warn">${escape(r.callsign)}</span>`
+                                 : `<code>${escape(r.callsign)}</code>`);
+                    const callQs = encodeURIComponent(r.callsign);
+                    return `<tr>` +
+                        `<td>${callPill}</td>` +
+                        `<td class="muted">${fmtAgo(r.lastPolledAt)}</td>` +
+                        `<td class="muted">${fmtAgo(r.lastSuccessAt)}</td>` +
+                        `<td class="numeric">${r.consecutiveFailures}</td>` +
+                        `<td class="numeric">${r.messagesDrained}</td>` +
+                        `<td class="muted">${escape(r.lastError || '—')}</td>` +
+                        `<td><input type="checkbox" ${r.optOut ? 'checked' : ''} onchange="dappsSetPollOptOut('${callQs}', this.checked)" /></td>` +
+                        `<td>` +
+                        `<button type="button" onclick="dappsPollOne('${callQs}')">Poll</button> ` +
+                        `<button type="button" onclick="dappsForgetPoll('${callQs}')">Forget</button>` +
+                        `</td>` +
+                        `</tr>`;
+                }).join('');
+            } catch { /* try again next tick */ }
+        }
+        poll();
+        setInterval(poll, 30000);
+        window.dappsRefreshPolls = poll;
+    })();
+</script>
+
 <h2>Recently dropped <span id="dropped-count" class="pill">—</span></h2>
 <p class="muted-inline">Messages DAPPS threw away (TTL expired in queue, etc.) instead of forwarding or delivering. Soft-deleted from the active queues so you can see what happened during RF testing. <span class="muted">Auto-refreshes every 5s.</span></p>
 <table id="dropped-table">
@@ -1006,6 +1086,9 @@ else
             UpdateCheckEnabled: f.UpdateCheckEnabled.checked,
             ProbingEnabled: f.ProbingEnabled.checked,
             ProbeIntervalHours: parseInt(f.ProbeIntervalHours.value, 10),
+            OpportunisticPollEnabled: f.OpportunisticPollEnabled.checked,
+            ScheduledPollEnabled: f.ScheduledPollEnabled.checked,
+            PollIntervalHours: parseInt(f.PollIntervalHours.value, 10),
         };
         if (await dappsPostJson('/Config', body)) location.reload();
     }
@@ -1095,6 +1178,35 @@ else
         if (!confirm(`Forget probe row for ${decodeURIComponent(callsign)}?`)) return;
         if (await dappsPostJson('/Probes/' + callsign, null, 'DELETE')) {
             window.dappsRefreshProbes && window.dappsRefreshProbes();
+        }
+    }
+
+    async function dappsRunPollSweep() {
+        if (!confirm('Poll every neighbour for queued mail now?')) return;
+        if (await dappsPostJson('/Polls/run', null)) {
+            window.dappsRefreshPolls && window.dappsRefreshPolls();
+        }
+    }
+
+    async function dappsPollOne(callsign) {
+        const url = '/Polls/run/' + callsign;
+        const res = await fetch(url, { method: 'POST' });
+        if (!res.ok && res.status !== 200 && res.status !== 204) {
+            const text = await res.text();
+            alert(`Poll failed (${res.status}): ${text}`);
+            return;
+        }
+        window.dappsRefreshPolls && window.dappsRefreshPolls();
+    }
+
+    async function dappsSetPollOptOut(callsign, optOut) {
+        await dappsPostJson('/Polls/' + callsign + '/optout', { OptOut: optOut });
+    }
+
+    async function dappsForgetPoll(callsign) {
+        if (!confirm(`Forget poll row for ${decodeURIComponent(callsign)}?`)) return;
+        if (await dappsPostJson('/Polls/' + callsign, null, 'DELETE')) {
+            window.dappsRefreshPolls && window.dappsRefreshPolls();
         }
     }
 </script>
