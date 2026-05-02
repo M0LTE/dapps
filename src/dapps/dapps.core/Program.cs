@@ -68,6 +68,13 @@ builder.Services.AddOptions<SystemOptions>().Configure<OptionsRepo, ILogger<Syst
         : 7 * 24 * 3600;
     o.OpportunisticPollEnabled = !bool.TryParse(
         options.SingleOrDefault(opt => opt.Option == "OpportunisticPollEnabled")?.Value, out var opp) || opp;
+    o.ScheduledPollEnabled = bool.TryParse(
+        options.SingleOrDefault(opt => opt.Option == "ScheduledPollEnabled")?.Value, out var sched) && sched;
+    o.PollIntervalHours = int.TryParse(
+        options.SingleOrDefault(opt => opt.Option == "PollIntervalHours")?.Value, out var pollHours)
+        && pollHours > 0
+        ? pollHours
+        : 6;
 
     logger.LogInformation($"Callsign: {o.Callsign}");
     logger.LogInformation($"BPQ AGW: {o.NodeHost}:{o.AgwPort} (default port byte {o.DefaultBpqPort})");
@@ -201,6 +208,13 @@ builder.Services.AddHostedService<UdpDatagramListener>();
 builder.Services.AddSingleton<NodeProber>();
 builder.Services.AddSingleton<ProbeSchedulerService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<ProbeSchedulerService>());
+
+// F3b — scheduled poll. NodePoller is stateless, opens a session,
+// drains via rev. The scheduler walks neighbours when
+// SystemOptions.ScheduledPollEnabled is true (off by default).
+builder.Services.AddSingleton<NodePoller>();
+builder.Services.AddSingleton<PollSchedulerService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<PollSchedulerService>());
 
 // DiscoveryService constructs its bearers itself in StartAsync (rather
 // than receiving them via IEnumerable<IDiscoveryBearer>), because the

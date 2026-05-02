@@ -50,6 +50,7 @@ public class DbStartup(ILogger<DbStartup> logger) : IHostedService
         db.CreateTable<DbDiscoveredPath>();
         db.CreateTable<DbProbedNode>();
         db.CreateTable<DbFragment>();
+        db.CreateTable<DbPolledNode>();
 
         var optionsTable = db.Table<DbSystemOption>().Table.TableName;
         var options = db.Query<DbSystemOption>($"select * from {optionsTable};");
@@ -73,6 +74,8 @@ public class DbStartup(ILogger<DbStartup> logger) : IHostedService
         InsertIfNotPresent(options, "FragmentThresholdBytes", "4096");
         InsertIfNotPresent(options, "FragmentReassemblyTimeoutSeconds", "604800");
         InsertIfNotPresent(options, "OpportunisticPollEnabled", "true");
+        InsertIfNotPresent(options, "ScheduledPollEnabled", "false");
+        InsertIfNotPresent(options, "PollIntervalHours", "6");
 
         ValidateRequiredConfig();
 

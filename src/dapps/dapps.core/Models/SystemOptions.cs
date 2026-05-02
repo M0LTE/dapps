@@ -110,6 +110,26 @@ public class SystemOptions
     public bool OpportunisticPollEnabled { get; set; } = true;
 
     /// <summary>
+    /// Plan F3b — scheduled poll. When true, the
+    /// <c>PollSchedulerService</c> walks every AGW-reachable manual
+    /// neighbour on a slow cadence and drains queued mail via
+    /// <c>rev</c>. Off by default — opportunistic poll on every push
+    /// covers the majority of cases for free; this is for nodes that
+    /// don't push often (read-only consumers, scheduled HF stations)
+    /// and would otherwise let mail rot at their forwarding partners.
+    /// </summary>
+    public bool ScheduledPollEnabled { get; set; } = false;
+
+    /// <summary>
+    /// Interval between full poll sweeps when
+    /// <see cref="ScheduledPollEnabled"/> is true. Default 6 hours —
+    /// shorter than the probe scheduler's daily cadence because
+    /// polling drains real mail that an operator wants delivered, not
+    /// just liveness checks.
+    /// </summary>
+    public int PollIntervalHours { get; set; } = 6;
+
+    /// <summary>
     /// Which routing algorithm composition to use. Two stacks are
     /// shipped today; both wrap <see cref="dapps.core.Routing.StaticRoutingAlgorithm"/>
     /// so operator overrides always win.

@@ -442,7 +442,7 @@ Where this shines is the corner DAPPS is most under-served on today: HF broadcas
 
 **Where it'd land**: alongside a real broadcast surface — e.g. "DAPPS bulletin" one-to-many, no-ack, fountain-coded over HF — as its own transport profile coexisting with F2's classic chunking. F2's `frag=N/M` doesn't preclude this; they're different shapes for different jobs.
 
-### F3. `rev` polling *(F3a done; F3b queued)*
+### F3. `rev` polling *(F3a + F3b done)*
 
 #### F3a — server rev + opportunistic poll on push *(done)*
 
@@ -458,9 +458,17 @@ Opportunistic poll is on by default — `Dappsv1SessionBackhaul.SendAsync` follo
 
 F2 ↔ F3 compose naturally: a multi-part message stuck mid-forward at B sits in B's queue as N fragment rows. When A polls B (or pushes to B and opportunistically polls), B drains them. A's inbox routes each fragment to the reassembly buffer, eventually reassembles. No special interop code needed beyond passing `mid=` / `frag=N/M` through `PolledMessage` (which it does).
 
-#### F3b — scheduled poll + dashboard *(queued)*
+#### F3b — scheduled poll + dashboard *(done)*
 
-For nodes that don't push often (read-only consumers, scheduled HF stations) the opportunistic mode never fires. A periodic `PollSchedulerService` mirroring `ProbeSchedulerService` walks known neighbours on a slow cadence, opens a session, sends `rev`, drains, disconnects. `SystemOptions.ScheduledPollEnabled` (off by default), `PollIntervalHours` (default 6). Dashboard panel + REST. Lands in the next PR.
+For nodes that don't push often (read-only consumers, scheduled HF stations) the opportunistic mode never fires. `PollSchedulerService` mirrors `ProbeSchedulerService`: walks AGW-reachable neighbours on a slow cadence, opens a session, drains via `rev`, disconnects. UDP-only neighbours are excluded by design — F3 is AGW-only.
+
+`NodePoller` is the single-shot worker: connect → wait for `DAPPSv1>` → `PollAsync` → deliver each polled message to `IBackhaulInbox`. Reused by both the scheduler and the on-demand REST endpoint, so an operator-triggered "poll now" exercises identical code to the cadenced sweep.
+
+Operator state is per-callsign in `DbPolledNode` (PK Callsign, LastPolledAt, LastSuccessAt, LastError, ConsecutiveFailures, MessagesDrained, OptOut). Failure counter resets on first success after a streak. OptOut is operator state and survives result updates.
+
+`SystemOptions.ScheduledPollEnabled` (off by default), `PollIntervalHours` (default 6). REST under `/Polls`: list, sweep-all, poll-one, set opt-out, forget. Dashboard panel surfaces the table with action buttons.
+
+8 new tests in `F3PollSchedulerTests` covering target enumeration (no neighbours / AGW only / UDP excluded / opt-out excluded) and `PollAndRecordAsync` shape (success-clean, success-with-message, fail-then-succeed counter reset, opt-out preservation across result update).
 
 ### F4. Protocol versioning policy
 
