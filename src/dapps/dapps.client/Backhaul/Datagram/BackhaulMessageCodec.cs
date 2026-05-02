@@ -10,27 +10,35 @@ namespace dapps.client.Backhaul.Datagram;
 /// doesn't fit. Stays in <c>dapps.client</c> so any bearer impl can
 /// reuse it without taking a dependency on the AGW path.
 ///
-/// Wire format (all integers little-endian). Version 4 (current) adds
-/// the <c>FloodHopsRemaining</c> field for B5 bounded-flood
-/// cold-start. Version 3 added <c>LinkSourceCallsign</c> for
-/// passive-learning routing. Version 2 added <c>Originator</c> for F1
-/// end-to-end source tracking. Version 1 was the original. Decoder
-/// accepts all four; encoder writes v4.
+/// Wire format (all integers little-endian). The version byte is the
+/// first thing on the wire; receivers reject anything other than the
+/// current <see cref="Version"/>. We're pre-shipping, so there's no
+/// in-flight traffic that would break — the version mechanism is
+/// preserved (so a future format change still hard-fails cleanly
+/// rather than silently misinterpreting bytes), but we don't carry
+/// historical decoder paths.
 /// <code>
-///   [1]  version           = 4 (encoder); decoder also accepts 1, 2, 3
+///   [1]  version           = current Version
 ///   [1]  flags             bit0=salt, bit1=ttl, bit2=headers,
-///                          bit3=originator (v2+), bit4=link-source (v3+),
-///                          bit5=flood-hops-remaining (v4+)
+///                          bit3=originator, bit4=link-source,
+///                          bit5=flood-hops-remaining,
+///                          bit6=source-route, bit7=traversed-hops
 ///   [7]  id (UTF-8 ASCII, 7-char hex from DappsMessage.ComputeHash)
 ///   [8]  salt              (only when flags bit0)
 ///   [4]  ttl seconds       (only when flags bit1)
 ///   [2]  destination len
 ///   [N]  destination       (UTF-8)
-///   [2]  originator len    (only when flags bit3, v2+)
-///   [O]  originator        (UTF-8, v2+)
-///   [2]  link-source len   (only when flags bit4, v3+)
-///   [L]  link-source       (UTF-8, v3+)
-///   [1]  flood-hops        (only when flags bit5, v4+)
+///   [2]  originator len    (only when flags bit3)
+///   [O]  originator        (UTF-8)
+///   [2]  link-source len   (only when flags bit4)
+///   [L]  link-source       (UTF-8)
+///   [1]  flood-hops        (only when flags bit5)
+///   [1]  source-route count (only when flags bit6)
+///   per source-route hop:
+///     [1] hop len, [N] hop (UTF-8)
+///   [1]  traversed count   (only when flags bit7)
+///   per traversed hop:
+///     [1] hop len, [N] hop (UTF-8)
 ///   [2]  headers count     (only when flags bit2)
 ///   per header:
 ///     [2] key len, [K] key (UTF-8), [2] value len, [V] value (UTF-8)
@@ -41,8 +49,10 @@ namespace dapps.client.Backhaul.Datagram;
 /// </summary>
 public static class BackhaulMessageCodec
 {
-    /// <summary>Version this encoder writes. Decoder accepts v1, v2, v3, v4.</summary>
-    public const byte Version = 4;
+    /// <summary>Version this encoder writes AND the only version the
+    /// decoder accepts. Bump on any wire-format change so a mismatched
+    /// peer fails fast instead of silently misreading flag bits.</summary>
+    public const byte Version = 5;
     public const int IdLength = 7;
 
     [Flags]
@@ -52,9 +62,11 @@ public static class BackhaulMessageCodec
         HasSalt = 1 << 0,
         HasTtl = 1 << 1,
         HasHeaders = 1 << 2,
-        HasOriginator = 1 << 3,         // v2+
-        HasLinkSource = 1 << 4,         // v3+
-        HasFloodHops = 1 << 5,          // v4+
+        HasOriginator = 1 << 3,
+        HasLinkSource = 1 << 4,
+        HasFloodHops = 1 << 5,
+        HasSourceRoute = 1 << 6,
+        HasTraversedHops = 1 << 7,
     }
 
     public static byte[] Encode(BackhaulMessage message)
@@ -75,6 +87,12 @@ public static class BackhaulMessageCodec
         var headerBytes = message.Headers is { Count: > 0 }
             ? EncodeHeaders(message.Headers)
             : [];
+        var sourceRouteBytes = message.SourceRoute is { Count: > 0 }
+            ? EncodeCallsignList(message.SourceRoute)
+            : [];
+        var traversedBytes = message.TraversedHops is { Count: > 0 }
+            ? EncodeCallsignList(message.TraversedHops)
+            : [];
 
         var flags = Flags.None;
         if (message.Salt.HasValue) flags |= Flags.HasSalt;
@@ -83,6 +101,8 @@ public static class BackhaulMessageCodec
         if (origBytes.Length > 0) flags |= Flags.HasOriginator;
         if (linkBytes.Length > 0) flags |= Flags.HasLinkSource;
         if (message.FloodHopsRemaining.HasValue) flags |= Flags.HasFloodHops;
+        if (sourceRouteBytes.Length > 0) flags |= Flags.HasSourceRoute;
+        if (traversedBytes.Length > 0) flags |= Flags.HasTraversedHops;
 
         var size = 1 + 1 + IdLength
             + (message.Salt.HasValue ? 8 : 0)
@@ -91,6 +111,8 @@ public static class BackhaulMessageCodec
             + (origBytes.Length > 0 ? 2 + origBytes.Length : 0)
             + (linkBytes.Length > 0 ? 2 + linkBytes.Length : 0)
             + (message.FloodHopsRemaining.HasValue ? 1 : 0)
+            + sourceRouteBytes.Length
+            + traversedBytes.Length
             + headerBytes.Length
             + 4 + message.Payload.Length;
 
@@ -140,6 +162,18 @@ public static class BackhaulMessageCodec
             buffer[offset++] = message.FloodHopsRemaining.Value;
         }
 
+        if (sourceRouteBytes.Length > 0)
+        {
+            sourceRouteBytes.CopyTo(buffer.AsSpan(offset));
+            offset += sourceRouteBytes.Length;
+        }
+
+        if (traversedBytes.Length > 0)
+        {
+            traversedBytes.CopyTo(buffer.AsSpan(offset));
+            offset += traversedBytes.Length;
+        }
+
         headerBytes.CopyTo(buffer.AsSpan(offset));
         offset += headerBytes.Length;
 
@@ -159,13 +193,9 @@ public static class BackhaulMessageCodec
 
         var offset = 0;
         var version = buffer[offset++];
-        // Decoder accepts v1 (pre-F1), v2 (F1 originator), v3 (B5
-        // link-source), and v4 (B5 flood-hops). Older versions never
-        // set the newer flag bits, so the decode path falls through
-        // naturally without per-version branching after this.
-        if (version is not (1 or 2 or 3) && version != Version)
+        if (version != Version)
         {
-            throw new InvalidDataException($"unsupported codec version {version}; expected 1, 2, 3, or {Version}");
+            throw new InvalidDataException($"unsupported codec version {version}; expected {Version}");
         }
         var flags = (Flags)buffer[offset++];
 
@@ -215,6 +245,18 @@ public static class BackhaulMessageCodec
             floodHops = buffer[offset++];
         }
 
+        IReadOnlyList<string>? sourceRoute = null;
+        if ((flags & Flags.HasSourceRoute) != 0)
+        {
+            sourceRoute = DecodeCallsignList(buffer, ref offset);
+        }
+
+        IReadOnlyList<string>? traversedHops = null;
+        if ((flags & Flags.HasTraversedHops) != 0)
+        {
+            traversedHops = DecodeCallsignList(buffer, ref offset);
+        }
+
         IReadOnlyDictionary<string, string>? headers = null;
         if ((flags & Flags.HasHeaders) != 0)
         {
@@ -240,12 +282,11 @@ public static class BackhaulMessageCodec
         offset += 4;
         var payload = buffer.Slice(offset, (int)payloadLen).ToArray();
 
-        return new BackhaulMessage(id, destination, salt, ttl, payload, headers, originator, linkSource, floodHops);
+        return new BackhaulMessage(id, destination, salt, ttl, payload, headers, originator, linkSource, floodHops, sourceRoute, traversedHops);
     }
 
     private static byte[] EncodeHeaders(IReadOnlyDictionary<string, string> headers)
     {
-        // Two-pass: size first, then write. Avoids list-of-byte-arrays churn.
         var pairs = headers.Select(kv => (Key: Encoding.UTF8.GetBytes(kv.Key), Val: Encoding.UTF8.GetBytes(kv.Value))).ToArray();
         var size = 2 + pairs.Sum(p => 2 + p.Key.Length + 2 + p.Val.Length);
         var buf = new byte[size];
@@ -264,5 +305,46 @@ public static class BackhaulMessageCodec
             off += val.Length;
         }
         return buf;
+    }
+
+    /// <summary>Length-prefixed list of UTF-8 callsigns. Count is one
+    /// byte (max 255 hops — far beyond anything realistic; AODV-style
+    /// algorithms cap at ~10) and each hop's length is one byte (max
+    /// 255 chars; a callsign is ~9 incl SSID).</summary>
+    private static byte[] EncodeCallsignList(IReadOnlyList<string> hops)
+    {
+        if (hops.Count > byte.MaxValue)
+        {
+            throw new ArgumentException($"callsign list exceeds {byte.MaxValue} entries", nameof(hops));
+        }
+        var encoded = hops.Select(h => Encoding.UTF8.GetBytes(h)).ToArray();
+        var size = 1 + encoded.Sum(b => 1 + b.Length);
+        var buf = new byte[size];
+        var off = 0;
+        buf[off++] = (byte)hops.Count;
+        foreach (var bytes in encoded)
+        {
+            if (bytes.Length > byte.MaxValue)
+            {
+                throw new ArgumentException("callsign exceeds 255 bytes", nameof(hops));
+            }
+            buf[off++] = (byte)bytes.Length;
+            bytes.CopyTo(buf.AsSpan(off));
+            off += bytes.Length;
+        }
+        return buf;
+    }
+
+    private static IReadOnlyList<string> DecodeCallsignList(ReadOnlySpan<byte> buffer, ref int offset)
+    {
+        var count = buffer[offset++];
+        var hops = new List<string>(count);
+        for (var i = 0; i < count; i++)
+        {
+            var len = buffer[offset++];
+            hops.Add(Encoding.UTF8.GetString(buffer.Slice(offset, len)));
+            offset += len;
+        }
+        return hops;
     }
 }

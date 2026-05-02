@@ -21,7 +21,9 @@ public sealed record BackhaulMessage(
     IReadOnlyDictionary<string, string>? Headers = null,
     string? Originator = null,
     string? LinkSourceCallsign = null,
-    byte? FloodHopsRemaining = null);
+    byte? FloodHopsRemaining = null,
+    IReadOnlyList<string>? SourceRoute = null,
+    IReadOnlyList<string>? TraversedHops = null);
 
 // LinkSourceCallsign: the *immediate sender's* callsign, distinct from
 // Originator (the F1 end-to-end source). Carried on bearers that don't
@@ -42,3 +44,19 @@ public sealed record BackhaulMessage(
 // regular routed message, not a flood." The bounded-flood fallback
 // (FloodFallbackAlgorithm) is the only thing that originates floods;
 // other algorithms / inbox handlers just propagate them.
+//
+// SourceRoute (MeshCore-flavoured): when set, the message must be
+// delivered along this exact ordered list of intermediate hops. Each
+// forwarder takes the first entry as its next hop, strips it before
+// re-encoding, and forwards. When the list is empty the recipient
+// uses the destination's callsign as next hop (or delivers locally).
+// null means "no embedded path; let the algorithm pick a hop."
+//
+// TraversedHops (MeshCore-flavoured discovery): the ordered list of
+// intermediate node callsigns the message has visited so far,
+// excluding the originator and the local node. Each forwarder
+// appends its own callsign before re-encoding. Carried on
+// flood-discovery messages so the destination (and every transiting
+// node) can derive the reverse path back to the originator —
+// MeshCoreLikeRoutingAlgorithm uses this to populate its discovered-
+// paths table without explicit RREP frames.
