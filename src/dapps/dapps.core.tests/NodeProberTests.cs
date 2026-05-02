@@ -91,7 +91,11 @@ public sealed class NodeProberTests
     private sealed class FakeOutboundTransport(byte[] cannedReceiverBytes) : IDappsOutboundTransport
     {
         public Task<IDappsConnection> ConnectAsync(string localCallsign, string remoteCallsign, int bpqPortNumber, CancellationToken stoppingToken)
-            => Task.FromResult<IDappsConnection>(new FakeConnection(new MemoryStream(cannedReceiverBytes)));
+            // FakeDuplexStream rather than a bare MemoryStream — the
+            // prober may write back ("peers\n" on Phase 2 fetch-peers
+            // probes), which would otherwise overwrite the canned read
+            // buffer if read and write shared one stream.
+            => Task.FromResult<IDappsConnection>(new FakeConnection(new FakeDuplexStream(cannedReceiverBytes)));
 
         private sealed class FakeConnection(Stream stream) : IDappsConnection
         {

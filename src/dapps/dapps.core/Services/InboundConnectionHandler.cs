@@ -111,6 +111,11 @@ public class InboundConnectionHandler(
                         await HandleData(stream, parts[1], stoppingToken);
                     }
                 }
+                else if (cmd == Command.Peers)
+                {
+                    logger.LogInformation("Client is asking for our peers");
+                    await HandlePeers(stream, stoppingToken);
+                }
             }
         }
         finally
@@ -121,10 +126,18 @@ public class InboundConnectionHandler(
 
     private enum Command
     {
-        Quit, 
+        Quit,
         IHave,
         Data,
-        Help
+        Help,
+        /// <summary>
+        /// Plan B6.1 Phase 2 — transitive peer discovery. Client asks
+        /// "who do you forward to?"; we emit one <c>peer &lt;call&gt;</c>
+        /// line per known forward target, then <c>end</c>, then loop
+        /// back to the next prompt. No state, no persistence — purely
+        /// a read-only view of our neighbour / discovered-peer tables.
+        /// </summary>
+        Peers,
     }
 
     private static readonly string[] exitCommands = ["q", "bye", "quit", "exit"];
@@ -161,7 +174,69 @@ public class InboundConnectionHandler(
             return Command.Data;
         }
 
+        if (command == "peers" || command == "who")
+        {
+            // Accept either form; the spec doc canonicalises on `peers`,
+            // but `who` is the verb a sysop already types at a node prompt
+            // so it's a natural alias.
+            return Command.Peers;
+        }
+
         return null;
+    }
+
+    /// <summary>
+    /// Plan B6.1 Phase 2 — emit the set of callsigns we forward to.
+    /// One <c>peer &lt;callsign&gt; source=&lt;n|d&gt;[ port=&lt;byte&gt;]</c>
+    /// line per known forward target, then <c>end</c>. Callers (today:
+    /// dapps probers populating their own <c>DbProbedNode</c> table for
+    /// transitive discovery) parse line-by-line until <c>end</c>.
+    ///
+    /// Sources reported:
+    /// <list type="bullet">
+    /// <item><c>n</c> — manual <see cref="Models.DbNeighbour"/> row,
+    /// AGW-routable (UDP-only neighbours are skipped; the asker can't
+    /// reach them over the same bearer).</item>
+    /// <item><c>d</c> — AGW-bearer <see cref="Models.DbDiscoveredPeer"/>
+    /// row. We've heard a beacon but never been asked to forward to
+    /// them ourselves; useful as an exploration hint for the asker.</item>
+    /// </list>
+    ///
+    /// Read-only — emitting a peer is not an endorsement, doesn't bind
+    /// us to forward, and doesn't leak anything more sensitive than
+    /// what already shows up on the air via beacons or DAPPS forwarding.
+    /// </summary>
+    private async Task HandlePeers(Stream stream, CancellationToken ct)
+    {
+        var sb = new StringBuilder();
+        var emitted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        var neighbours = await database.GetNeighbours();
+        foreach (var n in neighbours)
+        {
+            if (string.IsNullOrWhiteSpace(n.Callsign)) continue;
+            if (n.UdpEndpoint is not null) continue;   // UDP-only — not AGW-reachable for the asker
+            if (!emitted.Add(n.Callsign)) continue;
+            sb.Append("peer ").Append(n.Callsign).Append(" source=n");
+            if (n.BpqPort is { } port) sb.Append(" port=").Append(port);
+            sb.Append('\n');
+        }
+
+        var peers = await database.GetDiscoveredPeers();
+        foreach (var p in peers)
+        {
+            if (!string.Equals(p.Bearer, "agw", StringComparison.OrdinalIgnoreCase)) continue;
+            if (string.IsNullOrWhiteSpace(p.Callsign)) continue;
+            if (!emitted.Add(p.Callsign)) continue;     // already reported as a neighbour
+            sb.Append("peer ").Append(p.Callsign).Append(" source=d");
+            if (p.BpqPort is { } port) sb.Append(" port=").Append(port);
+            sb.Append('\n');
+        }
+
+        sb.Append("end\n");
+        await stream.WriteAsync(Encoding.UTF8.GetBytes(sb.ToString()), ct);
+        await stream.FlushAsync(ct);
+        logger.LogInformation("Sent {0} peer record(s) to {1}", emitted.Count, sourceCallsign);
     }
 
     private async Task HandleMessageOffer(Stream stream, string command, CancellationToken stoppingToken)

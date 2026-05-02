@@ -114,7 +114,8 @@ public class ProbesController(
         LastError: r.LastError,
         ConsecutiveFailures: r.ConsecutiveFailures,
         SuccessCount: r.SuccessCount,
-        OptOut: r.OptOut);
+        OptOut: r.OptOut,
+        Source: string.IsNullOrEmpty(r.Source) ? "neighbour" : r.Source);
 }
 
 /// <summary>Wire shape returned by the /Probes endpoints. Mirrors
@@ -128,7 +129,8 @@ public sealed record ProbedNodeModel(
     string LastError,
     int ConsecutiveFailures,
     int SuccessCount,
-    bool OptOut);
+    bool OptOut,
+    string Source);
 
 /// <summary>Body for <c>POST /Probes/{callsign}/optout</c>.</summary>
 public sealed record OptOutBody(bool OptOut);

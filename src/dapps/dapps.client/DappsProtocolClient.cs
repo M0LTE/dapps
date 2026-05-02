@@ -149,6 +149,64 @@ public class DappsProtocolClient(Stream stream, ILoggerFactory loggerFactory)
     }
 
     /// <summary>
+    /// Plan B6.1 Phase 2 — ask the remote DAPPS for its peers. Sends
+    /// <c>peers\n</c> and reads <c>peer …</c> lines until <c>end</c>;
+    /// silently tolerates other command-shaped lines arriving in between
+    /// so a noisy peer doesn't break the parse. Inactivity timeout
+    /// applies per-line (same budget as <see cref="ReadInitialPromptAsync"/>).
+    /// </summary>
+    public async Task<IReadOnlyList<DiscoveredPeerInfo>> RequestPeersAsync(CancellationToken ct)
+    {
+        await stream.WriteAsync(Encoding.UTF8.GetBytes("peers\n"), ct);
+        await stream.FlushAsync(ct);
+
+        var results = new List<DiscoveredPeerInfo>();
+        while (true)
+        {
+            var line = await ReadLineAsync(ct);
+            if (line.Length == 0)
+            {
+                logger.LogWarning("EOF reading peers response after {0} record(s)", results.Count);
+                break;
+            }
+            if (string.Equals(line, "end", StringComparison.OrdinalIgnoreCase)) break;
+
+            // Line shape: "peer <callsign> source=<n|d>[ port=<byte>]"
+            var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length < 2 || !string.Equals(parts[0], "peer", StringComparison.OrdinalIgnoreCase))
+            {
+                // Non-peer / non-end lines aren't part of this protocol;
+                // skip rather than abort so a future server adding extra
+                // info to the response doesn't break old clients.
+                continue;
+            }
+
+            var callsign = parts[1];
+            string? source = null;
+            int? port = null;
+            for (var i = 2; i < parts.Length; i++)
+            {
+                var kv = parts[i];
+                var eq = kv.IndexOf('=');
+                if (eq <= 0) continue;
+                var key = kv[..eq];
+                var value = kv[(eq + 1)..];
+                if (string.Equals(key, "source", StringComparison.OrdinalIgnoreCase)) source = value;
+                else if (string.Equals(key, "port", StringComparison.OrdinalIgnoreCase)
+                         && int.TryParse(value, out var p) && p >= 0 && p <= 255) port = p;
+            }
+            results.Add(new DiscoveredPeerInfo(callsign, source ?? "", port));
+        }
+        return results;
+    }
+
+    /// <summary>One row of a <c>peers</c> response. <see cref="Source"/>
+    /// is empty when the server didn't tag it; the wire form is
+    /// <c>"n"</c> for a neighbour, <c>"d"</c> for a beacon-discovered
+    /// peer.</summary>
+    public sealed record DiscoveredPeerInfo(string Callsign, string Source, int? BpqPort);
+
+    /// <summary>
     /// Reads a line terminated by <c>\n</c>, <c>\r</c>, or <c>\r\n</c>.
     /// Leading line terminators are skipped (so a stranded <c>\n</c>
     /// after a <c>\r\n</c> sequence on the previous call doesn't yield
