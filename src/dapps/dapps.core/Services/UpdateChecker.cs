@@ -28,7 +28,13 @@ public sealed class UpdateChecker(
     ILogger<UpdateChecker> logger) : BackgroundService
 {
     private const string ReleasesUrl = "https://api.github.com/repos/M0LTE/dapps/releases/latest";
-    private static readonly TimeSpan PollInterval = TimeSpan.FromHours(6);
+    // 1 hour: GitHub's unauthenticated rate limit is 60 req/hour/IP, so
+    // one poll/hour is well within budget. 6h was too long for "I just
+    // shipped, do my nodes see it?" — the dashboard would tell operators
+    // their freshly-pushed release didn't exist for hours. Operators
+    // wanting instant feedback hit POST /Update/check or the dashboard
+    // "Check now" button.
+    private static readonly TimeSpan PollInterval = TimeSpan.FromHours(1);
     private static readonly TimeSpan StartupDelay = TimeSpan.FromSeconds(15);
 
     private LatestRelease? _latest;
@@ -70,6 +76,16 @@ public sealed class UpdateChecker(
             catch (OperationCanceledException) { return; }
         }
     }
+
+    /// <summary>
+    /// Manually re-poll GitHub now, regardless of the cached cadence.
+    /// Used by the dashboard's "Check now" button and the
+    /// <c>POST /Update/check</c> endpoint when an operator wants
+    /// instant confirmation that a freshly-shipped release is visible
+    /// to this node — instead of waiting up to an hour for the next
+    /// scheduled poll.
+    /// </summary>
+    public Task RefreshAsync(CancellationToken ct) => PollOnce(ct);
 
     private async Task PollOnce(CancellationToken ct)
     {

@@ -61,6 +61,20 @@ public class UpdateController(
             LastRun: lastRun);
     }
 
+    /// <summary>
+    /// Plan C5.2 — manual GitHub re-poll. The background
+    /// <see cref="UpdateChecker"/> polls every hour; operators who
+    /// just shipped a release and want to see it appear on a node's
+    /// dashboard immediately hit this. Cheap (one HTTPS round-trip);
+    /// auth-gated like the rest of /Update.
+    /// </summary>
+    [HttpPost("check")]
+    public async Task<UpdateStatusResponse> Check(CancellationToken ct)
+    {
+        await updateChecker.RefreshAsync(ct);
+        return Status();
+    }
+
     [HttpPost("apply")]
     public IActionResult Apply()
     {
