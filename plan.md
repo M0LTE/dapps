@@ -253,18 +253,17 @@ Phase 2 adds a new **`peers` command on the DAPPSv1 protocol** (`who` aliased) a
 
 **Convention:** "DAPPS lives here" = an `APPLICATION` line whose alias is `DAPPS` (typing `DAPPS` at the node prompt connects to the local DAPPSv1 instance). Already what we recommend; documented in the install README. Phase 2b leans on this.
 
-#### B6.2 — HF NVIS solicit-and-listen *(on-demand done; scheduled cadence queued)*
+#### B6.2 — HF NVIS solicit-and-listen *(done — on-demand + scheduled cadence)*
 
 Wire form: `DAPPS v1 solicit callsign=M0LTE-9` — same KV style as the beacon, longer fixed prefix so the parsers don't confuse them. `SolicitCodec.TryParse` strictly anchors on `"DAPPS v1 solicit "` and accepts a `callsign=` field plus arbitrary forward-compat KVs. Both bearers (`AgwUiDiscoveryBearer`, `UdpMulticastDiscoveryBearer`) gained a `SolicitAsync(SolicitFrame, channelKey, ct)` emit method (UI 'M' frame on AGW, multicast datagram on UDP) and try the solicit codec before the beacon codec on inbound, surfacing them as `ReceivedSolicit` on the same listen stream as `ReceivedBeacon`. Both inherit from a new `ReceivedDiscoveryFrame` base so the dispatcher can pattern-match.
 
 `DiscoveryService` now responds to incoming solicits by emitting a beacon on the same channel after a uniform random delay in `[0, SolicitResponseMaxDelay]` (default 5 s). The random jitter avoids the "ten nodes hear the same solicit, all reply at once" channel-saturation case. Self-echo on the UDP loopback path is filtered out (we don't respond to our own solicit). Replies arrive at the asker as normal beacons → `DbDiscoveredPeer` upsert via the existing path; no new storage. REST surface: `POST /DiscoveryChannels/{id}/solicit` fires a one-shot solicit; `503` if the bearer isn't currently running, `400` if the channel is disabled. Dashboard: per-channel "solicit" button next to "remove".
 
-**What's still queued:** a *scheduled* solicit cadence per channel (the original "HF channels solicit every N hours" knob). Skipped intentionally because the global airtime-budget idea in the scratchpad is the right shape for this — once the budget accountant lands, the solicit cadence becomes a budget-share question rather than a per-channel duplicate of the beacon-interval knob. On-demand solicits cover the immediate "I want to ping the channel right now" use case, which is the one a sysop reaches for during HF testing anyway.
+Scheduled cadence landed alongside the airtime budget: per-channel `DbDiscoveryChannel.SolicitIntervalSeconds` (0 = disabled, default), gated through the same `AirtimeAccountant.TryReserve` as scheduled beacons and solicit replies. `DiscoveryService.EmitAndSweepAsync` keeps a per-channel `nextSolicit` map alongside `nextEmit` and fires `bearer.SolicitAsync` on cadence — independent of beacon cadence so a channel can beacon every 30 min and solicit every 4 h, or vice versa. Defer math mirrors beacons (quarter-interval retry on budget refusal). Operator surface: REST `DiscoveryChannelModel.SolicitIntervalSeconds`, dashboard "Solicit every" column, "Add discovery channel" form input. Sim coverage: `prove-scheduled-solicit` reconfigures B's channels with `SolicitIntervalSeconds=3`, restarts the node, wipes discoveredpeers, waits 12 s, and asserts both A and C re-populate without any operator-triggered solicit.
 
 Implementation notes carried forward:
 - **Frame format**: long magic `DAPPS v1 solicit ` distinguishes solicits from beacons at the codec layer. Bearers try solicit first; beacons fall through.
-- **Cadence**: on-demand only today (REST + dashboard). Scheduled cadence to be designed alongside the discovery airtime budget.
-- **Receive window**: random reply delay 0..5 s by default. Operator-tuneable via `DiscoveryService.SolicitResponseMaxDelay`; a per-channel column lands when scheduled cadence does.
+- **Receive window**: random reply delay 0..5 s by default. Operator-tuneable via `DiscoveryService.SolicitResponseMaxDelay`.
 - **Storage**: replies are normal beacons — `DbDiscoveredPeer` upserts via the existing path. No solicit-specific persistence.
 
 #### Sequencing

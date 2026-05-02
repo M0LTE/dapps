@@ -129,8 +129,27 @@ start_node() {
     local n=$1
     local d; d="$(node_dir "$n")"
     mkdir -p "$d/data"
+    # Fresh start — wipe DB + log so the topology comes up from a
+    # clean slate every `up`. Use restart_node when you want to bounce
+    # a node mid-test without losing its configured channels / peers.
     rm -f "$d/data/dapps.db" "$d/dapps.log"
 
+    _launch_node "$n"
+}
+
+# Bounce a node without wiping its DB — same env, same paths, same
+# port. Used by tests that need DiscoveryService to re-read channel
+# config (e.g. SolicitIntervalSeconds, which is captured at
+# StartAsync) without losing operator-configured rows.
+restart_node() {
+    local n=$1
+    stop_node "$n"
+    _launch_node "$n"
+}
+
+_launch_node() {
+    local n=$1
+    local d; d="$(node_dir "$n")"
     echo ">>> Starting $n (${CALLSIGN[$n]}) http=${HTTP_PORT[$n]} udp=${UDP_PORT[$n]} mqtt=${MQTT_PORT[$n]}"
     (
         cd "$d"
@@ -559,6 +578,91 @@ PY
     echo "═════════════════════════════════════════════════════════════"
 }
 
+# B6.2 follow-up acceptance — scheduled-solicit cadence. Same
+# topology, but instead of operator-triggering a solicit we set
+# SolicitIntervalSeconds=3 on B's G1+G2 channels and let the
+# DiscoveryService emit the solicit on its own. After wiping B's
+# discoveredpeers, the table should re-populate within one cadence
+# tick + the 5s max reply jitter — all without a single REST POST
+# /solicit call.
+cmd_prove_scheduled_solicit() {
+    local n=B
+    local d; d="$(node_dir "$n")/data/dapps.db"
+    local cookie; cookie="$(node_dir "$n")/cookie.txt"
+    local base="http://127.0.0.1:${HTTP_PORT[$n]}"
+
+    if [ ! -f "$d" ] || [ ! -f "$cookie" ]; then
+        echo "!!! Node $n not configured (run \`up\` first)"
+        return 1
+    fi
+
+    echo ">>> Setting SolicitIntervalSeconds=3 on every channel of ${CALLSIGN[$n]}…"
+    local chans; chans=$(curl -fsS -b "$cookie" "$base/DiscoveryChannels")
+    # Re-POST each channel with the new interval. Round-trip every
+    # field so we don't reset cost / TTL / etc. to defaults.
+    printf '%s' "$chans" | python3 -c '
+import json, sys
+chans = json.load(sys.stdin)
+for c in chans:
+    c["SolicitIntervalSeconds"] = 3
+    print(json.dumps(c))
+' | while read -r body; do
+        curl -fsS -o /dev/null -b "$cookie" -X POST "$base/DiscoveryChannels" \
+            -H 'content-type: application/json' -d "$body"
+    done
+
+    echo ">>> Wiping discovered peers on ${CALLSIGN[$n]}…"
+    python3 - "$d" <<'PY'
+import sqlite3, sys
+con = sqlite3.connect(sys.argv[1])
+con.execute("delete from discoveredpeers"); con.commit()
+PY
+
+    # The DiscoveryService applies channel config at startup; bounce
+    # the node so the new SolicitIntervalSeconds takes effect.
+    # restart_node preserves the DB (start_node would wipe it).
+    echo ">>> Restarting ${CALLSIGN[$n]} to pick up the new cadence…"
+    restart_node "$n"
+
+    # Wait for: startup grace (sub-second on the sim) + first cadence
+    # tick (3s) + max reply jitter (5s) + transit margin.
+    echo ">>> Waiting 12s for one scheduled solicit + reply round-trip…"
+    sleep 12
+
+    echo ">>> Discovered peers on ${CALLSIGN[$n]} after scheduled solicit:"
+    if ! python3 - "$d" "${CALLSIGN[A]}" "${CALLSIGN[C]}" <<'PY'
+import sqlite3, sys
+con = sqlite3.connect(sys.argv[1])
+rows = list(con.execute("select Callsign, Bearer, ChannelKey from discoveredpeers order by Callsign, ChannelKey"))
+expected = {sys.argv[2], sys.argv[3]}
+seen = {cs for cs, _, _ in rows}
+if not rows:
+    print("  (none — scheduled solicit got no replies)")
+    sys.exit(1)
+for cs, b, k in rows:
+    print(f"  {cs} via {b}/{k}")
+missing = expected - seen
+if missing:
+    print(f"  FAIL — expected to see {sorted(expected)}, missing {sorted(missing)}")
+    sys.exit(1)
+print(f"  OK — both {sorted(expected)} reached us via the scheduled solicit cadence")
+PY
+    then
+        echo "!!! B6.2 scheduled-solicit acceptance failed"
+        return 1
+    fi
+
+    echo
+    echo "═════════════════════════════════════════════════════════════"
+    echo "  B6.2 SCHEDULED-SOLICIT ACCEPTANCE: with SolicitIntervalSeconds"
+    echo "  set on each channel, ${CALLSIGN[$n]}'s discoveredpeers table"
+    echo "  re-populated WITHOUT any operator-triggered REST /solicit —"
+    echo "  the DiscoveryService cadence loop fired solicits on its own"
+    echo "  and the airtime-budget gate let them through (no global cap"
+    echo "  configured)."
+    echo "═════════════════════════════════════════════════════════════"
+}
+
 # Canned non-trivial exercise — runs several sends across the topology
 # that exercise different path lengths, branching, and parallel flows.
 # After all sends complete, prints each receiver's inbox so F1 origin
@@ -638,6 +742,9 @@ cmd_exercise() {
 
     echo
     cmd_prove_solicit
+
+    echo
+    cmd_prove_scheduled_solicit
 }
 
 cmd_status() {
@@ -686,5 +793,6 @@ case "${1:-up}" in
     prove-meshcore) cmd_prove_meshcore ;;
     prove-fragmentation) cmd_prove_fragmentation ;;
     prove-solicit) cmd_prove_solicit ;;
-    *)          echo "usage: $0 {up|stop|send <from> <to> [payload]|exercise|status|verify|learned|prove-learning|discovered|prove-meshcore|prove-fragmentation|prove-solicit}"; echo "       SIM_ALGO=meshcore $0 up    # run with the MeshCore-like algorithm instead of passive-flood"; exit 2 ;;
+    prove-scheduled-solicit) cmd_prove_scheduled_solicit ;;
+    *)          echo "usage: $0 {up|stop|send <from> <to> [payload]|exercise|status|verify|learned|prove-learning|discovered|prove-meshcore|prove-fragmentation|prove-solicit|prove-scheduled-solicit}"; echo "       SIM_ALGO=meshcore $0 up    # run with the MeshCore-like algorithm instead of passive-flood"; exit 2 ;;
 esac

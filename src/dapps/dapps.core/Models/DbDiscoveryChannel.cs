@@ -75,6 +75,19 @@ public sealed class DbDiscoveryChannel
     /// </summary>
     public int AirtimeBudgetSecondsPerHour { get; set; } = 0;
 
+    /// <summary>
+    /// Plan B6.2 follow-up — seconds between scheduled solicits on this
+    /// channel. 0 (default) disables scheduled solicits; the channel
+    /// still answers operator-triggered solicits and replies to incoming
+    /// solicits from other peers. A positive value has DAPPS proactively
+    /// re-discover peers on cadence — useful on HF where scheduled
+    /// beacons may have missed a propagation window. Reservations are
+    /// gated through the airtime accountant; setting a tight per-channel
+    /// <see cref="AirtimeBudgetSecondsPerHour"/> is the natural way to
+    /// bound the resulting on-air rate.
+    /// </summary>
+    public int SolicitIntervalSeconds { get; set; } = 0;
+
     /// <summary>Apply <see cref="LinkClassDefaults"/> to any field still
     /// at its zero value. Lets controllers write a row with just
     /// (Bearer, ChannelKey, LinkClass) and pick up sensible defaults
