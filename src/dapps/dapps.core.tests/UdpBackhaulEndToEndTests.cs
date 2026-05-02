@@ -147,7 +147,7 @@ public sealed class UdpBackhaulEndToEndTests
         }
         var database = new Database(NullLogger<Database>.Instance, optionsMonitor);
         var listener = new UdpDatagramListener(
-            optionsMonitor, inbox, database, NullLogger<UdpDatagramListener>.Instance);
+            optionsMonitor, inbox, database, TimeProvider.System, NullLogger<UdpDatagramListener>.Instance);
         // Fire-and-forget: BackgroundService.StartAsync returns once the
         // execute task is scheduled. The listener begins receiving on its
         // own task. Disposal cancels.

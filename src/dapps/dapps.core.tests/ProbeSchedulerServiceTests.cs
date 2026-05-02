@@ -412,9 +412,9 @@ public sealed class ProbeSchedulerServiceTests : IAsyncLifetime
         TimeSpan? minInterProbeDelay = null,
         TimeSpan? maxInterProbeDelay = null)
     {
-        var prober = new NodeProber(transport, NullLoggerFactory.Instance, NullLogger<NodeProber>.Instance);
+        var prober = new NodeProber(transport, TimeProvider.System, NullLoggerFactory.Instance, NullLogger<NodeProber>.Instance);
         var opts = MakeOptions(new SystemOptions { Callsign = "N0US", DefaultBpqPort = 7, ProbingEnabled = true });
-        return new ProbeSchedulerService(prober, database, opts, NullLogger<ProbeSchedulerService>.Instance)
+        return new ProbeSchedulerService(prober, database, opts, TimeProvider.System, NullLogger<ProbeSchedulerService>.Instance)
         {
             // Tests skip the 15-minute startup grace; ExecuteAsync isn't
             // exercised here, but if it were, this lets the loop fire

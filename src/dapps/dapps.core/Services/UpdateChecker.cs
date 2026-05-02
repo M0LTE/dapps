@@ -24,6 +24,7 @@ namespace dapps.core.Services;
 public sealed class UpdateChecker(
     IHttpClientFactory httpClientFactory,
     IOptionsMonitor<SystemOptions> options,
+    TimeProvider timeProvider,
     ILogger<UpdateChecker> logger) : BackgroundService
 {
     private const string ReleasesUrl = "https://api.github.com/repos/M0LTE/dapps/releases/latest";
@@ -59,13 +60,13 @@ public sealed class UpdateChecker(
         // Tiny startup delay so we don't slow first-render of the dashboard
         // and so the rest of the service surface (DB, MQTT, AGW reconnect)
         // gets a moment first.
-        try { await Task.Delay(StartupDelay, stoppingToken); }
+        try { await Task.Delay(StartupDelay, timeProvider, stoppingToken); }
         catch (OperationCanceledException) { return; }
 
         while (!stoppingToken.IsCancellationRequested)
         {
             await PollOnce(stoppingToken);
-            try { await Task.Delay(PollInterval, stoppingToken); }
+            try { await Task.Delay(PollInterval, timeProvider, stoppingToken); }
             catch (OperationCanceledException) { return; }
         }
     }
@@ -99,7 +100,7 @@ public sealed class UpdateChecker(
                 Name: release.name ?? release.tag_name,
                 Url: release.html_url ?? "",
                 PublishedAt: release.published_at,
-                FetchedAt: DateTime.UtcNow);
+                FetchedAt: timeProvider.GetUtcNow().UtcDateTime);
             logger.LogInformation(
                 "Update check: latest is {0} (running {1}{2})",
                 _latest.Tag, Current, UpdateAvailable ? " — UPDATE AVAILABLE" : "");

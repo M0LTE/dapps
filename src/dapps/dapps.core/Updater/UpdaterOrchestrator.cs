@@ -33,6 +33,7 @@ public sealed class UpdaterOrchestrator
     private readonly IUpdaterFileSystem fs;
     private readonly IUpdaterDownloader downloader;
     private readonly IUpdaterProcess proc;
+    private readonly TimeProvider timeProvider;
     private readonly ILogger logger;
     private readonly string currentVersion;
 
@@ -42,12 +43,17 @@ public sealed class UpdaterOrchestrator
         IUpdaterDownloader downloader,
         IUpdaterProcess proc,
         ILogger<UpdaterOrchestrator> logger,
-        string currentVersion)
+        string currentVersion,
+        TimeProvider? timeProvider = null)
     {
         this.paths = paths;
         this.fs = fs;
         this.downloader = downloader;
         this.proc = proc;
+        // The CLI side-door runs the orchestrator without DI. Default
+        // to system time when no TimeProvider is supplied — tests pass
+        // a FakeTimeProvider to drive deadlines deterministically.
+        this.timeProvider = timeProvider ?? TimeProvider.System;
         this.logger = logger;
         this.currentVersion = currentVersion;
     }
@@ -74,7 +80,7 @@ public sealed class UpdaterOrchestrator
             return 0;
         }
 
-        var startedAt = DateTime.UtcNow;
+        var startedAt = timeProvider.GetUtcNow().UtcDateTime;
         var status = new UpdateStatus(
             UpdatePhase.Checking, currentVersion, null, startedAt, startedAt, null);
         WriteStatus(status);
@@ -90,7 +96,7 @@ public sealed class UpdaterOrchestrator
             logger.LogError(ex, "GitHub Releases lookup failed");
             WriteStatus(status with
             {
-                Phase = UpdatePhase.Failed, UpdatedAt = DateTime.UtcNow, Error = $"check: {ex.Message}",
+                Phase = UpdatePhase.Failed, UpdatedAt = timeProvider.GetUtcNow().UtcDateTime, Error = $"check: {ex.Message}",
             });
             ClearRequest();
             return 2;
@@ -100,7 +106,7 @@ public sealed class UpdaterOrchestrator
             logger.LogWarning("No release info returned for RID {0}", Rid);
             WriteStatus(status with
             {
-                Phase = UpdatePhase.Failed, UpdatedAt = DateTime.UtcNow,
+                Phase = UpdatePhase.Failed, UpdatedAt = timeProvider.GetUtcNow().UtcDateTime,
                 Error = $"no release found for {Rid}",
             });
             ClearRequest();
@@ -108,7 +114,7 @@ public sealed class UpdaterOrchestrator
         }
 
         var targetVersion = latest.Tag.TrimStart('v');
-        status = status with { ToVersion = targetVersion, UpdatedAt = DateTime.UtcNow };
+        status = status with { ToVersion = targetVersion, UpdatedAt = timeProvider.GetUtcNow().UtcDateTime };
 
         // 2. Skip when we're already there. Belt-and-braces: the operator
         //    might click "apply" on a node that just upgraded a moment
@@ -116,14 +122,14 @@ public sealed class UpdaterOrchestrator
         if (string.Equals(targetVersion, currentVersion, StringComparison.Ordinal))
         {
             logger.LogInformation("Already on v{0}; nothing to do", currentVersion);
-            WriteStatus(status with { Phase = UpdatePhase.Success, UpdatedAt = DateTime.UtcNow });
+            WriteStatus(status with { Phase = UpdatePhase.Success, UpdatedAt = timeProvider.GetUtcNow().UtcDateTime });
             ClearRequest();
             return 0;
         }
 
         // 3. Download to a side path; never clobber the live binary
         //    until the whole download completes successfully.
-        WriteStatus(status with { Phase = UpdatePhase.Downloading, UpdatedAt = DateTime.UtcNow });
+        WriteStatus(status with { Phase = UpdatePhase.Downloading, UpdatedAt = timeProvider.GetUtcNow().UtcDateTime });
         try
         {
             await downloader.DownloadToAsync(latest.AssetUrl, paths.NewBinaryPath, ct);
@@ -135,7 +141,7 @@ public sealed class UpdaterOrchestrator
             fs.Delete(paths.NewBinaryPath);
             WriteStatus(status with
             {
-                Phase = UpdatePhase.Failed, UpdatedAt = DateTime.UtcNow, Error = $"download: {ex.Message}",
+                Phase = UpdatePhase.Failed, UpdatedAt = timeProvider.GetUtcNow().UtcDateTime, Error = $"download: {ex.Message}",
             });
             ClearRequest();
             return 2;
@@ -144,7 +150,7 @@ public sealed class UpdaterOrchestrator
         // 4. Atomic swap. After this point we're committed; failures
         //    flow through the rollback path so we always end with a
         //    runnable binary in place.
-        WriteStatus(status with { Phase = UpdatePhase.Swapping, UpdatedAt = DateTime.UtcNow });
+        WriteStatus(status with { Phase = UpdatePhase.Swapping, UpdatedAt = timeProvider.GetUtcNow().UtcDateTime });
         try
         {
             fs.SwapInPlace(paths.NewBinaryPath, paths.BinaryPath, paths.PreviousBinaryPath);
@@ -155,7 +161,7 @@ public sealed class UpdaterOrchestrator
             fs.Delete(paths.NewBinaryPath);
             WriteStatus(status with
             {
-                Phase = UpdatePhase.Failed, UpdatedAt = DateTime.UtcNow, Error = $"swap: {ex.Message}",
+                Phase = UpdatePhase.Failed, UpdatedAt = timeProvider.GetUtcNow().UtcDateTime, Error = $"swap: {ex.Message}",
             });
             ClearRequest();
             return 2;
@@ -164,7 +170,7 @@ public sealed class UpdaterOrchestrator
         // 5. Restart the unit + verify it stays up. ANY failure here
         //    triggers rollback, including non-zero systemctl exit and
         //    is-active going false at any point in the health window.
-        WriteStatus(status with { Phase = UpdatePhase.Restarting, UpdatedAt = DateTime.UtcNow });
+        WriteStatus(status with { Phase = UpdatePhase.Restarting, UpdatedAt = timeProvider.GetUtcNow().UtcDateTime });
         var restartCode = await proc.RestartServiceAsync(ServiceName, ct);
         if (restartCode != 0)
         {
@@ -172,9 +178,9 @@ public sealed class UpdaterOrchestrator
             return await RollBackAsync(status, $"restart returned {restartCode}", ct);
         }
 
-        WriteStatus(status with { Phase = UpdatePhase.Verifying, UpdatedAt = DateTime.UtcNow });
-        var deadline = DateTime.UtcNow + HealthWindow;
-        while (DateTime.UtcNow < deadline)
+        WriteStatus(status with { Phase = UpdatePhase.Verifying, UpdatedAt = timeProvider.GetUtcNow().UtcDateTime });
+        var deadline = timeProvider.GetUtcNow().UtcDateTime + HealthWindow;
+        while (timeProvider.GetUtcNow().UtcDateTime < deadline)
         {
             ct.ThrowIfCancellationRequested();
             await proc.DelayAsync(HealthPollInterval, ct);
@@ -195,7 +201,7 @@ public sealed class UpdaterOrchestrator
         }
 
         // 6. Stayed up the whole window — commit.
-        WriteStatus(status with { Phase = UpdatePhase.Success, UpdatedAt = DateTime.UtcNow });
+        WriteStatus(status with { Phase = UpdatePhase.Success, UpdatedAt = timeProvider.GetUtcNow().UtcDateTime });
         ClearRequest();
         logger.LogInformation("Update to v{0} successful", targetVersion);
         return 0;
@@ -234,7 +240,7 @@ public sealed class UpdaterOrchestrator
 
     private async Task<int> RollBackAsync(UpdateStatus status, string error, CancellationToken ct)
     {
-        WriteStatus(status with { Phase = UpdatePhase.RolledBack, UpdatedAt = DateTime.UtcNow, Error = error });
+        WriteStatus(status with { Phase = UpdatePhase.RolledBack, UpdatedAt = timeProvider.GetUtcNow().UtcDateTime, Error = error });
         try
         {
             fs.Restore(paths.PreviousBinaryPath, paths.BinaryPath);
@@ -244,7 +250,7 @@ public sealed class UpdaterOrchestrator
             logger.LogError(ex, "Rollback restore failed mid-update — node is in an inconsistent state");
             WriteStatus(status with
             {
-                Phase = UpdatePhase.Failed, UpdatedAt = DateTime.UtcNow,
+                Phase = UpdatePhase.Failed, UpdatedAt = timeProvider.GetUtcNow().UtcDateTime,
                 Error = $"rollback restore failed: {ex.Message}",
             });
             ClearRequest();

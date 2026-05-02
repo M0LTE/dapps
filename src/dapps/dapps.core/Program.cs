@@ -68,6 +68,14 @@ builder.Services.AddOptions<SystemOptions>().Configure<OptionsRepo, ILogger<Syst
 });
 
 builder.Services.AddHttpClient();
+
+// Plan A polish — single TimeProvider injected everywhere
+// cadence-sensitive code reads time. Tests substitute
+// FakeTimeProvider (Microsoft.Extensions.TimeProvider.Testing) so
+// `Advance(30s)` deterministically fast-forwards every service that
+// uses it. Production wires the system clock.
+builder.Services.AddSingleton(TimeProvider.System);
+
 builder.Services.AddSingleton<UpdateChecker>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<UpdateChecker>());
 

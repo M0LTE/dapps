@@ -23,6 +23,7 @@ public sealed class UdpDatagramListener(
     IOptionsMonitor<SystemOptions> options,
     IBackhaulInbox inbox,
     Database database,
+    TimeProvider timeProvider,
     ILogger<UdpDatagramListener> logger) : BackgroundService
 {
     /// <summary>Source address used for inbound delivery's sourceCallsign
@@ -53,7 +54,7 @@ public sealed class UdpDatagramListener(
 
         using var udp = new UdpClient(new IPEndPoint(IPAddress.Any, port));
         var reassembler = new Reassembler();
-        var nextSweep = DateTime.UtcNow + SweepInterval;
+        var nextSweep = timeProvider.GetUtcNow().UtcDateTime + SweepInterval;
         logger.LogInformation("UDP datagram listener bound on :{0}", port);
 
         while (!stoppingToken.IsCancellationRequested)
@@ -75,7 +76,7 @@ public sealed class UdpDatagramListener(
 
             try
             {
-                var assembled = reassembler.Accept(received.Buffer, DateTime.UtcNow);
+                var assembled = reassembler.Accept(received.Buffer, timeProvider.GetUtcNow().UtcDateTime);
                 if (assembled is null)
                 {
                     continue;
@@ -111,14 +112,14 @@ public sealed class UdpDatagramListener(
                 logger.LogError(ex, "UDP fragment dispatch failed");
             }
 
-            if (DateTime.UtcNow >= nextSweep)
+            if (timeProvider.GetUtcNow().UtcDateTime >= nextSweep)
             {
-                var dropped = reassembler.DropOlderThan(DateTime.UtcNow - ReassemblyTimeout);
+                var dropped = reassembler.DropOlderThan(timeProvider.GetUtcNow().UtcDateTime - ReassemblyTimeout);
                 if (dropped > 0)
                 {
                     logger.LogInformation("UDP reassembler dropped {0} stale partial(s)", dropped);
                 }
-                nextSweep = DateTime.UtcNow + SweepInterval;
+                nextSweep = timeProvider.GetUtcNow().UtcDateTime + SweepInterval;
             }
         }
     }

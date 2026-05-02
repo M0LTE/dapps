@@ -26,6 +26,7 @@ namespace dapps.core.Services;
 public sealed class DiscoveryService(
     Database database,
     IOptionsMonitor<SystemOptions> options,
+    TimeProvider timeProvider,
     ILoggerFactory loggerFactory,
     ILogger<DiscoveryService> logger) : BackgroundService
 {
@@ -50,7 +51,7 @@ public sealed class DiscoveryService(
             logger.LogInformation(
                 "DiscoveryService: no channels configured yet — polling every {0}s",
                 (int)StartupPollInterval.TotalSeconds);
-            try { await Task.Delay(StartupPollInterval, stoppingToken); }
+            try { await Task.Delay(StartupPollInterval, timeProvider, stoppingToken); }
             catch (OperationCanceledException) { return; }
         }
 
@@ -143,13 +144,13 @@ public sealed class DiscoveryService(
         {
             // Initial fire: a small jitter from now so a freshly-joined
             // node is visible to neighbours within seconds.
-            nextEmit[(kv.Key, ch.ChannelKey)] = DateTime.UtcNow.AddMilliseconds(Random.Shared.Next(50, 250));
+            nextEmit[(kv.Key, ch.ChannelKey)] = timeProvider.GetUtcNow().UtcDateTime.AddMilliseconds(Random.Shared.Next(50, 250));
         }
-        var nextSweep = DateTime.UtcNow + SweepInterval;
+        var nextSweep = timeProvider.GetUtcNow().UtcDateTime + SweepInterval;
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            var now = DateTime.UtcNow;
+            var now = timeProvider.GetUtcNow().UtcDateTime;
 
             foreach (var kv in channelsByBearer)
             {
@@ -199,10 +200,10 @@ public sealed class DiscoveryService(
             // Sleep until the nearest of: next emit, next sweep, or 1s.
             var soonest = nextEmit.Values.Min();
             if (nextSweep < soonest) soonest = nextSweep;
-            var sleep = soonest - DateTime.UtcNow;
+            var sleep = soonest - timeProvider.GetUtcNow().UtcDateTime;
             if (sleep < TimeSpan.FromMilliseconds(50)) sleep = TimeSpan.FromMilliseconds(50);
             if (sleep > TimeSpan.FromSeconds(1)) sleep = TimeSpan.FromSeconds(1);
-            try { await Task.Delay(sleep, stoppingToken); }
+            try { await Task.Delay(sleep, timeProvider, stoppingToken); }
             catch (OperationCanceledException) { break; }
         }
     }
@@ -284,7 +285,7 @@ public sealed class DiscoveryService(
         {
             if (delayMs > 0)
             {
-                await Task.Delay(TimeSpan.FromMilliseconds(delayMs), ct);
+                await Task.Delay(TimeSpan.FromMilliseconds(delayMs), timeProvider, ct);
             }
             var beacon = new BeaconFrame(
                 Callsign: options.CurrentValue.Callsign,
@@ -359,7 +360,7 @@ public sealed class DiscoveryService(
             TtlSeconds = beacon.Ttl,
             BpqPort = beacon.Bearer is AgwBearerHint a ? a.BpqPort : null,
             UdpEndpoint = beacon.Bearer is UdpBearerHint u ? u.Endpoint : null,
-            LastSeen = DateTime.UtcNow,
+            LastSeen = timeProvider.GetUtcNow().UtcDateTime,
         };
         await database.UpsertDiscoveredPeer(row);
     }

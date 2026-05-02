@@ -86,7 +86,7 @@ public sealed class NodeProberTests
     }
 
     private static NodeProber MakeProber(IDappsOutboundTransport transport)
-        => new(transport, NullLoggerFactory.Instance, NullLogger<NodeProber>.Instance);
+        => new(transport, TimeProvider.System, NullLoggerFactory.Instance, NullLogger<NodeProber>.Instance);
 
     private sealed class FakeOutboundTransport(byte[] cannedReceiverBytes) : IDappsOutboundTransport
     {

@@ -125,9 +125,12 @@ public sealed class OutboundForwarderServiceTests : IAsyncLifetime
             .BuildServiceProvider();
         var service = new OutboundForwarderService(
             sp,
-            NullLogger<OutboundForwarderService>.Instance,
-            tickInterval: TimeSpan.FromMilliseconds(50),
-            startupDelay: TimeSpan.FromMilliseconds(50));
+            TimeProvider.System,
+            NullLogger<OutboundForwarderService>.Instance)
+        {
+            TickInterval = TimeSpan.FromMilliseconds(50),
+            StartupDelay = TimeSpan.FromMilliseconds(50),
+        };
         using var cts = new CancellationTokenSource();
 
         await service.StartAsync(cts.Token);

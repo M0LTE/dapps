@@ -19,9 +19,16 @@ namespace dapps.core.Services;
 /// recent-events queue is <see cref="ConcurrentQueue{T}"/>. Every
 /// recorder method is safe to call from any thread.
 /// </summary>
-public sealed class OperationalMetrics
+public sealed class OperationalMetrics(TimeProvider timeProvider)
 {
     public const int MaxRecent = 100;
+
+    private readonly TimeProvider timeProvider = timeProvider;
+
+    /// <summary>Convenience overload for tests / call sites that don't
+    /// want to plumb a clock — uses the system clock. Production code
+    /// should let DI inject the registered <see cref="TimeProvider"/>.</summary>
+    public OperationalMetrics() : this(TimeProvider.System) { }
 
     private long _forwardAttempts;
     private long _forwardSuccess;
@@ -41,7 +48,7 @@ public sealed class OperationalMetrics
         Interlocked.Increment(ref _forwardAttempts);
         Interlocked.Increment(ref _forwardSuccess);
         var n = GetOrAdd(callsign);
-        n.LastSuccessAt = DateTime.UtcNow;
+        n.LastSuccessAt = timeProvider.GetUtcNow().UtcDateTime;
         n.LastError = null;
         Interlocked.Increment(ref n._successCount);
         Push("forward.ok", $"→ {callsign} ({bytes} B)");
@@ -52,7 +59,7 @@ public sealed class OperationalMetrics
         Interlocked.Increment(ref _forwardAttempts);
         Interlocked.Increment(ref _forwardFailure);
         var n = GetOrAdd(callsign);
-        n.LastFailureAt = DateTime.UtcNow;
+        n.LastFailureAt = timeProvider.GetUtcNow().UtcDateTime;
         n.LastError = error;
         Interlocked.Increment(ref n._failureCount);
         Push("forward.fail", $"→ {callsign} ({bytes} B): {error}");
@@ -73,7 +80,7 @@ public sealed class OperationalMetrics
     public void RecordAgwReconnect()
     {
         Interlocked.Increment(ref _agwReconnects);
-        _agwLastReconnectAt = DateTime.UtcNow;
+        _agwLastReconnectAt = timeProvider.GetUtcNow().UtcDateTime;
         Push("agw.reconnect", "AGW socket connected + 'X' registered");
     }
 
@@ -119,7 +126,7 @@ public sealed class OperationalMetrics
 
     private void Push(string kind, string summary)
     {
-        _events.Enqueue(new OperationalEvent(DateTime.UtcNow, kind, summary));
+        _events.Enqueue(new OperationalEvent(timeProvider.GetUtcNow().UtcDateTime, kind, summary));
         while (_events.Count > MaxRecent)
         {
             _events.TryDequeue(out _);
