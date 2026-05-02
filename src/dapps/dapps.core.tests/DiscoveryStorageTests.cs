@@ -125,7 +125,7 @@ public sealed class DiscoveryStorageTests : IAsyncLifetime
             LastSeen = t0.AddSeconds(-30),
         });
 
-        (await database.AgeOutDiscoveredPeers(t0)).Should().Be(1);
+        (await database.AgeOutDiscoveredPeers(t0)).Should().HaveCount(1);
         var remaining = await database.GetDiscoveredPeers();
         remaining.Should().ContainSingle().Which.Callsign.Should().Be("FRESH");
     }

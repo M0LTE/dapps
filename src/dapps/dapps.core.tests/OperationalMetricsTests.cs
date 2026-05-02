@@ -9,9 +9,9 @@ public class OperationalMetricsTests
     public void RecordForwardSuccess_BumpsCounters_AndPerNeighbour()
     {
         var m = new OperationalMetrics();
-        m.RecordForwardSuccess("G7XYZ", 42);
-        m.RecordForwardSuccess("G7XYZ", 100);
-        m.RecordForwardSuccess("M0LTE-9", 5);
+        m.RecordForwardSuccess("aaa1234", "G7XYZ", 42);
+        m.RecordForwardSuccess("aaa1235", "G7XYZ", 100);
+        m.RecordForwardSuccess("aaa1236", "M0LTE-9", 5);
 
         var s = m.Take();
         s.ForwardAttempts.Should().Be(3);
@@ -30,8 +30,8 @@ public class OperationalMetricsTests
     public void RecordForwardFailure_StashesLastError()
     {
         var m = new OperationalMetrics();
-        m.RecordForwardSuccess("G7XYZ", 10);
-        m.RecordForwardFailure("G7XYZ", 0, "AGW connect timeout");
+        m.RecordForwardSuccess("aaa1234", "G7XYZ", 10);
+        m.RecordForwardFailure("aaa1234", "G7XYZ", 0, "AGW connect timeout");
 
         var s = m.Take();
         var g7 = s.Neighbours.Single();
@@ -53,8 +53,8 @@ public class OperationalMetricsTests
         // says 'last error: connection timeout'?" Last-error tracks
         // the most recent failure relative to the most recent success.
         var m = new OperationalMetrics();
-        m.RecordForwardFailure("G7XYZ", 0, "timeout");
-        m.RecordForwardSuccess("G7XYZ", 10);
+        m.RecordForwardFailure("aaa1234", "G7XYZ", 0, "timeout");
+        m.RecordForwardSuccess("aaa1234", "G7XYZ", 10);
 
         m.Take().Neighbours.Single().LastError.Should().BeNull();
     }
@@ -65,7 +65,7 @@ public class OperationalMetricsTests
         var m = new OperationalMetrics();
         for (var i = 0; i < OperationalMetrics.MaxRecent + 50; i++)
         {
-            m.RecordForwardSuccess("G7XYZ", i);
+            m.RecordForwardSuccess($"a{i:x6}", "G7XYZ", i);
         }
 
         var s = m.Take();
@@ -76,8 +76,8 @@ public class OperationalMetricsTests
     public void RecentEvents_NewestFirst()
     {
         var m = new OperationalMetrics();
-        m.RecordForwardSuccess("first", 1);
-        m.RecordForwardFailure("second", 0, "boom");
+        m.RecordForwardSuccess("aaa1111", "first", 1);
+        m.RecordForwardFailure("aaa2222", "second", 0, "boom");
 
         var ev = m.Take().RecentEvents;
         ev[0].Kind.Should().Be("forward.fail");
@@ -106,5 +106,74 @@ public class OperationalMetricsTests
         var s = m.Take();
         s.TtlExpiredDrops.Should().Be(2);
         s.NoRouteSkips.Should().Be(1);
+    }
+
+    [Fact]
+    public void Probe_SuccessAndFailure_BumpDistinctCounters()
+    {
+        var m = new OperationalMetrics();
+        m.RecordProbeOutcome("G7XYZ", success: true, error: null);
+        m.RecordProbeOutcome("G7XYZ", success: false, error: "timeout");
+
+        var s = m.Take();
+        s.ProbeAttempts.Should().Be(2);
+        s.ProbeSuccess.Should().Be(1);
+        s.ProbeFailure.Should().Be(1);
+        s.RecentEvents.Select(e => e.Kind).Should().Contain(new[] { "probe.ok", "probe.fail" });
+    }
+
+    [Fact]
+    public void Poll_SuccessRecordsDrainedCount_Failure_RecordsError()
+    {
+        var m = new OperationalMetrics();
+        m.RecordPollOutcome("G7XYZ", success: true, messagesDrained: 3, error: null);
+        m.RecordPollOutcome("G7XYZ", success: true, messagesDrained: 0, error: null);
+        m.RecordPollOutcome("G7XYZ", success: false, messagesDrained: 0, error: "no banner");
+
+        var s = m.Take();
+        s.PollAttempts.Should().Be(3);
+        s.PollSuccess.Should().Be(2);
+        s.PollFailure.Should().Be(1);
+
+        var summaries = s.RecentEvents.Select(e => e.Summary).ToList();
+        summaries.Should().Contain(s => s.Contains("drained 3"));
+        summaries.Should().Contain(s => s.Contains("(empty)"));
+        summaries.Should().Contain(s => s.Contains("no banner"));
+    }
+
+    [Fact]
+    public void RouteLearned_PeerAged_BudgetRefused_BumpCountersAndPushEvents()
+    {
+        var m = new OperationalMetrics();
+        m.RecordRouteLearned("G7DEST", "G7HOP-9");
+        m.RecordPeerAgedOut("G7CALL", "udp", "239.0.0.1:54321");
+        m.RecordBudgetRefused("global cap: beacon udp/239.x");
+
+        var s = m.Take();
+        s.RoutesLearned.Should().Be(1);
+        s.PeersAgedOut.Should().Be(1);
+        s.BudgetRefusals.Should().Be(1);
+        s.RecentEvents.Select(e => e.Kind).Should()
+            .Contain(new[] { "route.learned", "peer.aged", "budget.refused" });
+    }
+
+    [Fact]
+    public void LastForwardSuccessAt_TracksMostRecentSuccess()
+    {
+        var m = new OperationalMetrics();
+        m.LastForwardSuccessAt.Should().BeNull();
+
+        m.RecordForwardSuccess("aaa1111", "G7XYZ", 10);
+        m.LastForwardSuccessAt.Should().NotBeNull();
+        var firstStamp = m.LastForwardSuccessAt!.Value;
+
+        // A failure between successes must not bump the timestamp —
+        // /Health surfaces this as "node was actually doing real work
+        // recently" and shouldn't be reset by a transient flap.
+        m.RecordForwardFailure("aaa2222", "G7XYZ", 0, "timeout");
+        m.LastForwardSuccessAt.Should().Be(firstStamp);
+
+        m.RecordForwardSuccess("aaa3333", "G7XYZ", 10);
+        m.LastForwardSuccessAt.Should().BeOnOrAfter(firstStamp);
     }
 }

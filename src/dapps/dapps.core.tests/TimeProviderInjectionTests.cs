@@ -111,7 +111,7 @@ public sealed class TimeProviderInjectionTests : IAsyncLifetime
         // gives tests a deterministic LastSuccessAt without the wall
         // clock leaking in.
         var metrics = new OperationalMetrics(clock);
-        metrics.RecordForwardSuccess("N0PEER-9", bytes: 100);
+        metrics.RecordForwardSuccess(id: "aaa1234", callsign: "N0PEER-9", bytes: 100);
 
         var snapshot = metrics.Take();
         var nb = snapshot.Neighbours.Single(n => n.Callsign == "N0PEER-9");
@@ -122,9 +122,9 @@ public sealed class TimeProviderInjectionTests : IAsyncLifetime
     public void OperationalMetrics_RecentEvents_StampedAtInjectedTime()
     {
         var metrics = new OperationalMetrics(clock);
-        metrics.RecordForwardSuccess("N0A-9", bytes: 1);
+        metrics.RecordForwardSuccess(id: "aaa1111", callsign: "N0A-9", bytes: 1);
         clock.Advance(TimeSpan.FromMinutes(5));
-        metrics.RecordForwardFailure("N0B-9", bytes: 2, error: "boom");
+        metrics.RecordForwardFailure(id: "aaa2222", callsign: "N0B-9", bytes: 2, error: "boom");
 
         var events = metrics.Take().RecentEvents.OrderBy(e => e.At).ToList();
         events.Should().HaveCount(2);

@@ -12,7 +12,8 @@ namespace dapps.core.Routing;
 /// </summary>
 public sealed class DatabaseRoutingContext(
     Database database,
-    IOptionsMonitor<SystemOptions> options) : IRoutingContext
+    IOptionsMonitor<SystemOptions> options,
+    OperationalMetrics? metrics = null) : IRoutingContext
 {
     public string LocalCallsign => options.CurrentValue.Callsign;
 
@@ -35,8 +36,20 @@ public sealed class DatabaseRoutingContext(
     public async Task<DbNeighbour?> GetNeighbourByCallsignAsync(string callsign, CancellationToken ct)
         => await database.GetNeighbour(callsign);
 
-    public Task UpsertLearnedRouteAsync(string destinationBaseCallsign, string nextHopCallsign, CancellationToken ct)
-        => database.UpsertLearnedRouteAsync(destinationBaseCallsign, nextHopCallsign, DateTime.UtcNow);
+    public async Task UpsertLearnedRouteAsync(string destinationBaseCallsign, string nextHopCallsign, CancellationToken ct)
+    {
+        // Pre-check whether the row is a refresh or a real change. Skip
+        // the metrics event on refreshes — every successful inbound
+        // F1-stamped message would otherwise emit `route.learned`,
+        // drowning the journal in noise. Two queries on the learning
+        // hot path is fine (it's per-inbound-message at most, not per-
+        // tick).
+        var existing = await database.GetLearnedRouteAsync(destinationBaseCallsign);
+        var significant = existing is null
+            || !string.Equals(existing.NextHopCallsign, nextHopCallsign, StringComparison.OrdinalIgnoreCase);
+        await database.UpsertLearnedRouteAsync(destinationBaseCallsign, nextHopCallsign, DateTime.UtcNow);
+        if (significant) metrics?.RecordRouteLearned(destinationBaseCallsign, nextHopCallsign);
+    }
 
     public Task<DbLearnedRoute?> GetLearnedRouteAsync(string destinationBaseCallsign, CancellationToken ct)
         => database.GetLearnedRouteAsync(destinationBaseCallsign);
@@ -53,8 +66,22 @@ public sealed class DatabaseRoutingContext(
     public Task RecordFloodSeenAsync(string messageId, string linkSourceCallsign, CancellationToken ct)
         => database.RecordFloodSeenAsync(messageId, linkSourceCallsign, DateTime.UtcNow);
 
-    public Task UpsertDiscoveredPathAsync(string destinationBaseCallsign, IReadOnlyList<string> intermediates, CancellationToken ct)
-        => database.UpsertDiscoveredPathAsync(destinationBaseCallsign, intermediates, DateTime.UtcNow);
+    public async Task UpsertDiscoveredPathAsync(string destinationBaseCallsign, IReadOnlyList<string> intermediates, CancellationToken ct)
+    {
+        // Same diff-then-record shape as UpsertLearnedRouteAsync — only
+        // emit `route.learned` on a new path or a path-shape change,
+        // not on every refresh tick.
+        var existing = await database.GetDiscoveredPathAsync(destinationBaseCallsign);
+        var newCsv = Models.DbDiscoveredPath.ToCsv(intermediates);
+        var significant = existing is null
+            || !string.Equals(existing.IntermediatesCsv, newCsv, StringComparison.OrdinalIgnoreCase);
+        await database.UpsertDiscoveredPathAsync(destinationBaseCallsign, intermediates, DateTime.UtcNow);
+        if (significant)
+        {
+            var summary = intermediates.Count == 0 ? "(direct)" : string.Join("→", intermediates);
+            metrics?.RecordRouteLearned(destinationBaseCallsign, summary);
+        }
+    }
 
     public Task<DbDiscoveredPath?> GetDiscoveredPathAsync(string destinationBaseCallsign, CancellationToken ct)
         => database.GetDiscoveredPathAsync(destinationBaseCallsign);

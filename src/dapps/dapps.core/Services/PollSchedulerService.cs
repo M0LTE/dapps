@@ -23,7 +23,8 @@ public sealed class PollSchedulerService(
     Database database,
     IOptionsMonitor<SystemOptions> options,
     TimeProvider timeProvider,
-    ILogger<PollSchedulerService> logger) : BackgroundService
+    ILogger<PollSchedulerService> logger,
+    OperationalMetrics? metrics = null) : BackgroundService
 {
     /// <summary>Delay before the first sweep after startup. Long enough
     /// for AGW reconnect, MQTT broker init to settle. Tunable for
@@ -124,6 +125,7 @@ public sealed class PollSchedulerService(
             row.ConsecutiveFailures = unchecked(row.ConsecutiveFailures + 1);
         }
         await database.UpsertPolledNode(row);
+        metrics?.RecordPollOutcome(result.Callsign, result.Success, result.MessagesDrained, result.Error);
         return row;
     }
 
