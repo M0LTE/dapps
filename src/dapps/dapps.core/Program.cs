@@ -107,6 +107,13 @@ builder.Services.AddOptions<SystemOptions>().Configure<OptionsRepo, ILogger<Syst
         && pqws > 0
         ? pqws
         : 300;
+    o.HeartbeatEnabled = !bool.TryParse(
+        options.SingleOrDefault(opt => opt.Option == "HeartbeatEnabled")?.Value, out var hb) || hb;
+    o.HeartbeatIntervalSeconds = int.TryParse(
+        options.SingleOrDefault(opt => opt.Option == "HeartbeatIntervalSeconds")?.Value, out var hbInt)
+        && hbInt >= 10
+        ? hbInt
+        : 60;
 
     logger.LogInformation($"Callsign: {o.Callsign}");
     logger.LogInformation($"BPQ AGW: {o.NodeHost}:{o.AgwPort} (default port byte {o.DefaultBpqPort})");
@@ -134,6 +141,12 @@ builder.Services.AddSingleton(TimeProvider.System);
 // pings it on every successful send.
 builder.Services.AddSingleton<AirtimeAccountant>();
 builder.Services.AddSingleton<OutboundActivityTracker>();
+
+// Plan C3 PR-B — operational snapshot composer used by both
+// /Operational and HeartbeatPublisher. Singleton so the two
+// consumers see consistent state.
+builder.Services.AddSingleton<OperationalSnapshotBuilder>();
+builder.Services.AddHostedService<HeartbeatPublisher>();
 
 builder.Services.AddSingleton<UpdateChecker>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<UpdateChecker>());

@@ -670,6 +670,8 @@ public class Database(
         await Upsert(connection, options, systemOptions.ProbeOvernightStartHour.ToString(), nameof(systemOptions.ProbeOvernightStartHour));
         await Upsert(connection, options, systemOptions.ProbeOvernightEndHour.ToString(), nameof(systemOptions.ProbeOvernightEndHour));
         await Upsert(connection, options, systemOptions.ProbeQuietWindowSeconds.ToString(), nameof(systemOptions.ProbeQuietWindowSeconds));
+        await Upsert(connection, options, systemOptions.HeartbeatEnabled.ToString(), nameof(systemOptions.HeartbeatEnabled));
+        await Upsert(connection, options, systemOptions.HeartbeatIntervalSeconds.ToString(), nameof(systemOptions.HeartbeatIntervalSeconds));
     }
 
     private static async Task Upsert(SQLiteAsyncConnection connection, List<DbSystemOption> options, string value, string field)
@@ -742,6 +744,12 @@ public class Database(
                 && int.TryParse(pqw, out var pqwParsed) && pqwParsed > 0
                 ? pqwParsed
                 : 300,
+            HeartbeatEnabled = !options.TryGetValue(nameof(SystemOptions.HeartbeatEnabled), out var hb)
+                || !bool.TryParse(hb, out var hbParsed) || hbParsed,
+            HeartbeatIntervalSeconds = options.TryGetValue(nameof(SystemOptions.HeartbeatIntervalSeconds), out var hbi)
+                && int.TryParse(hbi, out var hbiParsed) && hbiParsed >= 10
+                ? hbiParsed
+                : 60,
         };
     }
 

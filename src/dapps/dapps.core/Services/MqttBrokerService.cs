@@ -105,6 +105,35 @@ public sealed class MqttBrokerService(
     /// If no subscriber is connected, the broker drops the publish — the
     /// message is in the DB and will be replayed on next subscribe.
     /// </summary>
+    /// <summary>
+    /// Plan C3 PR-B — publish a retained message on a fixed topic
+    /// (heartbeat use case). Retained = true so a subscriber connecting
+    /// later sees the latest snapshot immediately rather than waiting
+    /// for the next interval. QoS 0 because the next snapshot is
+    /// always &lt;interval&gt; seconds away — losing one in flight is
+    /// no big deal.
+    /// </summary>
+    public async Task<bool> PublishRetainedAsync(string topic, byte[] payload, CancellationToken ct = default)
+    {
+        if (server is null) return false;
+        var msg = new MqttApplicationMessageBuilder()
+            .WithTopic(topic)
+            .WithPayload(payload)
+            .WithRetainFlag(true)
+            .WithQualityOfServiceLevel(MQTTnet.Protocol.MqttQualityOfServiceLevel.AtMostOnce)
+            .Build();
+        try
+        {
+            await server.InjectApplicationMessage(new InjectedMqttApplicationMessage(msg));
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "MQTT: retained publish to {0} failed", topic);
+            return false;
+        }
+    }
+
     public async Task InjectInboundMessage(DbMessage message)
     {
         if (server is null) return;

@@ -146,6 +146,25 @@ public class SystemOptions
     public int PollIntervalHours { get; set; } = 6;
 
     /// <summary>
+    /// Plan C3 PR-B — periodic MQTT heartbeat publish. When true, an
+    /// <see cref="dapps.core.Services.OperationalSnapshot"/> is
+    /// serialised and published as a retained message on
+    /// <c>dapps/metrics/heartbeat</c> every
+    /// <see cref="HeartbeatIntervalSeconds"/> seconds. Lets operator-
+    /// side consumers (Home Assistant, simple MQTT subscribers) wire
+    /// DAPPS into their dashboards without any new infra. Default on
+    /// — the broker is already running for the app interface, so
+    /// the publish is effectively free.
+    /// </summary>
+    public bool HeartbeatEnabled { get; set; } = true;
+
+    /// <summary>Seconds between heartbeat publishes when
+    /// <see cref="HeartbeatEnabled"/> is true. Default 60. Clamped
+    /// to a minimum of 10 by the publisher to avoid pathological
+    /// settings.</summary>
+    public int HeartbeatIntervalSeconds { get; set; } = 60;
+
+    /// <summary>
     /// Plan B7 — single trailing-hour cap on airtime consumed by ALL
     /// discovery-class transmissions (beacons, solicit replies,
     /// probes). 0 = unlimited (default — preserves pre-B7 behaviour).
