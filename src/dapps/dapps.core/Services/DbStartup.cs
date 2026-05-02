@@ -24,8 +24,6 @@ public static class DbInfo
 
 public class DbStartup(ILogger<DbStartup> logger) : IHostedService
 {
-    private readonly SQLiteConnection db = DbInfo.GetConnection();
-
     /// <summary>Sentinel callsign in the seeded defaults. If the resolved
     /// value still matches this after seed it means the operator never
     /// configured a real one — refuse to start rather than transmit
@@ -34,7 +32,34 @@ public class DbStartup(ILogger<DbStartup> logger) : IHostedService
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        logger.LogInformation($"DB: {db.DatabasePath}");
+        // Idempotent — Program.cs already calls EnsureSchemaAndSeed
+        // before builder.Build() so that the SystemOptions Configure
+        // callback (which fires during eager hosted-service DI graph
+        // materialisation) sees a fully-seeded systemoptions table
+        // regardless of hosted-service start order. We re-invoke here
+        // as a belt-and-braces second line of defence; CreateTable is
+        // CREATE-IF-NOT-EXISTS and InsertIfNotPresent skips rows that
+        // already exist, so the second call is a no-op on a clean
+        // boot.
+        EnsureSchemaAndSeed(logger);
+        return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Create every table the daemon needs and seed the first-run
+    /// systemoptions defaults (env-var overrides → hardcoded fallback).
+    /// Safe to call multiple times — every step is idempotent.
+    ///
+    /// Called once from Program.cs *before* <c>builder.Build()</c> so
+    /// the eager DI materialisation of hosted services (which transit
+    /// IRoutingAlgorithm → IOptionsMonitor&lt;SystemOptions&gt;.CurrentValue
+    /// → SystemOptions Configure → OptionsRepo.GetOptions) finds a
+    /// seeded table rather than racing it.
+    /// </summary>
+    public static void EnsureSchemaAndSeed(ILogger? logger = null)
+    {
+        using var db = DbInfo.GetConnection();
+        logger?.LogInformation($"DB: {db.DatabasePath}");
 
         db.CreateTable<DbOffer>();
         db.CreateTable<DbMessage>();
@@ -59,31 +84,30 @@ public class DbStartup(ILogger<DbStartup> logger) : IHostedService
         // otherwise the hardcoded fallback applies. Either way the value
         // is only written when no row exists — once configured (here or
         // via /Config), the row sticks and env vars stop mattering.
-        InsertIfNotPresent(options, "NodeType", "BPQ");
-        InsertIfNotPresent(options, "NodeHost", "localhost");
-        InsertIfNotPresent(options, "AgwPort", "8000");
-        InsertIfNotPresent(options, "DefaultBpqPort", "0");
-        InsertIfNotPresent(options, "Callsign", PlaceholderCallsign);
-        InsertIfNotPresent(options, "MqttPort", "1883");
-        InsertIfNotPresent(options, "UdpListenPort", "0");
-        InsertIfNotPresent(options, "AuthRequired", "false");
-        InsertIfNotPresent(options, "UpdateCheckEnabled", "true");
-        InsertIfNotPresent(options, "RoutingAlgorithm", "passive-flood");
-        InsertIfNotPresent(options, "ProbingEnabled", "false");
-        InsertIfNotPresent(options, "ProbeIntervalHours", "24");
-        InsertIfNotPresent(options, "FragmentThresholdBytes", "4096");
-        InsertIfNotPresent(options, "FragmentReassemblyTimeoutSeconds", "604800");
-        InsertIfNotPresent(options, "OpportunisticPollEnabled", "true");
-        InsertIfNotPresent(options, "ScheduledPollEnabled", "false");
-        InsertIfNotPresent(options, "PollIntervalHours", "6");
+        InsertIfNotPresent(db, options, "NodeType", "BPQ", logger);
+        InsertIfNotPresent(db, options, "NodeHost", "localhost", logger);
+        InsertIfNotPresent(db, options, "AgwPort", "8000", logger);
+        InsertIfNotPresent(db, options, "DefaultBpqPort", "0", logger);
+        InsertIfNotPresent(db, options, "Callsign", PlaceholderCallsign, logger);
+        InsertIfNotPresent(db, options, "MqttPort", "1883", logger);
+        InsertIfNotPresent(db, options, "UdpListenPort", "0", logger);
+        InsertIfNotPresent(db, options, "AuthRequired", "false", logger);
+        InsertIfNotPresent(db, options, "UpdateCheckEnabled", "true", logger);
+        InsertIfNotPresent(db, options, "RoutingAlgorithm", "passive-flood", logger);
+        InsertIfNotPresent(db, options, "ProbingEnabled", "false", logger);
+        InsertIfNotPresent(db, options, "ProbeIntervalHours", "24", logger);
+        InsertIfNotPresent(db, options, "FragmentThresholdBytes", "4096", logger);
+        InsertIfNotPresent(db, options, "FragmentReassemblyTimeoutSeconds", "604800", logger);
+        InsertIfNotPresent(db, options, "OpportunisticPollEnabled", "true", logger);
+        InsertIfNotPresent(db, options, "ScheduledPollEnabled", "false", logger);
+        InsertIfNotPresent(db, options, "PollIntervalHours", "6", logger);
 
-        ValidateRequiredConfig();
+        ValidateRequiredConfig(db, logger);
 
-        logger.LogInformation("DB schema refreshed");
-        return Task.CompletedTask;
+        logger?.LogInformation("DB schema refreshed");
     }
 
-    private void InsertIfNotPresent(List<DbSystemOption> options, string key, string defaultValue)
+    private static void InsertIfNotPresent(SQLiteConnection db, List<DbSystemOption> options, string key, string defaultValue, ILogger? logger)
     {
         if (options.Any(o => string.Equals(o.Option, key, StringComparison.OrdinalIgnoreCase)))
         {
@@ -98,7 +122,7 @@ public class DbStartup(ILogger<DbStartup> logger) : IHostedService
 
         if (!string.IsNullOrEmpty(envValue))
         {
-            logger.LogInformation("Seeded {0} from {1}", key, envKey);
+            logger?.LogInformation("Seeded {0} from {1}", key, envKey);
         }
     }
 
@@ -108,7 +132,7 @@ public class DbStartup(ILogger<DbStartup> logger) : IHostedService
     /// the wild — frames go on the air with the configured callsign,
     /// and pretending to be N0CALL is both wrong and traceable to us.
     /// </summary>
-    private void ValidateRequiredConfig()
+    private static void ValidateRequiredConfig(SQLiteConnection db, ILogger? logger)
     {
         var optionsTable = db.Table<DbSystemOption>().Table.TableName;
         var options = db.Query<DbSystemOption>($"select * from {optionsTable};");
@@ -122,7 +146,7 @@ public class DbStartup(ILogger<DbStartup> logger) : IHostedService
             var msg = $"Callsign is not configured (currently '{callsign}'). " +
                 $"Set the DAPPS_CALLSIGN environment variable before first start, " +
                 $"or POST {{\"Callsign\":\"YOUR-CALL\", ...}} to /Config and restart.";
-            logger.LogError(msg);
+            logger?.LogError(msg);
             throw new InvalidOperationException(msg);
         }
     }

@@ -21,6 +21,17 @@ using System.Net.Sockets;
 // is unset, which is exactly when --rollback is most useful.
 if (UpdaterCli.TryHandle(args, out var cliExitCode)) return cliExitCode;
 
+// Seed the systemoptions table BEFORE host build. The
+// SystemOptions Configure callback (line ~34 below) fires during
+// eager hosted-service DI graph materialisation — UdpDatagramListener
+// → IBackhaulInbox → IRoutingAlgorithm → IOptionsMonitor.CurrentValue.
+// If DbStartup ran first as a hosted service it would race the
+// configurator and lose: hosted services are CONSTRUCTED in one
+// pass before any of their StartAsync runs. Pre-seeding here makes
+// the order guarantee explicit; DbStartup's own StartAsync is then
+// a no-op belt-and-braces second pass.
+DbStartup.EnsureSchemaAndSeed();
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.

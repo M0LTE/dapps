@@ -157,6 +157,48 @@ public class BackhaulMessageCodecTests
     }
 
     [Fact]
+    public void RoundTrip_FragmentHeaders_PreservesMasterIdIndexAndTotal()
+    {
+        // F2 multi-part: when forwarded over a datagram bearer, the
+        // fragment headers (master id + 1-based index + total) must
+        // traverse the codec or the receiver can't tell N independent
+        // datagrams apart from N parts of one larger message — and
+        // delivers each as a standalone inbox row instead of holding
+        // them in the reassembly buffer.
+        var input = new BackhaulMessage(
+            Id: "abcdef0",
+            Destination: "app@G0DST-1",
+            Salt: 42L,
+            Ttl: 600,
+            Payload: "fragment-2-of-3"u8.ToArray(),
+            MasterId: "master7",
+            FragmentIndex: 2,
+            FragmentTotal: 3);
+
+        var decoded = BackhaulMessageCodec.Decode(BackhaulMessageCodec.Encode(input));
+
+        decoded.MasterId.Should().Be("master7");
+        decoded.FragmentIndex.Should().Be(2);
+        decoded.FragmentTotal.Should().Be(3);
+        decoded.Payload.Should().Equal(input.Payload);
+    }
+
+    [Fact]
+    public void Encode_FragmentIndexWithoutMasterId_Throws()
+    {
+        var input = new BackhaulMessage(
+            Id: "abcdef0",
+            Destination: "app@G0DST-1",
+            Salt: null,
+            Ttl: null,
+            Payload: "x"u8.ToArray(),
+            FragmentIndex: 2);
+
+        var act = () => BackhaulMessageCodec.Encode(input);
+        act.Should().Throw<ArgumentException>().WithMessage("*master id*");
+    }
+
+    [Fact]
     public void RoundTrip_LargePayload_StaysBinaryFaithful()
     {
         // 5 KB exercises the 4-byte payload-length field's range and gives

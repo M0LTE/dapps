@@ -19,10 +19,11 @@ namespace dapps.client.Backhaul.Datagram;
 /// historical decoder paths.
 /// <code>
 ///   [1]  version           = current Version
-///   [1]  flags             bit0=salt, bit1=ttl, bit2=headers,
+///   [2]  flags (UInt16)    bit0=salt, bit1=ttl, bit2=headers,
 ///                          bit3=originator, bit4=link-source,
 ///                          bit5=flood-hops-remaining,
-///                          bit6=source-route, bit7=traversed-hops
+///                          bit6=source-route, bit7=traversed-hops,
+///                          bit8=fragment (F2 multi-part)
 ///   [7]  id (UTF-8 ASCII, 7-char hex from DappsMessage.ComputeHash)
 ///   [8]  salt              (only when flags bit0)
 ///   [4]  ttl seconds       (only when flags bit1)
@@ -39,6 +40,9 @@ namespace dapps.client.Backhaul.Datagram;
 ///   [1]  traversed count   (only when flags bit7)
 ///   per traversed hop:
 ///     [1] hop len, [N] hop (UTF-8)
+///   [7]  master id         (only when flags bit8; ASCII)
+///   [2]  fragment index    (only when flags bit8; UInt16, 1-based)
+///   [2]  fragment total    (only when flags bit8; UInt16)
 ///   [2]  headers count     (only when flags bit2)
 ///   per header:
 ///     [2] key len, [K] key (UTF-8), [2] value len, [V] value (UTF-8)
@@ -52,11 +56,11 @@ public static class BackhaulMessageCodec
     /// <summary>Version this encoder writes AND the only version the
     /// decoder accepts. Bump on any wire-format change so a mismatched
     /// peer fails fast instead of silently misreading flag bits.</summary>
-    public const byte Version = 5;
+    public const byte Version = 6;
     public const int IdLength = 7;
 
     [Flags]
-    private enum Flags : byte
+    private enum Flags : ushort
     {
         None = 0,
         HasSalt = 1 << 0,
@@ -67,6 +71,7 @@ public static class BackhaulMessageCodec
         HasFloodHops = 1 << 5,
         HasSourceRoute = 1 << 6,
         HasTraversedHops = 1 << 7,
+        HasFragment = 1 << 8,
     }
 
     public static byte[] Encode(BackhaulMessage message)
@@ -74,6 +79,27 @@ public static class BackhaulMessageCodec
         if (message.Id.Length != IdLength)
         {
             throw new ArgumentException($"id must be exactly {IdLength} characters; got '{message.Id}'", nameof(message));
+        }
+
+        // F2 fragment headers always travel together; presence of MasterId
+        // is the gate. Validate the trio so an in-transit relay can't half-
+        // strip them (which would leave the receiver unable to reassemble
+        // and unable to tell that's what happened).
+        var hasFragment = message.MasterId is not null;
+        if (hasFragment)
+        {
+            if (message.MasterId!.Length != IdLength)
+            {
+                throw new ArgumentException($"master id must be exactly {IdLength} characters; got '{message.MasterId}'", nameof(message));
+            }
+            if (!message.FragmentIndex.HasValue || !message.FragmentTotal.HasValue)
+            {
+                throw new ArgumentException("fragment index/total must accompany master id", nameof(message));
+            }
+        }
+        else if (message.FragmentIndex.HasValue || message.FragmentTotal.HasValue)
+        {
+            throw new ArgumentException("fragment index/total without master id", nameof(message));
         }
 
         var idBytes = Encoding.ASCII.GetBytes(message.Id);
@@ -93,6 +119,9 @@ public static class BackhaulMessageCodec
         var traversedBytes = message.TraversedHops is { Count: > 0 }
             ? EncodeCallsignList(message.TraversedHops)
             : [];
+        var masterIdBytes = hasFragment
+            ? Encoding.ASCII.GetBytes(message.MasterId!)
+            : [];
 
         var flags = Flags.None;
         if (message.Salt.HasValue) flags |= Flags.HasSalt;
@@ -103,8 +132,9 @@ public static class BackhaulMessageCodec
         if (message.FloodHopsRemaining.HasValue) flags |= Flags.HasFloodHops;
         if (sourceRouteBytes.Length > 0) flags |= Flags.HasSourceRoute;
         if (traversedBytes.Length > 0) flags |= Flags.HasTraversedHops;
+        if (hasFragment) flags |= Flags.HasFragment;
 
-        var size = 1 + 1 + IdLength
+        var size = 1 + 2 + IdLength
             + (message.Salt.HasValue ? 8 : 0)
             + (message.Ttl.HasValue ? 4 : 0)
             + 2 + dstBytes.Length
@@ -113,6 +143,7 @@ public static class BackhaulMessageCodec
             + (message.FloodHopsRemaining.HasValue ? 1 : 0)
             + sourceRouteBytes.Length
             + traversedBytes.Length
+            + (hasFragment ? IdLength + 2 + 2 : 0)
             + headerBytes.Length
             + 4 + message.Payload.Length;
 
@@ -120,7 +151,8 @@ public static class BackhaulMessageCodec
         var offset = 0;
 
         buffer[offset++] = Version;
-        buffer[offset++] = (byte)flags;
+        BinaryPrimitives.WriteUInt16LittleEndian(buffer.AsSpan(offset, 2), (ushort)flags);
+        offset += 2;
 
         idBytes.CopyTo(buffer.AsSpan(offset));
         offset += IdLength;
@@ -174,6 +206,16 @@ public static class BackhaulMessageCodec
             offset += traversedBytes.Length;
         }
 
+        if (hasFragment)
+        {
+            masterIdBytes.CopyTo(buffer.AsSpan(offset));
+            offset += IdLength;
+            BinaryPrimitives.WriteUInt16LittleEndian(buffer.AsSpan(offset, 2), (ushort)message.FragmentIndex!.Value);
+            offset += 2;
+            BinaryPrimitives.WriteUInt16LittleEndian(buffer.AsSpan(offset, 2), (ushort)message.FragmentTotal!.Value);
+            offset += 2;
+        }
+
         headerBytes.CopyTo(buffer.AsSpan(offset));
         offset += headerBytes.Length;
 
@@ -186,7 +228,7 @@ public static class BackhaulMessageCodec
 
     public static BackhaulMessage Decode(ReadOnlySpan<byte> buffer)
     {
-        if (buffer.Length < 1 + 1 + IdLength + 2 + 4)
+        if (buffer.Length < 1 + 2 + IdLength + 2 + 4)
         {
             throw new InvalidDataException("buffer too short for any valid backhaul message");
         }
@@ -197,7 +239,8 @@ public static class BackhaulMessageCodec
         {
             throw new InvalidDataException($"unsupported codec version {version}; expected {Version}");
         }
-        var flags = (Flags)buffer[offset++];
+        var flags = (Flags)BinaryPrimitives.ReadUInt16LittleEndian(buffer.Slice(offset, 2));
+        offset += 2;
 
         var id = Encoding.ASCII.GetString(buffer.Slice(offset, IdLength));
         offset += IdLength;
@@ -257,6 +300,19 @@ public static class BackhaulMessageCodec
             traversedHops = DecodeCallsignList(buffer, ref offset);
         }
 
+        string? masterId = null;
+        int? fragmentIndex = null;
+        int? fragmentTotal = null;
+        if ((flags & Flags.HasFragment) != 0)
+        {
+            masterId = Encoding.ASCII.GetString(buffer.Slice(offset, IdLength));
+            offset += IdLength;
+            fragmentIndex = BinaryPrimitives.ReadUInt16LittleEndian(buffer.Slice(offset, 2));
+            offset += 2;
+            fragmentTotal = BinaryPrimitives.ReadUInt16LittleEndian(buffer.Slice(offset, 2));
+            offset += 2;
+        }
+
         IReadOnlyDictionary<string, string>? headers = null;
         if ((flags & Flags.HasHeaders) != 0)
         {
@@ -282,7 +338,7 @@ public static class BackhaulMessageCodec
         offset += 4;
         var payload = buffer.Slice(offset, (int)payloadLen).ToArray();
 
-        return new BackhaulMessage(id, destination, salt, ttl, payload, headers, originator, linkSource, floodHops, sourceRoute, traversedHops);
+        return new BackhaulMessage(id, destination, salt, ttl, payload, headers, originator, linkSource, floodHops, sourceRoute, traversedHops, masterId, fragmentIndex, fragmentTotal);
     }
 
     private static byte[] EncodeHeaders(IReadOnlyDictionary<string, string> headers)

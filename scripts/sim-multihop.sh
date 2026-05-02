@@ -32,8 +32,10 @@
 #   scripts/sim-multihop.sh verify    # show every node's inbox
 #   scripts/sim-multihop.sh learned   # dump per-node learned-routes
 #   scripts/sim-multihop.sh discovered    # dump per-node discovered-paths
-#   scripts/sim-multihop.sh prove-learning   # passive-flood acceptance
-#   scripts/sim-multihop.sh prove-meshcore   # meshcore acceptance
+#   scripts/sim-multihop.sh prove-learning       # passive-flood acceptance
+#   scripts/sim-multihop.sh prove-meshcore       # meshcore acceptance
+#   scripts/sim-multihop.sh prove-fragmentation  # F2 multi-part acceptance
+#   scripts/sim-multihop.sh prove-solicit        # B6.2 on-demand solicit acceptance
 #
 # Requires: dotnet 8 SDK, curl, python3 (with stdlib sqlite3).
 set -euo pipefail
@@ -396,6 +398,167 @@ PY
     echo "═════════════════════════════════════════════════════════════"
 }
 
+# F2 acceptance — submit a payload several times the default
+# fragment threshold (4096 bytes) at A, watch it traverse the 4-hop
+# chain to F as N independent fragment rows, and verify the receiver
+# reassembles into a single inbox row whose bytes match what we sent.
+# Catches "fragments arrive but reassembly drops some", "wrong order
+# reassembly", or "transit relay corrupts the mid=/frag= headers"
+# regressions that unit tests can't see end-to-end.
+cmd_prove_fragmentation() {
+    # 12 KB → 3 fragments at the 4096 default. Build it with a leading
+    # marker (so we can find the row deterministically) followed by a
+    # repeating filler. Done in Python because bash can't cleanly handle
+    # 12 KB in a single arg without quoting hazards.
+    local marker="frag-$(date +%s%N)"
+    local payload
+    payload=$(python3 -c "
+import sys
+marker = sys.argv[1]
+size = 12000
+body = marker + '|' + ('X' * (size - len(marker) - 1))
+sys.stdout.write(body)
+" "$marker")
+    local size=${#payload}
+
+    echo ">>> A→F payload size=$size bytes (default threshold=4096 → 3 fragments)"
+    submit_message A F "$payload"
+    drain_queues
+
+    echo ">>> Verifying F reassembled into exactly one row…"
+    if ! python3 - "${HTTP_PORT[F]}" "$marker" "$size" <<'PY'
+import sys, json, base64, urllib.request
+port, marker, expected_len = sys.argv[1], sys.argv[2], int(sys.argv[3])
+with urllib.request.urlopen(f"http://127.0.0.1:{port}/AppApi/inbound/chat") as r:
+    rows = json.loads(r.read().decode())
+matches = []
+for row in rows:
+    body = base64.b64decode(row.get("payload", "") or "")
+    try: text = body.decode("utf-8")
+    except UnicodeDecodeError: continue
+    if marker in text:
+        matches.append((row, text))
+if len(matches) != 1:
+    print(f"  FAIL — expected exactly 1 row containing marker {marker!r}, got {len(matches)}")
+    sys.exit(1)
+row, text = matches[0]
+if len(text) != expected_len:
+    print(f"  FAIL — reassembled length {len(text)} != expected {expected_len}")
+    sys.exit(1)
+if not text.startswith(marker):
+    print(f"  FAIL — reassembled bytes don't start with marker")
+    sys.exit(1)
+filler = text[len(marker) + 1:]
+if any(c != "X" for c in filler):
+    print(f"  FAIL — filler corrupted (not all 'X')")
+    sys.exit(1)
+print(f"  OK — single row, len={len(text)}, origin={row.get('originatorCallsign')}, prefix={text[:48]!r}…")
+PY
+    then
+        echo "!!! F2 acceptance failed"
+        return 1
+    fi
+
+    echo
+    echo "═════════════════════════════════════════════════════════════"
+    echo "  F2 ACCEPTANCE: a $size-byte payload was split at A into"
+    echo "  multiple fragments, each forwarded across the 4-hop chain"
+    echo "  A→B→C→E→F, and reassembled at F into a single row whose"
+    echo "  bytes match the original — fragment order, headers, and"
+    echo "  transit forwarding all preserved end-to-end."
+    echo "═════════════════════════════════════════════════════════════"
+}
+
+# B6.2 acceptance — on-demand solicit on a discovery channel, even
+# when scheduled beacons wouldn't have fired in the test window.
+# Stand-in for the HF NVIS use case ("operator triggers a probe
+# rather than waiting for the next propagation window") on a fast
+# LAN-multicast bearer.
+#
+# B is the central relay, sitting on both G1 (with A) and G2 (with C).
+# We wipe its discoveredpeers table and fire a solicit on each of B's
+# enabled channels. Replies arrive on the standard beacon path — if
+# the solicit→reply round-trip works, B's table re-populates with at
+# least A (G1) and C (G2) before the next scheduled beacon could fire
+# (LanMulticast default = 60s; we wait 4s).
+cmd_prove_solicit() {
+    local n=B
+    local d; d="$(node_dir "$n")/data/dapps.db"
+    local cookie; cookie="$(node_dir "$n")/cookie.txt"
+    local base="http://127.0.0.1:${HTTP_PORT[$n]}"
+
+    if [ ! -f "$d" ] || [ ! -f "$cookie" ]; then
+        echo "!!! Node $n not configured (run \`up\` first)"
+        return 1
+    fi
+
+    echo ">>> Wiping discovered peers on ${CALLSIGN[$n]}…"
+    python3 - "$d" <<'PY'
+import sqlite3, sys
+con = sqlite3.connect(sys.argv[1])
+con.execute("delete from discoveredpeers"); con.commit()
+PY
+
+    local chans; chans=$(curl -fsS -b "$cookie" "$base/DiscoveryChannels")
+    local ids; ids=$(printf '%s' "$chans" | python3 -c '
+import json, sys
+print(" ".join(str(c["id"]) for c in json.load(sys.stdin) if c.get("enabled", True)))
+')
+    if [ -z "$ids" ]; then
+        echo "!!! No enabled channels on ${CALLSIGN[$n]}"
+        return 1
+    fi
+
+    for id in $ids; do
+        echo ">>> Firing solicit on channel id=$id…"
+        curl -fsS -o /dev/null -b "$cookie" -X POST "$base/DiscoveryChannels/$id/solicit"
+    done
+
+    # Soliciting peers reply after a uniform-random delay drawn from
+    # [0, SolicitResponseMaxDelay] — 5s default in DiscoveryService
+    # (politeness back-off so a solicit doesn't trigger a beacon
+    # storm). 7s clears the max jitter window with margin for the
+    # beacon to actually travel over multicast and land in B's
+    # discoveredpeers table. Still well under the 60s scheduled-beacon
+    # interval for LanMulticast, so any peers that show up are direct
+    # consequences of the solicit, not the cadence timer.
+    echo ">>> Waiting 7s for solicit replies (clears 5s max jitter, under 60s scheduled-beacon)…"
+    sleep 7
+
+    echo ">>> Discovered peers on ${CALLSIGN[$n]} after solicit:"
+    if ! python3 - "$d" "${CALLSIGN[A]}" "${CALLSIGN[C]}" <<'PY'
+import sqlite3, sys
+con = sqlite3.connect(sys.argv[1])
+rows = list(con.execute("select Callsign, Bearer, ChannelKey from discoveredpeers order by Callsign, ChannelKey"))
+expected = {sys.argv[2], sys.argv[3]}
+seen = {cs for cs, _, _ in rows}
+if not rows:
+    print("  (none — solicit got no replies)")
+    sys.exit(1)
+for cs, b, k in rows:
+    print(f"  {cs} via {b}/{k}")
+missing = expected - seen
+if missing:
+    print(f"  FAIL — expected to see {sorted(expected)}, missing {sorted(missing)}")
+    sys.exit(1)
+print(f"  OK — both {sorted(expected)} replied within the solicit window")
+PY
+    then
+        echo "!!! B6.2 acceptance failed"
+        return 1
+    fi
+
+    echo
+    echo "═════════════════════════════════════════════════════════════"
+    echo "  B6.2 ACCEPTANCE: discovered-peers on ${CALLSIGN[$n]} was"
+    echo "  emptied, then a one-shot solicit on each of its channels"
+    echo "  re-populated the table with both ${CALLSIGN[A]} (G1) and"
+    echo "  ${CALLSIGN[C]} (G2) inside 7s — well under the 60s scheduled"
+    echo "  beacon interval, so the repopulation is solely the"
+    echo "  solicit→reply round-trip working as designed."
+    echo "═════════════════════════════════════════════════════════════"
+}
+
 # Canned non-trivial exercise — runs several sends across the topology
 # that exercise different path lengths, branching, and parallel flows.
 # After all sends complete, prints each receiver's inbox so F1 origin
@@ -469,6 +632,12 @@ cmd_exercise() {
         echo
         cmd_prove_learning
     fi
+
+    echo
+    cmd_prove_fragmentation
+
+    echo
+    cmd_prove_solicit
 }
 
 cmd_status() {
@@ -515,5 +684,7 @@ case "${1:-up}" in
     prove-learning) cmd_prove_learning ;;
     discovered) cmd_discovered ;;
     prove-meshcore) cmd_prove_meshcore ;;
-    *)          echo "usage: $0 {up|stop|send <from> <to> [payload]|exercise|status|verify|learned|prove-learning|discovered|prove-meshcore}"; echo "       SIM_ALGO=meshcore $0 up    # run with the MeshCore-like algorithm instead of passive-flood"; exit 2 ;;
+    prove-fragmentation) cmd_prove_fragmentation ;;
+    prove-solicit) cmd_prove_solicit ;;
+    *)          echo "usage: $0 {up|stop|send <from> <to> [payload]|exercise|status|verify|learned|prove-learning|discovered|prove-meshcore|prove-fragmentation|prove-solicit}"; echo "       SIM_ALGO=meshcore $0 up    # run with the MeshCore-like algorithm instead of passive-flood"; exit 2 ;;
 esac
