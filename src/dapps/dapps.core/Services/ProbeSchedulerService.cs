@@ -242,13 +242,25 @@ public sealed class ProbeSchedulerService(
         string localCallsign, string remoteCallsign, int bpqPort, CancellationToken ct,
         bool fetchPeers = true)
     {
+        var (row, _) = await ProbeAndRecordVerboseAsync(localCallsign, remoteCallsign, bpqPort, ct, fetchPeers);
+        return row;
+    }
+
+    /// <summary>Same as <see cref="ProbeAndRecordAsync"/> but also
+    /// returns the underlying <see cref="NodeProber.ProbeResult"/> so
+    /// callers (Plan M PR-D — exploration tools) can reason about the
+    /// raw peers exchange. Persistence happens identically.</summary>
+    public async Task<(DbProbedNode Row, NodeProber.ProbeResult Result)> ProbeAndRecordVerboseAsync(
+        string localCallsign, string remoteCallsign, int bpqPort, CancellationToken ct,
+        bool fetchPeers = true)
+    {
         var result = await prober.ProbeAsync(localCallsign, remoteCallsign, bpqPort, ct, fetchPeers);
         var row = await RecordResultAsync(result);
         if (result.Success && result.DiscoveredPeers.Count > 0)
         {
             await PersistTransitiveDiscoveriesAsync(result);
         }
-        return row;
+        return (row, result);
     }
 
     /// <summary>Apply a probe result to the persisted row (insert if
