@@ -231,13 +231,20 @@
                     phase.className = 'pill';
                     phase.textContent = '—';
                 } else {
-                    last.textContent = `${lr.phase} · ${fmtAgo(lr.updated_at)}`;
+                    // Phase is the enum name as a string (System.Text.Json
+                    // would default to integers; UpdatePhase has a
+                    // [JsonStringEnumConverter] attribute pinning the
+                    // string shape — see UpdateStatus.cs).
+                    const prettyPhase =
+                        lr.phase === 'RolledBack' ? 'rolled back'
+                        : (typeof lr.phase === 'string' ? lr.phase.toLowerCase() : '?');
+                    last.textContent = `${prettyPhase} · ${fmtAgo(lr.updated_at)}`;
                     lastErr.textContent = lr.error ? `error: ${escape(lr.error)}` : '';
                     if (lr.phase === 'Success') { phase.className = 'pill ok'; phase.textContent = 'success'; }
                     else if (lr.phase === 'RolledBack') { phase.className = 'pill warn'; phase.textContent = 'rolled back'; }
                     else if (lr.phase === 'Failed') { phase.className = 'pill warn'; phase.textContent = 'failed'; }
-                    else if (inProgress(lr.phase)) { phase.className = 'pill info'; phase.textContent = lr.phase.toLowerCase(); }
-                    else { phase.className = 'pill'; phase.textContent = lr.phase.toLowerCase(); }
+                    else if (inProgress(lr.phase)) { phase.className = 'pill info'; phase.textContent = prettyPhase; }
+                    else { phase.className = 'pill'; phase.textContent = prettyPhase; }
                 }
 
                 // Apply-button gating: needs a release available, and

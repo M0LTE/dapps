@@ -23,6 +23,45 @@ public sealed class UpdaterOrchestratorTests
         StatusPath: "/test/update-status");
 
     [Fact]
+    public void UpdateStatus_Phase_SerializesAsEnumName()
+    {
+        // The dashboard JS pattern-matches on phase NAMES ("Success",
+        // "RolledBack", …). System.Text.Json's default is integer
+        // encoding which silently breaks every comparison and leaves
+        // the pill at —. Pin the serialised shape so a regression
+        // can't re-introduce that bug. Caught in the v0.18.0 deploy on
+        // gb7rdg-node where every successful apply showed "6 · 32s ago"
+        // instead of "Success · 32s ago".
+        var status = new UpdateStatus(
+            UpdatePhase.Success,
+            FromVersion: "0.18.0",
+            ToVersion: "0.18.1",
+            StartedAt: new DateTime(2026, 5, 2, 11, 50, 0, DateTimeKind.Utc),
+            UpdatedAt: new DateTime(2026, 5, 2, 11, 51, 0, DateTimeKind.Utc),
+            Error: null);
+
+        var json = JsonSerializer.Serialize(status);
+
+        json.Should().Contain("\"phase\":\"Success\"",
+            "the dashboard JS compares lr.phase === 'Success' / 'RolledBack' / 'Failed' / etc");
+        json.Should().NotContain("\"phase\":6");
+    }
+
+    [Fact]
+    public void UpdateStatus_Phase_RoundTripsThroughString()
+    {
+        var json = "{\"phase\":\"RolledBack\",\"from_version\":\"0.18.0\",\"to_version\":\"0.18.1\"," +
+                   "\"started_at\":\"2026-05-02T11:00:00Z\",\"updated_at\":\"2026-05-02T11:01:00Z\"," +
+                   "\"error\":\"swap failed\"}";
+
+        var status = JsonSerializer.Deserialize<UpdateStatus>(json);
+
+        status.Should().NotBeNull();
+        status!.Phase.Should().Be(UpdatePhase.RolledBack);
+        status.Error.Should().Be("swap failed");
+    }
+
+    [Fact]
     public async Task ApplyUpdate_NoRequestMarker_NoOpsImmediately()
     {
         // Common case — systemd timer fired, no operator clicked
