@@ -167,6 +167,41 @@ public sealed class UpdaterOrchestratorTests
     }
 
     [Fact]
+    public async Task ApplyUpdate_SystemctlProbeThrows_FailsBeforeSwap()
+    {
+        // Defends against the linux-arm Process-bundle bug class:
+        // we probe IsServiceActiveAsync (which uses System.Diagnostics.
+        // Process under the hood) BEFORE the swap. A missing-assembly
+        // exception there should fail-fast with no swap attempted —
+        // not a swap-then-crash that leaves dapps running on the OLD
+        // binary while the NEW one sits on disk unstarted.
+        var fs = new FakeFileSystem();
+        fs.Files["/test/dapps"] = "old";
+        fs.Files["/test/update-requested"] = "marker";
+        var dl = new FakeDownloader(fs)
+        {
+            Latest = new LatestReleaseInfo("v0.18.0", "url", null),
+            DownloadContent = "new",
+        };
+        var proc = new FakeProcess
+        {
+            IsActiveException = new FileNotFoundException(
+                "Could not load file or assembly 'System.Diagnostics.Process'"),
+        };
+
+        var rc = await MakeOrchestrator("0.17.2", fs, dl, proc).ApplyUpdateAsync(CancellationToken.None);
+
+        rc.Should().Be(2);
+        fs.Files["/test/dapps"].Should().Be("old", "swap MUST NOT happen if probe fails");
+        fs.Files.ContainsKey("/test/dapps.new").Should().BeFalse(
+            "no download triggered either — probe gates everything");
+        proc.Calls.Where(c => c.StartsWith("restart:")).Should().BeEmpty();
+        var status = ReadStatus(fs);
+        status.Phase.Should().Be(UpdatePhase.Failed);
+        status.Error.Should().Contain("systemctl probe");
+    }
+
+    [Fact]
     public async Task ApplyUpdate_DownloadFails_FailedNoSwap()
     {
         var fs = new FakeFileSystem();
@@ -177,6 +212,8 @@ public sealed class UpdaterOrchestratorTests
             Latest = new LatestReleaseInfo("v0.18.0", "url", null),
             DownloadException = new IOException("link reset"),
         };
+        // Probe succeeds (default IsActive=false is fine — we only
+        // check that the call doesn't throw); download fails.
         var proc = new FakeProcess();
 
         var rc = await MakeOrchestrator("0.17.2", fs, dl, proc).ApplyUpdateAsync(CancellationToken.None);
@@ -185,7 +222,9 @@ public sealed class UpdaterOrchestratorTests
         fs.Files["/test/dapps"].Should().Be("old");
         // Half-downloaded artifact must not litter /opt/dapps.
         fs.Files.ContainsKey("/test/dapps.new").Should().BeFalse();
-        proc.Calls.Should().BeEmpty();
+        // The systemctl probe runs before the download (Plan C5.2 — fail
+        // fast if we can't talk to systemd). No restart should fire.
+        proc.Calls.Where(c => c.StartsWith("restart:")).Should().BeEmpty();
         var status = ReadStatus(fs);
         status.Phase.Should().Be(UpdatePhase.Failed);
         status.Error.Should().Contain("download:");
@@ -390,6 +429,7 @@ public sealed class UpdaterOrchestratorTests
         public Queue<int> RestartExitCodes { get; set; } = new();
         public Queue<bool>? IsActiveSequence { get; set; }
         public bool IsActive { get; set; }
+        public Exception? IsActiveException { get; set; }
 
         public Task<int> RestartServiceAsync(string serviceName, CancellationToken ct)
         {
@@ -400,6 +440,7 @@ public sealed class UpdaterOrchestratorTests
         public Task<bool> IsServiceActiveAsync(string serviceName, CancellationToken ct)
         {
             Calls.Add($"is-active:{serviceName}");
+            if (IsActiveException is not null) throw IsActiveException;
             if (IsActiveSequence is not null && IsActiveSequence.Count > 0)
             {
                 return Task.FromResult(IsActiveSequence.Dequeue());

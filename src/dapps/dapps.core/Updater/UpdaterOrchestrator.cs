@@ -127,6 +127,32 @@ public sealed class UpdaterOrchestrator
             return 0;
         }
 
+        // 3a. Sanity-probe systemctl BEFORE we swap. If Process can't
+        //     be loaded (we hit this on linux-arm with the in-memory
+        //     bundle resolver — fixed in v0.18.4 by extraction-on-
+        //     startup, but defending here means the next class of
+        //     "can't talk to systemd" never produces a swap-then-
+        //     crash dead-end node), surface the failure with no swap
+        //     attempted. Calling IsServiceActiveAsync here makes the
+        //     JIT eagerly compile RestartServiceAsync's deps, so any
+        //     missing-assembly error fires right now rather than
+        //     between the swap and the restart.
+        try
+        {
+            await proc.IsServiceActiveAsync(ServiceName, ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "systemctl probe failed — refusing to swap");
+            WriteStatus(status with
+            {
+                Phase = UpdatePhase.Failed, UpdatedAt = timeProvider.GetUtcNow().UtcDateTime,
+                Error = $"systemctl probe: {ex.Message}",
+            });
+            ClearRequest();
+            return 2;
+        }
+
         // 3. Download to a side path; never clobber the live binary
         //    until the whole download completes successfully.
         WriteStatus(status with { Phase = UpdatePhase.Downloading, UpdatedAt = timeProvider.GetUtcNow().UtcDateTime });
