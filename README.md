@@ -446,7 +446,18 @@ sudo curl -L --fail \
 
 Or copy from a local clone (`sudo install -m 644 scripts/dapps.service /etc/systemd/system/`).
 
-The unit binds the dashboard to `127.0.0.1:5000` by default (loopback only — set the sysop password through the browser before exposing on the LAN), runs as the unprivileged `dapps` user with the standard systemd hardening flags, and includes `RestartPreventExitStatus=78` so dapps doesn't crash-loop on operationally-fatal config errors (e.g. when an MQTT port conflict means restarting won't help — the journal will surface a clear error and dapps will stop, instead of retrying forever).
+The unit binds the dashboard to `0.0.0.0:5000` (reachable from the LAN — set the sysop password through the browser on first visit before going further), runs as the unprivileged `dapps` user with the standard systemd hardening flags, and includes `RestartPreventExitStatus=78` so dapps doesn't crash-loop on operationally-fatal config errors (e.g. when an MQTT port conflict means restarting won't help — the journal will surface a clear error and dapps will stop, instead of retrying forever).
+
+**Local overrides** (different bind, different port, extra environment): drop a file in `/etc/systemd/system/dapps.service.d/` rather than editing the unit file in place. Drop-ins survive future replacements (e.g. when the dapps-updater pulls a fresh unit, or when you re-curl the recipe). Example to bind only on a specific interface:
+
+```sh
+sudo mkdir -p /etc/systemd/system/dapps.service.d
+sudo tee /etc/systemd/system/dapps.service.d/override.conf >/dev/null <<'EOF'
+[Service]
+Environment=ASPNETCORE_URLS=http://192.0.2.1:5000
+EOF
+sudo systemctl daemon-reload && sudo systemctl restart dapps.service
+```
 
 **Enable + start:**
 
