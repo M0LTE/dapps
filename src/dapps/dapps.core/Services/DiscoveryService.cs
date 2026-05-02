@@ -73,7 +73,7 @@ public sealed class DiscoveryService(
             var info = group.Select(r => new DiscoveryChannelInfo(
                 r.Id, r.Bearer, r.ChannelKey, r.LinkClass,
                 r.BeaconIntervalSeconds, r.AdvertisedTtlSeconds, r.CostHint,
-                r.AirtimeBudgetSecondsPerHour)).ToList();
+                r.AirtimeBudgetSecondsPerHour, r.SolicitIntervalSeconds)).ToList();
             try
             {
                 await bearer.StartAsync(info, stoppingToken);
@@ -141,12 +141,24 @@ public sealed class DiscoveryService(
         CancellationToken stoppingToken)
     {
         var nextEmit = new Dictionary<(string Bearer, string ChannelKey), DateTime>();
+        // Plan B6.2 follow-up — per-channel scheduled solicit. Only
+        // populated for channels with a positive SolicitIntervalSeconds.
+        // The first solicit fires one full interval after start (not
+        // immediately) — beacons cover the freshly-joined-node case
+        // already, and an immediate solicit would step on our own
+        // initial beacon.
+        var nextSolicit = new Dictionary<(string Bearer, string ChannelKey), DateTime>();
         foreach (var kv in channelsByBearer)
         foreach (var ch in kv.Value)
         {
             // Initial fire: a small jitter from now so a freshly-joined
             // node is visible to neighbours within seconds.
             nextEmit[(kv.Key, ch.ChannelKey)] = timeProvider.GetUtcNow().UtcDateTime.AddMilliseconds(Random.Shared.Next(50, 250));
+            if (ch.SolicitIntervalSeconds > 0)
+            {
+                nextSolicit[(kv.Key, ch.ChannelKey)] =
+                    timeProvider.GetUtcNow().UtcDateTime.AddSeconds(ch.SolicitIntervalSeconds);
+            }
         }
         var nextSweep = timeProvider.GetUtcNow().UtcDateTime + SweepInterval;
 
@@ -200,6 +212,45 @@ public sealed class DiscoveryService(
                     }
                     nextEmit[key] = now.AddSeconds(Math.Max(5, ch.BeaconIntervalSeconds));
                 }
+
+                // Plan B6.2 — scheduled solicit cadence. Independent of
+                // beacons: a channel may want to beacon every 30 min and
+                // solicit every 4 h, or beacon never (Enabled but
+                // BeaconIntervalSeconds large) and solicit on a tighter
+                // schedule. Both still gate through the airtime budget.
+                foreach (var ch in kv.Value)
+                {
+                    var key = (kv.Key, ch.ChannelKey);
+                    if (!nextSolicit.TryGetValue(key, out var solicitDue)) continue;
+                    if (now < solicitDue) continue;
+
+                    var solicitCost = LinkClassDefaults.AirtimeSecondsEstimate(ch.LinkClass, AirtimeKind.Solicit);
+                    if (airtime is { } sacct && !sacct.TryReserve(solicitCost, $"scheduled-solicit {kv.Key}/{ch.ChannelKey}", ch.ChannelKey, ch.AirtimeBudgetSecondsPerHour))
+                    {
+                        // Same defer math as scheduled beacons — a
+                        // quarter of the regular interval keeps us
+                        // checking but doesn't burn cycles re-trying.
+                        var deferSec = Math.Max(15, ch.SolicitIntervalSeconds / 4);
+                        nextSolicit[key] = now.AddSeconds(deferSec);
+                        continue;
+                    }
+
+                    var solicit = new SolicitFrame(options.CurrentValue.Callsign);
+                    try
+                    {
+                        await bearer.SolicitAsync(solicit, ch.ChannelKey, stoppingToken);
+                        logger.LogInformation(
+                            "DiscoveryService: scheduled solicit on {0}/{1}",
+                            kv.Key, ch.ChannelKey);
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogWarning(ex,
+                            "DiscoveryService: scheduled solicit on {0}/{1} failed",
+                            kv.Key, ch.ChannelKey);
+                    }
+                    nextSolicit[key] = now.AddSeconds(Math.Max(15, ch.SolicitIntervalSeconds));
+                }
             }
 
             if (now >= nextSweep)
@@ -216,8 +267,14 @@ public sealed class DiscoveryService(
                 nextSweep = now + SweepInterval;
             }
 
-            // Sleep until the nearest of: next emit, next sweep, or 1s.
+            // Sleep until the nearest of: next emit, next solicit,
+            // next sweep, or 1s.
             var soonest = nextEmit.Values.Min();
+            if (nextSolicit.Count > 0)
+            {
+                var soonestSolicit = nextSolicit.Values.Min();
+                if (soonestSolicit < soonest) soonest = soonestSolicit;
+            }
             if (nextSweep < soonest) soonest = nextSweep;
             var sleep = soonest - timeProvider.GetUtcNow().UtcDateTime;
             if (sleep < TimeSpan.FromMilliseconds(50)) sleep = TimeSpan.FromMilliseconds(50);

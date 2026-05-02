@@ -675,6 +675,7 @@ else
                 <th>Beacon every</th>
                 <th>Advertised TTL</th>
                 <th title="Per-channel airtime cap (B7). 0 = use the global budget only.">Channel budget</th>
+                <th title="Scheduled-solicit cadence (B6.2). 0 = disabled. Reservations gate through the airtime budget.">Solicit every</th>
                 <th>Enabled</th>
                 <th></th>
             </tr>
@@ -690,6 +691,7 @@ else
                 <td class="numeric">@c.BeaconIntervalSeconds s</td>
                 <td class="numeric">@c.AdvertisedTtlSeconds s</td>
                 <td class="numeric">@(c.AirtimeBudgetSecondsPerHour > 0 ? $"{c.AirtimeBudgetSecondsPerHour}s/h" : "—")</td>
+                <td class="numeric">@(c.SolicitIntervalSeconds > 0 ? $"{c.SolicitIntervalSeconds} s" : "—")</td>
                 <td>@(c.Enabled ? "yes" : "no")</td>
                 <td>
                     <button class="link-btn" onclick="dappsSolicitChannel(@c.Id)" title="Send a 'who's there?' solicit on this channel; reachable peers reply with their normal beacon (B6.2)">solicit</button>
@@ -720,6 +722,7 @@ else
             </select>
         </label>
         <label>Channel airtime budget (seconds/hour, 0 = unlimited) <input name="airtimeBudgetSecondsPerHour" type="number" min="0" max="3600" value="0" /></label>
+        <label>Scheduled solicit interval (seconds, 0 = disabled) <input name="solicitIntervalSeconds" type="number" min="0" max="86400" value="0" /></label>
         <button type="submit">Add / update</button>
     </form>
 </details>
@@ -1160,6 +1163,7 @@ else
             ChannelKey: f.channelKey.value,
             LinkClass: f.linkClass.value,
             AirtimeBudgetSecondsPerHour: parseInt(f.airtimeBudgetSecondsPerHour.value, 10) || 0,
+            SolicitIntervalSeconds: parseInt(f.solicitIntervalSeconds.value, 10) || 0,
         };
         if (await dappsPostJson('/DiscoveryChannels', body)) location.reload();
     }
