@@ -139,6 +139,22 @@ jobs:
         # ASP.NET Core + DI + JSON have enough reflection that trimming
         # tends to break startup in subtle ways. Binary size is ~100MB
         # — acceptable cost for "no runtime install needed".
+        #
+        # IncludeAllContentForSelfExtract=true forces every bundled
+        # assembly (managed AND native) to be extracted to a per-run
+        # cache dir on startup, instead of the default in-memory bundle
+        # resolver. We hit a real reproducible bug on linux-arm where
+        # the in-memory resolver couldn't load System.Diagnostics.Process
+        # — the assembly bytes were in the bundle (verified via
+        # `strings`) but the runtime threw FileNotFoundException when
+        # JIT'ing code that referenced it. The behaviour was 100%
+        # reproducible across consecutive apply-update runs and not
+        # transient. Forcing extraction puts every assembly on disk
+        # where the standard fs resolver finds it; trades a tiny
+        # startup penalty (~few hundred MB to /tmp/.net/...) for a
+        # working binary on the only platform this matters for in
+        # practice. The other RIDs (linux-x64, linux-arm64, win-x64,
+        # osx-arm64) absorb this with no observed downside.
         shell: bash
         run: |
           dotnet publish src/dapps/dapps.core/dapps.core.csproj \
@@ -147,6 +163,7 @@ jobs:
             --self-contained true \
             -p:PublishSingleFile=true \
             -p:IncludeNativeLibrariesForSelfExtract=true \
+            -p:IncludeAllContentForSelfExtract=true \
             -p:DebugType=embedded \
             --output publish
 
