@@ -14,6 +14,80 @@ namespace dapps.core.tests;
 public sealed class UdpMulticastDiscoveryTests
 {
     [Fact]
+    public async Task Loopback_SolicitFromOne_HeardByOtherAsReceivedSolicit()
+    {
+        // Plan B6.2 — solicit round-trip over the UDP multicast bearer.
+        // Sender emits a solicit; receiver yields a ReceivedSolicit (NOT
+        // a ReceivedBeacon) carrying the asker's callsign and the same
+        // ChannelKey we joined.
+        var port = 47880 + Random.Shared.Next(1000);
+        var group = $"239.42.42.42:{port}";
+        var channel = new DiscoveryChannelInfo(
+            Id: 1, Bearer: "udp", ChannelKey: group, LinkClass: LinkClass.LanMulticast,
+            BeaconIntervalSeconds: 60, AdvertisedTtlSeconds: 180, CostHint: 1);
+
+        await using var sender = new UdpMulticastDiscoveryBearer("M0SEND", NullLoggerFactory.Instance);
+        await using var receiver = new UdpMulticastDiscoveryBearer("M0RECV", NullLoggerFactory.Instance);
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await sender.StartAsync([channel], cts.Token);
+        await receiver.StartAsync([channel], cts.Token);
+
+        var heard = new TaskCompletionSource<ReceivedSolicit>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var listenTask = Task.Run(async () =>
+        {
+            await foreach (var frame in receiver.ListenAsync(cts.Token).WithCancellation(cts.Token))
+            {
+                if (frame is not ReceivedSolicit rs) continue;
+                heard.TrySetResult(rs);
+                break;
+            }
+        }, cts.Token);
+
+        await Task.Delay(150, cts.Token);
+        await sender.SolicitAsync(new SolicitFrame("M0SEND"), group, cts.Token);
+
+        var got = await heard.Task.WaitAsync(TimeSpan.FromSeconds(5), cts.Token);
+        got.Solicit.Callsign.Should().Be("M0SEND");
+        got.ChannelKey.Should().Be(group);
+    }
+
+    [Fact]
+    public async Task Loopback_OwnSolicitNotEchoedToSelf()
+    {
+        // Mirror of the beacon self-echo case: our own solicit looped
+        // back via MulticastLoopback must not surface as a
+        // ReceivedSolicit, otherwise the service would respond to its
+        // own ask.
+        var port = 48880 + Random.Shared.Next(1000);
+        var group = $"239.42.42.42:{port}";
+        var channel = new DiscoveryChannelInfo(1, "udp", group, LinkClass.LanMulticast, 60, 180, 1);
+
+        await using var bearer = new UdpMulticastDiscoveryBearer("M0SELF", NullLoggerFactory.Instance);
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+        await bearer.StartAsync([channel], cts.Token);
+
+        var saw = new TaskCompletionSource<ReceivedSolicit>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var listenTask = Task.Run(async () =>
+        {
+            await foreach (var frame in bearer.ListenAsync(cts.Token).WithCancellation(cts.Token))
+            {
+                if (frame is not ReceivedSolicit rs) continue;
+                saw.TrySetResult(rs);
+                break;
+            }
+        }, cts.Token);
+
+        await Task.Delay(150, cts.Token);
+        await bearer.SolicitAsync(new SolicitFrame("M0SELF"), group, cts.Token);
+
+        var winner = await Task.WhenAny(saw.Task, Task.Delay(TimeSpan.FromSeconds(1), cts.Token));
+        winner.Should().NotBeSameAs(saw.Task,
+            "a node MUST NOT respond to its own solicit looping back via MulticastLoopback");
+    }
+
+    [Fact]
     public async Task Loopback_AnnounceFromOne_HeardByOther()
     {
         var port = 41880 + Random.Shared.Next(1000);
@@ -32,8 +106,9 @@ public sealed class UdpMulticastDiscoveryTests
         var heard = new TaskCompletionSource<ReceivedBeacon>(TaskCreationOptions.RunContinuationsAsynchronously);
         var listenTask = Task.Run(async () =>
         {
-            await foreach (var rb in receiver.ListenAsync(cts.Token).WithCancellation(cts.Token))
+            await foreach (var frame in receiver.ListenAsync(cts.Token).WithCancellation(cts.Token))
             {
+                if (frame is not ReceivedBeacon rb) continue;
                 heard.TrySetResult(rb);
                 break;
             }
@@ -67,8 +142,9 @@ public sealed class UdpMulticastDiscoveryTests
         var saw = new TaskCompletionSource<ReceivedBeacon>(TaskCreationOptions.RunContinuationsAsynchronously);
         var listenTask = Task.Run(async () =>
         {
-            await foreach (var rb in bearer.ListenAsync(cts.Token).WithCancellation(cts.Token))
+            await foreach (var frame in bearer.ListenAsync(cts.Token).WithCancellation(cts.Token))
             {
+                if (frame is not ReceivedBeacon rb) continue;
                 saw.TrySetResult(rb);
                 break;
             }
@@ -107,8 +183,9 @@ public sealed class UdpMulticastDiscoveryTests
         var seen = new List<ReceivedBeacon>();
         var listenTask = Task.Run(async () =>
         {
-            await foreach (var rb in receiver.ListenAsync(cts.Token).WithCancellation(cts.Token))
+            await foreach (var frame in receiver.ListenAsync(cts.Token).WithCancellation(cts.Token))
             {
+                if (frame is not ReceivedBeacon rb) continue;
                 lock (seen) seen.Add(rb);
                 if (seen.Count >= 2) break;
             }
@@ -159,8 +236,9 @@ public sealed class UdpMulticastDiscoveryTests
         var seen = new List<ReceivedBeacon>();
         var listenTask = Task.Run(async () =>
         {
-            await foreach (var rb in receiver.ListenAsync(cts.Token).WithCancellation(cts.Token))
+            await foreach (var frame in receiver.ListenAsync(cts.Token).WithCancellation(cts.Token))
             {
+                if (frame is not ReceivedBeacon rb) continue;
                 lock (seen) seen.Add(rb);
             }
         }, cts.Token);

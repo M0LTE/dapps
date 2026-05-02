@@ -25,8 +25,8 @@ public sealed class UdpMulticastDiscoveryBearer : IDiscoveryBearer
 
     private readonly Dictionary<string, GroupBinding> _groups = new(StringComparer.Ordinal);
 
-    private readonly Channel<ReceivedBeacon> _incoming
-        = Channel.CreateUnbounded<ReceivedBeacon>(new UnboundedChannelOptions
+    private readonly Channel<ReceivedDiscoveryFrame> _incoming
+        = Channel.CreateUnbounded<ReceivedDiscoveryFrame>(new UnboundedChannelOptions
         {
             SingleReader = true,
             SingleWriter = true,
@@ -102,7 +102,18 @@ public sealed class UdpMulticastDiscoveryBearer : IDiscoveryBearer
         await binding.Send.SendAsync(bytes, binding.Endpoint, ct);
     }
 
-    public async IAsyncEnumerable<ReceivedBeacon> ListenAsync(
+    public async Task SolicitAsync(SolicitFrame solicit, string channelKey, CancellationToken ct)
+    {
+        if (!_groups.TryGetValue(channelKey, out var binding))
+        {
+            throw new InvalidOperationException(
+                $"No UDP multicast group bound for channel-key '{channelKey}'");
+        }
+        var bytes = SolicitCodec.Encode(solicit);
+        await binding.Send.SendAsync(bytes, binding.Endpoint, ct);
+    }
+
+    public async IAsyncEnumerable<ReceivedDiscoveryFrame> ListenAsync(
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
     {
         await foreach (var rb in _incoming.Reader.ReadAllAsync(ct))
@@ -127,6 +138,20 @@ public sealed class UdpMulticastDiscoveryBearer : IDiscoveryBearer
                 {
                     _logger.LogWarning(ex,
                         "UDP multicast receive failed on {0}; continuing", binding.Endpoint);
+                    continue;
+                }
+
+                // Solicit codec first — its magic prefix is strictly
+                // longer than the beacon's, so a beacon never matches.
+                // Solicits without a callsign or with our own callsign
+                // are still surfaced (the service decides what to do
+                // about self-echo); UDP self-echo dedup runs on the
+                // beacon path below since beacons populate peer state.
+                if (SolicitCodec.TryParse(dgram.Buffer, out var solicit) && solicit is not null)
+                {
+                    if (string.Equals(solicit.Callsign, _ourCallsign, StringComparison.OrdinalIgnoreCase))
+                        continue; // our own solicit looped back — ignore
+                    await _incoming.Writer.WriteAsync(new ReceivedSolicit(solicit, binding.ChannelKey), ct);
                     continue;
                 }
 

@@ -165,7 +165,12 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<ProbeSchedulerServ
 // bearer factory needs to dereference SystemOptions, which queries the
 // systemoptions table — which DbStartup hasn't created at the moment
 // the DI container materialises hosted services.
-builder.Services.AddHostedService<DiscoveryService>();
+//
+// Registered as a singleton so the /DiscoveryChannels controller can
+// inject it for B6.2 on-demand solicits. AddHostedService binds the
+// same instance to the host lifecycle.
+builder.Services.AddSingleton<DiscoveryService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<DiscoveryService>());
 builder.Services.AddLogging(logging =>
 {
     logging.AddSimpleConsole(options =>

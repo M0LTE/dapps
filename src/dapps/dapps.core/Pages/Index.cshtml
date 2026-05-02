@@ -529,7 +529,10 @@ else
                 <td class="numeric">@c.BeaconIntervalSeconds s</td>
                 <td class="numeric">@c.AdvertisedTtlSeconds s</td>
                 <td>@(c.Enabled ? "yes" : "no")</td>
-                <td><button class="link-btn" onclick="dappsDeleteChannel(@c.Id)">remove</button></td>
+                <td>
+                    <button class="link-btn" onclick="dappsSolicitChannel(@c.Id)" title="Send a 'who's there?' solicit on this channel; reachable peers reply with their normal beacon (B6.2)">solicit</button>
+                    <button class="link-btn" onclick="dappsDeleteChannel(@c.Id)">remove</button>
+                </td>
             </tr>
         }
         </tbody>
@@ -916,6 +919,16 @@ else
         if (!confirm(`Remove discovery channel ${id}?`)) return;
         if (await dappsPostJson('/DiscoveryChannels/' + id, null, 'DELETE')) {
             location.reload();
+        }
+    }
+
+    async function dappsSolicitChannel(id) {
+        // B6.2 — fire-and-forget. Replies arrive on the regular beacon
+        // path and populate "Discovered peers" automatically; no UI
+        // refresh needed beyond the existing 30s poll.
+        if (await dappsPostJson('/DiscoveryChannels/' + id + '/solicit', null)) {
+            // Tiny user feedback so the operator knows the click landed.
+            // No alert/reload — we don't want to disrupt their viewing.
         }
     }
 

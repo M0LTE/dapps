@@ -253,17 +253,19 @@ Phase 2 adds a new **`peers` command on the DAPPSv1 protocol** (`who` aliased) a
 
 **Convention:** "DAPPS lives here" = an `APPLICATION` line whose alias is `DAPPS` (typing `DAPPS` at the node prompt connects to the local DAPPSv1 instance). Already what we recommend; documented in the install README. Phase 2b leans on this.
 
-#### B6.2 — HF NVIS solicit-and-listen
+#### B6.2 — HF NVIS solicit-and-listen *(on-demand done; scheduled cadence queued)*
 
-UI-frame discovery's missing twin. Beacons say "I'm here." A solicit says "anyone there?" — broadcast on the configured discovery channel, then listen for a bounded window for replies. Especially useful on 40m NVIS HF where the propagation footprint is shifting and broadcast-shaped: tonight's reachable peers aren't yesterday's, and beacons that happened to TX while propagation was closed don't reach anyone.
+Wire form: `DAPPS v1 solicit callsign=M0LTE-9` — same KV style as the beacon, longer fixed prefix so the parsers don't confuse them. `SolicitCodec.TryParse` strictly anchors on `"DAPPS v1 solicit "` and accepts a `callsign=` field plus arbitrary forward-compat KVs. Both bearers (`AgwUiDiscoveryBearer`, `UdpMulticastDiscoveryBearer`) gained a `SolicitAsync(SolicitFrame, channelKey, ct)` emit method (UI 'M' frame on AGW, multicast datagram on UDP) and try the solicit codec before the beacon codec on inbound, surfacing them as `ReceivedSolicit` on the same listen stream as `ReceivedBeacon`. Both inherit from a new `ReceivedDiscoveryFrame` base so the dispatcher can pattern-match.
 
-Builds on the B1 bearer/channel concept — would be a new channel mode parallel to "beacon" (which is "scheduled outbound broadcasts") rather than a separate bearer. Operator turns it on per-channel: the AGW UI bearer can do solicits on HF channels but doesn't have to on VHF (where beacons + line-of-sight do the job adequately).
+`DiscoveryService` now responds to incoming solicits by emitting a beacon on the same channel after a uniform random delay in `[0, SolicitResponseMaxDelay]` (default 5 s). The random jitter avoids the "ten nodes hear the same solicit, all reply at once" channel-saturation case. Self-echo on the UDP loopback path is filtered out (we don't respond to our own solicit). Replies arrive at the asker as normal beacons → `DbDiscoveredPeer` upsert via the existing path; no new storage. REST surface: `POST /DiscoveryChannels/{id}/solicit` fires a one-shot solicit; `503` if the bearer isn't currently running, `400` if the channel is disabled. Dashboard: per-channel "solicit" button next to "remove".
 
-Implementation notes:
-- **Frame format**: a UI frame with a known discriminator ("DAPPS-SOLICIT" or similar) — receivers reply with their normal beacon. Keeps reply path identical to passive discovery; just gives nudges.
-- **Cadence**: opt-in per channel. HF channels say "yes, solicit"; VHF channels say "no, beacons are enough."
-- **Receive window**: bounded ("listen for replies for N seconds, then move on"). Receivers pick a random delay 0-N before replying so the channel doesn't get hammered with simultaneous responses.
-- **Storage**: replies populate the existing `DbDiscoveredPeer` table — a peer heard via solicit-reply is no different from a peer heard via beacon. The solicit just made it more likely we'd hear them at all.
+**What's still queued:** a *scheduled* solicit cadence per channel (the original "HF channels solicit every N hours" knob). Skipped intentionally because the global airtime-budget idea in the scratchpad is the right shape for this — once the budget accountant lands, the solicit cadence becomes a budget-share question rather than a per-channel duplicate of the beacon-interval knob. On-demand solicits cover the immediate "I want to ping the channel right now" use case, which is the one a sysop reaches for during HF testing anyway.
+
+Implementation notes carried forward:
+- **Frame format**: long magic `DAPPS v1 solicit ` distinguishes solicits from beacons at the codec layer. Bearers try solicit first; beacons fall through.
+- **Cadence**: on-demand only today (REST + dashboard). Scheduled cadence to be designed alongside the discovery airtime budget.
+- **Receive window**: random reply delay 0..5 s by default. Operator-tuneable via `DiscoveryService.SolicitResponseMaxDelay`; a per-channel column lands when scheduled cadence does.
+- **Storage**: replies are normal beacons — `DbDiscoveredPeer` upserts via the existing path. No solicit-specific persistence.
 
 #### Sequencing
 
@@ -487,7 +489,7 @@ Roughly:
 3. **C1 + C2 + C4** (docker image, config tooling, install docs) — gets the thing into one sysop's hands.
 4. **A4** (per-app auth) — *done*.
 5. **D1 + D2** (web UI inspection + exercise) — *MVP done*. SSE inbound feed + ihave terminal still pending.
-6. **B1–B4** (channels-first-class discovery + cost-based resolver) — *done*. **B5** (learned-graph routing inside DAPPS, bearer-agnostic) — *done*. **B6.1** Phase 1 (direct-connect liveness probes) and Phase 2 (`peers` command + transitive discovery) — *done*. **B6.1 Phase 2b** (node-prompt discovery against non-DAPPS NODECALLs) and **B6.2** (HF NVIS solicit-and-listen) still queued.
+6. **B1–B4** (channels-first-class discovery + cost-based resolver) — *done*. **B5** (learned-graph routing inside DAPPS, bearer-agnostic) — *done*. **B6.1** Phase 1 (direct-connect liveness probes) and Phase 2 (`peers` command + transitive discovery) — *done*. **B6.2** (HF NVIS solicit-and-listen, on-demand) — *done*. **B6.1 Phase 2b** (node-prompt discovery against non-DAPPS NODECALLs) and **B6.2** scheduled cadence still queued; the latter is naturally subsumed by the global airtime-budget idea in the scratchpad.
 7. **E1–E4** (concepts + tutorial + reference + sample-app gallery) — *done*. Developer guide is complete; third-party app development is unlocked.
 8. **H** (concrete bearer integrations — MeshCore Companion, MeshCore KISS, RHP, …) on its own track, doesn't gate the routing or developer-guide work.
 9. **A3** — *done*. **C5.1** (update-availability banner) — *done*. **C3, C5.2/C5.3 (triggered + scheduled self-update), D3, D4, F1–F4** in parallel as polish.

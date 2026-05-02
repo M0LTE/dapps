@@ -40,8 +40,8 @@ public sealed class AgwUiDiscoveryBearer : IDiscoveryBearer
     private Task? _readLoop;
     private readonly Dictionary<byte, string> _portToChannelKey = new();
 
-    private readonly Channel<ReceivedBeacon> _incoming
-        = Channel.CreateUnbounded<ReceivedBeacon>(new UnboundedChannelOptions
+    private readonly Channel<ReceivedDiscoveryFrame> _incoming
+        = Channel.CreateUnbounded<ReceivedDiscoveryFrame>(new UnboundedChannelOptions
         {
             SingleReader = true,
             SingleWriter = true,
@@ -121,7 +121,17 @@ public sealed class AgwUiDiscoveryBearer : IDiscoveryBearer
             ct);
     }
 
-    public async IAsyncEnumerable<ReceivedBeacon> ListenAsync(
+    public async Task SolicitAsync(SolicitFrame solicit, string channelKey, CancellationToken ct)
+    {
+        if (_framing is null) throw new InvalidOperationException("AgwUiDiscoveryBearer not started");
+        var portByte = ParsePortByte(channelKey);
+        var payload = SolicitCodec.Encode(solicit);
+        await _framing.WriteFrameAsync(
+            new AgwFrame(portByte, 'M', 0xF0, _ourCallsign, _broadcastCall, payload),
+            ct);
+    }
+
+    public async IAsyncEnumerable<ReceivedDiscoveryFrame> ListenAsync(
         [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
     {
         await foreach (var rb in _incoming.Reader.ReadAllAsync(ct))
@@ -156,6 +166,17 @@ public sealed class AgwUiDiscoveryBearer : IDiscoveryBearer
                 if (!_portToChannelKey.TryGetValue(frame.Port, out var channelKey))
                 {
                     // Frame on a port we didn't ask to monitor — odd; skip.
+                    continue;
+                }
+
+                // Try the solicit codec first — its magic prefix is
+                // strictly longer than the beacon's, so a beacon never
+                // matches it. Beacons rejected by the solicit parser
+                // (no "solicit" keyword) fall through to the beacon
+                // parser.
+                if (SolicitCodec.TryParse(frame.Payload, out var solicit) && solicit is not null)
+                {
+                    await _incoming.Writer.WriteAsync(new ReceivedSolicit(solicit, channelKey), ct);
                     continue;
                 }
 
