@@ -4,21 +4,9 @@ Living planning document. Aim is to get DAPPS into the hands of node operators w
 
 ## Where we are now
 
-Seven PRs have landed since the restart:
+The protocol is fully specified (`README.md`'s "On-air protocol" section, including F4 versioning policy). The implementation matches the spec; the on-air format is byte-validated against real BPQ in CI via `m0lte/linbpq` (Testcontainers-managed). Local apps talk to DAPPS via MQTT (durable, idempotent on `dapps-id`) or REST. TTL forwarding works across multi-hop topologies. F1 end-to-end source tracking, F2 multi-part messages, F3 `rev` polling (opportunistic + scheduled) all done. B5 passive-learning routing + B5.1 MeshCore-flavoured DSR alternative both shipped. B6.1 connected-mode probe-and-map with transitive `peers` discovery, B6.2 HF-NVIS solicit-and-listen (on-demand + scheduled cadence), B7 single-counter discovery airtime budget with probe strategies, all live. C1 single-file native binaries publish via CI on five platforms; C2 env-var seeding plus `dapps --show-config`; C3 `/Health`, `/Operational`, decision-events ring + structured journal mirror, MQTT heartbeat; C4 install/upgrade docs in the README; C5.1 update-availability banner + C5.2 triggered self-update via privileged `dapps-updater.service`. D1-D4 dashboard MVP. E1-E4 developer guide complete. Phase M (#81-#85) — MCP server at `/mcp` with 26 operator-facing tools.
 
-| # | Title | What it did |
-|---|---|---|
-| 1 | Pin v1 on-air protocol; archive v0 | README protocol section pinned: `chk` rules, `clen=` for `fmt=d`, `s=` salt rename, per-hop residual TTL, fmt-defaults, KV-format constraints. Archived v0 source tree. |
-| 2 | Bring parser into compliance with v1 spec | CRC-16/CCITT-FALSE chk impl, `s=` rename in parser, `clen` enforcement, fmt-default, inactivity timeouts on receiver. |
-| 3 | Internal Timestamp→Salt rename + IHaveValidator extraction + tests | Code cosmetic alignment with the spec, parser logic lifted into a pure static for testability, 4→37 tests. |
-| 4 | AGW outbound transport behind a pluggable interface; remove FBB-telnet | `IDappsOutboundTransport`, `AgwOutboundTransport`, `DappsProtocolClient`. FBB-telnet path entirely deleted. Real-BPQ integration tests via `m0lte/linbpq` Docker image. 60 tests. |
-| 7 | App interface: embedded MQTT broker + REST mirror | Embedded MQTTnet broker + REST endpoints sharing one SQLite-backed queue. DAPPS-as-queue, broker-as-channel design. Source-callsign threading. 77 tests. |
-| 8 | .NET 10 + central package management + xunit.v3 + Microsoft Testing Platform + this plan.md | Toolchain refresh + roadmap doc. **Subsequently rolled back to .NET 8 LTS** — see below for the why. |
-| 9 | A1: TTL forwarder logic + two-instance integration test (closes #6) | `DbMessage.Ttl` + `CreatedAt` columns, residual-decrement at forward, drop-on-expiry, `TtlSweeperService`, `TwoInstanceLinbpqFixture`, end-to-end TTL test through real BPQ over AXIP-UDP. 105 tests. Diagnosed M0LTE/linbpq#41 (image's `mail chat` default CMD) along the way. |
-
-The protocol is fully specified (`README.md`'s "On-air protocol" section). The implementation matches the spec for the parts it implements. The on-air format is byte-validated against real BPQ in CI via `m0lte/linbpq`. Local apps can talk to a DAPPS instance via MQTT (durable, idempotent on `dapps-id`) or REST (POST + poll). TTL forwarding works end-to-end across two BPQs.
-
-What's missing to call this complete is the parts that turn a single-node demo into a network: a transport-neutral backhaul seam, a sysop-friendly neighbour table, peer discovery, route exchange, a deployable container, sysop and developer documentation, and a couple of specific spec follow-ups (multi-part messages, end-to-end source tracking).
+What's left is in the "Suggested ordering" near the bottom plus the open H bearer-integration phase. The biggest remaining items are external-blocked (H1/H2 MeshCore hardware, H3 RHP awaiting BPQ support, F5 signing awaiting an identity layer) or not-yet-prioritised (Phase G second-language reference impl, scratchpad phone messenger app).
 
 ## Tom's scratchpad of ideas
 
@@ -72,15 +60,9 @@ Real radio-bearer integrations (MeshCore Companion, MeshCore KISS, RHP UI, …) 
 
 Landed: `DbMessage.Ttl` + `CreatedAt` columns, residual-TTL decrement on forward, drop-and-delete on expiry, `TtlSweeperService` for background expiry of offers and messages, two-instance integration fixture with end-to-end coverage through real BPQ over AXIP-UDP. M0LTE/linbpq#41 (image's `mail chat` CMD blocking AGW dispatch) was diagnosed and fixed in the same arc, which closed #6.
 
-### A2. Better neighbour table than "manual MAP entries"
+### A2. Better neighbour table than "manual MAP entries" *(done)*
 
-Today `DbNeighbour.ConnectScript` is gone (replaced with `BpqPort` from PR #4) but neighbour selection in `OutboundMessageManager.ResolveNeighbour` still relies on `DbRouteHint` — a flat callsign→nexthop table populated by hand. Fine for v0 but not for "give it to a sysop and let them go."
-
-Sysop-friendly model:
-
-- `dapps neighbours add <callsign> [--bpq-port N]` and `... remove`, `... list` — REST endpoints (probably `/Neighbours`) + sample CLI scripts.
-- Optional: surface in the planned web UI (Phase D).
-- The auto-discovery work (Phase B) feeds this same table; manual + auto coexist.
+`DbNeighbour` is the canonical table; manual entries coexist with auto-discovered peers (Phase B). REST surface at `/Neighbours` (list / upsert / delete) plus a dashboard panel with add/remove form. `OutboundMessageManager.ResolveNeighbour` consults the routing seam (Phase B5/B5.1), which itself walks neighbour + discovered-peer + route-hint state. The originally-planned `dapps neighbours …` CLI was deferred — REST + dashboard cover the sysop ergonomics; if a real need surfaces it can be added as a side-door (à la `dapps --show-config`).
 
 ### A3. Sender-side inactivity timeout on AGW *(done)*
 
@@ -288,13 +270,13 @@ B7 follow-ups landed in a separate PR: per-channel airtime budgets via `DbDiscov
 
 **Goal:** a sysop downloads a single binary for their platform from a GitHub Release, drops it next to a `dapps.db`, and it Just Works.
 
-### C1. Native single-file binary releases
+### C1. Native single-file binary releases *(done)*
 
-Direction: native single-file binaries published as GitHub Release assets, not a Docker image. Operators run a binary; no .NET runtime install, no Docker install, no container plumbing. The Dockerfile in the repo stays as a secondary option for those who want it but isn't the primary distribution.
+Native single-file binaries published as GitHub Release assets, not a Docker image. Operators run a binary; no .NET runtime install, no Docker install, no container plumbing. The Dockerfile in the repo stays as a secondary option for those who want it but isn't the primary distribution.
 
 - Single workflow `.github/workflows/ci.yml` handles the full PR-to-release path. Triggered on PR (test only) and master push (test, then conditional release). Tag-push triggers are gone; the release decision is driven by `<Version>` in `src/dapps/Directory.Build.props` — bump it to release, leave it to land a normal commit.
 - Master-push flow: build + test → query whether `v$(Version)` already exists as a GitHub Release → if not, fan out the matrix (`linux-x64`, `linux-arm64`, `linux-arm`, `win-x64`, `osx-arm64`) and `gh release create` with all five binaries attached. Same version twice = second push is a no-op, so re-merging or amending master won't overwrite a published release.
-- `dotnet publish ... --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true` so the SQLite native lib bundles into the executable.
+- `dotnet publish ... --self-contained -p:PublishSingleFile=true -p:IncludeAllContentForSelfExtract=true` so the SQLite native lib AND the rest of the bundled framework extract correctly on first run (the `IncludeAll` form was needed to fix a `System.Diagnostics.Process` load failure on linux-arm — see #66).
 - Trimming left off — ASP.NET Core + DI + JSON have enough reflection that trimming tends to break startup in subtle ways. Binary is ~100MB; acceptable for the ergonomics win.
 
 ### C2. Config tooling *(env-var seeding done; CLI subcommand deferred)*
@@ -373,13 +355,13 @@ Send-test-message form on the dashboard POSTs into `Database.SubmitOutboundMessa
 
 The "subscribe to inbound" SSE view and the "manual ihave" terminal are still useful but bigger surfaces; deferred. Both have natural homes once the dashboard grows beyond a single page (separate `/Inbound` and `/IHave` Razor pages).
 
-### D3. Configuration UI
+### D3. Configuration UI *(done)*
 
-Replace the bare `POST /Config` endpoint with a form: callsign, AGW host/port, MQTT port, default BPQ port, neighbour list. Save persists to the DB; restart prompts when needed.
+`/Config` `<details>` block on the dashboard exposes every operator-tunable knob: callsign, BPQ AGW host/port, MQTT port, UDP listener, default BPQ port, auth-required, update-check, probing toggles + cadence + strategy + overnight window + quiet window, scheduled-poll toggle + interval, opportunistic poll, F2 fragment threshold + reassembly timeout, B7 discovery airtime budget, C3 heartbeat toggle + interval, B5 routing algorithm. Restart-required fields are flagged in the form blurb. Save POSTs the full SystemOptions row to `/Config`.
 
-### D4. Auth on the UI
+### D4. Auth on the UI *(done)*
 
-Same auth model as the REST API (Phase A4) — bearer token, or HTTP Basic for easy bookmarking.
+Cookie-based admin password with a first-use `/Setup` flow. `AdminPasswordStore` hashes via PBKDF2-HMAC-SHA256 (16-byte salt, 100k iterations) — same scheme as `AppTokenStore`. AdminAuthMiddleware gates everything except `/AppApi` (which has its own bearer auth model), `/Setup`, `/Login`, `/Logout`, the static-asset paths, and `/Health` / `/Operational` / `/mcp` (which are designed for clients without admin cookies — watchdog units, scrapers, MCP).
 
 ### D5. Implementation notes
 
@@ -530,17 +512,18 @@ The README already says "multiple compatible implementations is healthy." Once t
 
 Probably also worth a public conversation about whether DAPPS sits under OARC (the original RFC venue) or stays as a personal project — has implications for spec governance and license expectations.
 
-## Phase M — MCP server endpoint *(bootstrap landed; PR-A → PR-D ahead)*
+## Phase M — MCP server endpoint *(done)*
 
 An operator-assistant interface: expose DAPPS state and supervised actions to MCP clients (Claude Desktop, Claude Code, Cursor) so an LLM can compose diagnostic narratives, propose topology fixes, and run controlled probes on the operator's behalf. Sysop catches up after a week away with "what happened?" instead of grep'ing journals.
 
 In-process: the dapps daemon hosts the MCP server at `/mcp` via `ModelContextProtocol.AspNetCore`. Same Kestrel listener, same DI graph as the rest of the daemon, so tools have direct access to `OperationalSnapshotBuilder`, `Database`, `OperationalMetrics`, etc. without the round-trip through REST. AdminAuthMiddleware allowlists `/mcp` alongside `/Health` and `/Operational` — clients (Claude / Cursor) don't carry an admin cookie. An MCP-specific token model can come later.
 
-Bootstrap (this PR) registers a single tool `get_operational_snapshot` that wraps the existing snapshot builder. Subsequent PRs:
-- **PR-A** — Full read-only toolset: per-callsign probe / poll state, learned-routes graph, message lookup by id, recent-events filter, dropped-message log.
-- **PR-B** — Action tools: `run_probe`, `run_solicit`, `run_sweep`, `run_poll`, `run_poll_sweep`, `send_test_message`, plus `Config` setters.
-- **PR-C** — Composite diagnostic tools (the actual point): `explain_why_message_failed(id)`, `diagnose_silent_neighbour(callsign)`, `summarize_last_24h`, `find_path_to(destination)`, `propose_topology_changes`. Each composes 3–5 of the read tools internally and returns a narrative.
-- **PR-D** — Supervised exploration: `explore_via_neighbour(callsign)` returns the neighbour's `peers` response annotated for what's NEW vs. KNOWN to us; `opinion_on_route(destination)` ranks every routing-table candidate plus B6.1 Phase 2 transitive `via:CALLSIGN` candidates with a confidence band and a recommended next-action string. Pure read-only proposals — the agent suggests, the operator runs the recommended action tool to actually act.
+Five PRs landed (#81 bootstrap, #82 reads, #83 actions, #84 diagnostics, #85 exploration), 26 tools total:
+- **Bootstrap (#81)** — framework wired in-process; one tool (`get_operational_snapshot`) wrapping the existing snapshot builder.
+- **PR-A (#82)** — full read-only toolset: `get_recent_events`, `get_system_options`, `list_neighbours`, `list_discovered_peers`, `list_discovery_channels`, `list_learned_routes`, `list_discovered_paths`, `list_route_hints`, `list_probed_nodes`, `list_polled_nodes`, `get_message`, `list_recent_messages`, `list_dropped_messages`.
+- **PR-B (#83)** — action tools: `run_probe`, `run_probe_sweep`, `run_poll`, `run_poll_sweep`, `run_solicit`, `send_test_message`, plus a single `update_config(partial)` setter that takes a typed `ConfigUpdate` record (every field nullable; null = no change). Excludes Callsign / NodeHost / AgwPort / MqttPort / UdpListenPort intentionally — those need a daemon restart and a wrong value takes a node off-air.
+- **PR-C (#84)** — composite diagnostic narratives, the actual point: `explain_why_message_failed(id)` traces a message across messages + dropped + recent events + route resolution; `diagnose_silent_neighbour(callsign)` walks every state surface for a callsign; `summarize_recent_activity` aggregates the events ring; `find_path_to(destination)` deterministic resolution walk; `propose_topology_changes` heard-but-not-configured + high-failure-streak suggestions.
+- **PR-D (#85)** — supervised exploration: `explore_via_neighbour(callsign)` probes a neighbour with peers-fetch and annotates the response NEW vs KNOWN; `opinion_on_route(destination)` ranks candidates with confidence + recommended next-action string. The agent suggests, the operator runs the recommended action tool to actually act.
 
 What's explicitly out: autonomous routing-participation (algorithm stays deterministic; agent suggests, operator decides), anything that mutates other operators' nodes, long-term memory baked into the server (let the client own conversation context).
 
@@ -581,12 +564,13 @@ Roughly:
 1. **A0.1–A0.3** (backhaul seam) — *done*. **A1** (TTL forwarding) — *done*. **A2** (neighbour-table cleanup) — *done*.
 3. **C1 + C2 + C4** (docker image, config tooling, install docs) — gets the thing into one sysop's hands.
 4. **A4** (per-app auth) — *done*.
-5. **D1 + D2** (web UI inspection + exercise) — *MVP done*. SSE inbound feed + ihave terminal still pending.
-6. **B1–B4** (channels-first-class discovery + cost-based resolver) — *done*. **B5** (learned-graph routing inside DAPPS, bearer-agnostic) — *done*. **B6.1** Phase 1 (direct-connect liveness probes) and Phase 2 (`peers` command + transitive discovery) — *done*. **B6.2** (HF NVIS solicit-and-listen, on-demand) — *done*. **B6.1 Phase 2b** (node-prompt discovery against non-DAPPS NODECALLs) and **B6.2** scheduled cadence still queued; the latter is naturally subsumed by the global airtime-budget idea in the scratchpad.
+5. **D1 + D2 + D3 + D4** (web UI: inspection / exercise / config / auth) — *MVP done*. SSE inbound feed + manual `ihave` terminal still pending under D2.
+6. **B1–B4** (channels-first-class discovery + cost-based resolver) — *done*. **B5** (learned-graph routing inside DAPPS, bearer-agnostic) — *done*. **B6.1** Phase 1 (direct-connect liveness probes) and Phase 2 (`peers` command + transitive discovery) — *done*. **B6.2** (HF NVIS solicit-and-listen) — *done* including scheduled cadence. **B7** (airtime budget + probe strategies) — *done*. Only **B6.1 Phase 2b** (node-prompt discovery against non-DAPPS NODECALLs) is still queued.
 7. **E1–E4** (concepts + tutorial + reference + sample-app gallery) — *done*. Developer guide is complete; third-party app development is unlocked.
 8. **H** (concrete bearer integrations — MeshCore Companion, MeshCore KISS, RHP, …) on its own track, doesn't gate the routing or developer-guide work.
-9. **A3** — *done*. **C5.1** (update-availability banner) — *done*. **C3, C5.2/C5.3 (triggered + scheduled self-update), D3, D4, F1–F4** in parallel as polish.
-10. **Phase G** (second-language reference impl) once the spec has been exercised by enough first-party apps that the ambiguities are likely to surface.
+9. **A3** — *done*. **C5.1** (update-availability banner) — *done*. **C5.2** (triggered self-update) — *done*. **C3** (health/logs/observability) — *done*. **D3, D4, F1–F4** all *done*. **C5.3** (scheduled auto-update) still queued.
+10. **Phase M** (MCP server endpoint exposing operator tools to LLMs) — *done* (#81–#85). 26 tools across reads / actions / config / composite diagnostics / supervised exploration.
+11. **Phase G** (second-language reference impl) once the spec has been exercised by enough first-party apps that the ambiguities are likely to surface.
 
 Phases A and C can ship as a single "v0.1.0 — runnable" release. Phase D as "v0.2.0 — operable". Phase B + E as "v1.0.0 — networked + developable".
 
@@ -603,7 +587,7 @@ If picking this up cold:
 - `src/dapps/Directory.Packages.props` — central package versions; update there, not in csproj.
 - `~/src/linbpq/docs/protocols/` — apps-interface.md, rhp.md, bpqtoagw.md — the BPQ protocol surfaces we built against.
 - `~/src/linbpq/tests/integration/` — the linbpq test suite, especially `test_two_instance_agw_tunnel.py` for the topology pattern that feeds issue #6.
-- Open issues #5 and #6 for known test-infra gaps.
+- Open issue #6 (two-instance AGW dispatch under bridge networking) — known test-infra gap. #5 closed in #77 (Testcontainers migration).
 
 Test runner today is `dotnet test` — MTP filter syntax is `-- --filter-trait "Category=Integration"` (not `--filter Category=...`, which is the old VSTest syntax).
 
