@@ -27,8 +27,8 @@ What's missing to call this complete is the parts that turn a single-node demo i
 - I think we should look at shipping an actual usable app, ideally an actual phone app, maybe a messenger app. Or maybe a long form mail app so as not to conflict with whatsapp.
 - RHP (v2?) support
 - MCP server endpoint exposing some DAPPS surface to LLMs — could let an agent participate in routing decisions ("explore via this neighbour and report what you find"), help with network discovery / topology mapping, or surface a richer query interface than the dashboard JSON. Open question what the right tools are: read-only diagnostics, controlled probes, route hints, app-traffic synthesis for testing? Worth a short design pass when it gets pulled forward.
-- **Global airtime budget for discovery.** A single operator-tuneable cap on airtime consumed by *all* discovery-class transmissions — beacons (B1–B4), HF solicits (B6.2), connected-mode probes (B6.1). Today each subsystem has its own cadence knobs (per-channel `BeaconIntervalSeconds`, `ProbeIntervalHours`, future solicit cadence) and they don't know about each other. A frequency-coordinator's view of "this DAPPS node is using N% of channel time" is useful — especially on shared 1200-baud VHF — and the obvious knob is one budget that the schedulers compete for. Shape: `DiscoveryAirtimeBudgetSecondsPerHour` on `SystemOptions`, optionally per-channel; each subsystem reports its planned transmission length to a shared accountant before transmitting; the accountant defers or drops if the budget is exceeded. Worth designing properly before we add a third or fourth discovery-class subsystem.
-- **Probe strategies, not bare intervals.** The `ProbeIntervalHours` knob on B6.1 today is a placeholder shape — it picks a fixed cadence regardless of what the network's doing. Real options the operator wants: *run-overnight* (configurable local-time window, the obvious default), *run-when-quiet* (defer probes when the OutboundForwarderService is actively forwarding or AGW saw recent traffic), *fixed-interval* (today's behaviour, kept for tests / for sysops who want it deterministic). Strategy as an enum on `SystemOptions`, with a small dispatcher in `ProbeSchedulerService`. Pairs naturally with the airtime-budget idea above — "run when quiet" is a special case of "share the budget gracefully." Probably done together when the time-of-day work lands.
+- ~~**Global airtime budget for discovery.**~~ *(actioned — see B7 below)*
+- ~~**Probe strategies, not bare intervals.**~~ *(actioned — see B7 below)*
 
 ## Open tasks (issues filed)
 
@@ -270,6 +270,20 @@ Implementation notes carried forward:
 #### Sequencing
 
 B6.1 wants B5 (the routing graph). B6.2 is mostly orthogonal — could land after B5 too but doesn't strictly need it. Both are bigger engineering investments than the polish items in C3/D-anything; B5 → B6.1 → B6.2 is the natural order if we tackle this whole sub-phase.
+
+### B7. Airtime budget + probe strategies *(done)*
+
+Two scratchpad items folded into one PR because they're the same shape: pick the right cadence given operator context, rather than burning a fixed interval regardless.
+
+**Airtime budget.** `AirtimeAccountant` is a singleton with a single global rolling 60-min window. Beacons (per channel), solicit replies (per channel), and probes (each session) call `TryReserve(estimatedSeconds, reason)` before transmitting; if the trailing-hour total would exceed `SystemOptions.DiscoveryAirtimeBudgetSecondsPerHour`, the call returns false and the caller defers (beacons reschedule a quarter of the regular interval out; probe sweeps stop early and resume next sweep). Budget defaults to `0` (unlimited — preserves pre-B7 behaviour); operators on shared 1200-baud VHF or HF opt in. Estimates rather than measurements: `LinkClassDefaults.AirtimeSecondsEstimate(LinkClass, AirtimeKind)` returns coarse per-class numbers (e.g. VHF FM beacon ≈ 2 s, HF probe session ≈ 32 s). Off by an order of magnitude in either direction is fine — the budget is a cap on order-of-magnitude growth, not a precision regulator.
+
+**Probe strategies.** `SystemOptions.ProbeStrategy` enum chooses the dispatcher: `FixedInterval` (default — pre-B7 cadence), `Overnight` (one sweep per local-time day inside `[ProbeOvernightStartHour, ProbeOvernightEndHour)` — handles straddling-midnight windows naturally; default 02:00–06:00 local), `WhenQuiet` (fixed cadence but defers each tick if `OutboundActivityTracker` saw a successful forward inside `ProbeQuietWindowSeconds` ago; default 5 minutes). The dispatcher is a pure `ShouldRunSweep(opts, lastSweepCompletedAt)` function: easy to unit-test, no side effects, no real time involved.
+
+**Operator-triggered probes from the REST surface bypass the budget** — that's an explicit human action on a single callsign, and rate-limiting it would be hostile to the "I'm debugging a peer right now" path. The budget gates only the *automatic* sweeps.
+
+13 new tests across `AirtimeAccountantTests` (7 — budget zero allows; within-budget allows; over-budget rejects; entries age out; runtime budget reduction enforced; negative-estimate clamp; consumed-seconds rolls forward) and `ProbeStrategyTests` (6 — FixedInterval immediate; Overnight inside-window/outside-window/already-swept-this-night; Overnight straddle-midnight window math; WhenQuiet recent-activity defers / no-history fires).
+
+Skipped explicitly: per-channel budget overrides (one global is enough until we have a use case where it isn't), an airtime-meter on the dashboard (the accountant exposes `ConsumedSecondsLastHour` so this is one Razor card away when wanted), and a CLI subcommand for "show me the budget" (operators read `/Config` for now).
 
 ## Phase C — deployable, runnable for sysops
 

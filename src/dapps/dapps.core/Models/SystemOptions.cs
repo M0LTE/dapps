@@ -10,6 +10,22 @@ public class DbSystemOption
     public string Value { get; set; } = "";
 }
 
+/// <summary>Plan B7 — probe-scheduler strategy. See
+/// <see cref="SystemOptions.ProbeStrategy"/>.</summary>
+public enum ProbeStrategy
+{
+    /// <summary>Pre-B7 behaviour — sweep every
+    /// <see cref="SystemOptions.ProbeIntervalHours"/>.</summary>
+    FixedInterval = 0,
+    /// <summary>One sweep per local-time day, inside the configured
+    /// overnight window.</summary>
+    Overnight = 1,
+    /// <summary>Sweep on the fixed cadence, but defer if the outbound
+    /// forwarder ran inside <see cref="SystemOptions.ProbeQuietWindowSeconds"/>
+    /// seconds ago.</summary>
+    WhenQuiet = 2,
+}
+
 public class SystemOptions
 {
     /// <summary>Hostname or IP of the local packet node BPQ instance.</summary>
@@ -128,6 +144,44 @@ public class SystemOptions
     /// just liveness checks.
     /// </summary>
     public int PollIntervalHours { get; set; } = 6;
+
+    /// <summary>
+    /// Plan B7 — single trailing-hour cap on airtime consumed by ALL
+    /// discovery-class transmissions (beacons, solicit replies,
+    /// probes). 0 = unlimited (default — preserves pre-B7 behaviour).
+    /// Set to a positive value to enforce; the airtime accountant
+    /// defers transmissions whose estimated cost would push the
+    /// last-hour total past the budget. Operators on shared 1200-
+    /// baud VHF or HF channels are the use case.
+    /// </summary>
+    public int DiscoveryAirtimeBudgetSecondsPerHour { get; set; } = 0;
+
+    /// <summary>
+    /// Plan B7 — strategy controlling when probe sweeps fire. Default
+    /// <see cref="Models.ProbeStrategy.FixedInterval"/> matches the
+    /// pre-B7 behaviour (sweep every <see cref="ProbeIntervalHours"/>).
+    /// <see cref="Models.ProbeStrategy.Overnight"/> sweeps once per
+    /// local-time day inside [<see cref="ProbeOvernightStartHour"/>,
+    /// <see cref="ProbeOvernightEndHour"/>). <see cref="Models.ProbeStrategy.WhenQuiet"/>
+    /// sweeps on the same fixed cadence but defers each tick if the
+    /// outbound forwarder transmitted in the last
+    /// <see cref="ProbeQuietWindowSeconds"/> seconds.
+    /// </summary>
+    public ProbeStrategy ProbeStrategy { get; set; } = ProbeStrategy.FixedInterval;
+
+    /// <summary>Local-time hour (0–23) at which the Overnight strategy's
+    /// nightly sweep window opens. Default 02:00 local.</summary>
+    public int ProbeOvernightStartHour { get; set; } = 2;
+
+    /// <summary>Local-time hour (0–23) at which the Overnight strategy's
+    /// nightly sweep window closes. Default 06:00 local. If the end
+    /// hour is less than the start hour the window straddles midnight
+    /// (e.g. start=22, end=6 = 22:00 through 06:00 next morning).</summary>
+    public int ProbeOvernightEndHour { get; set; } = 6;
+
+    /// <summary>Seconds of quiet required before the WhenQuiet strategy
+    /// will fire a sweep. Default 300 (5 minutes).</summary>
+    public int ProbeQuietWindowSeconds { get; set; } = 300;
 
     /// <summary>
     /// Which routing algorithm composition to use. Two stacks are

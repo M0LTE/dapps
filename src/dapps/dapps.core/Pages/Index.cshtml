@@ -153,9 +153,23 @@
         <label class="checkbox-label"><input name="UpdateCheckEnabled" type="checkbox" @(Model.Options.UpdateCheckEnabled ? "checked" : "") /> Check GitHub for new releases</label>
         <label class="checkbox-label"><input name="ProbingEnabled" type="checkbox" @(Model.Options.ProbingEnabled ? "checked" : "") /> Probe known peers on a slow cadence (B6.1)</label>
         <label>Probe interval (hours) <input name="ProbeIntervalHours" type="number" min="1" max="168" value="@Model.Options.ProbeIntervalHours" required /></label>
+        @{
+            var ps = Model.Options.ProbeStrategy;
+        }
+        <label>Probe strategy (B7)
+            <select name="ProbeStrategy">
+                <option value="FixedInterval" selected="@(ps == dapps.core.Models.ProbeStrategy.FixedInterval)">Fixed interval</option>
+                <option value="Overnight" selected="@(ps == dapps.core.Models.ProbeStrategy.Overnight)">Overnight (one sweep/day)</option>
+                <option value="WhenQuiet" selected="@(ps == dapps.core.Models.ProbeStrategy.WhenQuiet)">When forwarder is quiet</option>
+            </select>
+        </label>
+        <label>Overnight start hour (local) <input name="ProbeOvernightStartHour" type="number" min="0" max="23" value="@Model.Options.ProbeOvernightStartHour" required /></label>
+        <label>Overnight end hour (local) <input name="ProbeOvernightEndHour" type="number" min="0" max="23" value="@Model.Options.ProbeOvernightEndHour" required /></label>
+        <label>Quiet window (seconds) <input name="ProbeQuietWindowSeconds" type="number" min="1" max="86400" value="@Model.Options.ProbeQuietWindowSeconds" required /></label>
         <label class="checkbox-label"><input name="OpportunisticPollEnabled" type="checkbox" @(Model.Options.OpportunisticPollEnabled ? "checked" : "") /> Opportunistic poll on every push (F3a) — drain peers' mail at the end of every push session</label>
         <label class="checkbox-label"><input name="ScheduledPollEnabled" type="checkbox" @(Model.Options.ScheduledPollEnabled ? "checked" : "") /> Schedule periodic mail polls (F3b) — for nodes that don't push often</label>
         <label>Poll interval (hours) <input name="PollIntervalHours" type="number" min="1" max="168" value="@Model.Options.PollIntervalHours" required /></label>
+        <label>Discovery airtime budget (seconds/hour, 0 = unlimited) (B7) <input name="DiscoveryAirtimeBudgetSecondsPerHour" type="number" min="0" max="3600" value="@Model.Options.DiscoveryAirtimeBudgetSecondsPerHour" required /></label>
         <button type="submit">Save</button>
     </form>
 </details>
@@ -1086,9 +1100,14 @@ else
             UpdateCheckEnabled: f.UpdateCheckEnabled.checked,
             ProbingEnabled: f.ProbingEnabled.checked,
             ProbeIntervalHours: parseInt(f.ProbeIntervalHours.value, 10),
+            ProbeStrategy: f.ProbeStrategy.value,
+            ProbeOvernightStartHour: parseInt(f.ProbeOvernightStartHour.value, 10),
+            ProbeOvernightEndHour: parseInt(f.ProbeOvernightEndHour.value, 10),
+            ProbeQuietWindowSeconds: parseInt(f.ProbeQuietWindowSeconds.value, 10),
             OpportunisticPollEnabled: f.OpportunisticPollEnabled.checked,
             ScheduledPollEnabled: f.ScheduledPollEnabled.checked,
             PollIntervalHours: parseInt(f.PollIntervalHours.value, 10),
+            DiscoveryAirtimeBudgetSecondsPerHour: parseInt(f.DiscoveryAirtimeBudgetSecondsPerHour.value, 10),
         };
         if (await dappsPostJson('/Config', body)) location.reload();
     }

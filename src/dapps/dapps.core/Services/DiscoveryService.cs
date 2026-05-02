@@ -28,7 +28,8 @@ public sealed class DiscoveryService(
     IOptionsMonitor<SystemOptions> options,
     TimeProvider timeProvider,
     ILoggerFactory loggerFactory,
-    ILogger<DiscoveryService> logger) : BackgroundService
+    ILogger<DiscoveryService> logger,
+    AirtimeAccountant? airtime = null) : BackgroundService
 {
     private static readonly TimeSpan SweepInterval = TimeSpan.FromMinutes(1);
 
@@ -160,6 +161,23 @@ public sealed class DiscoveryService(
                     var key = (kv.Key, ch.ChannelKey);
                     if (now < nextEmit[key]) continue;
 
+                    // Plan B7 — airtime budget. Defer this beacon if the
+                    // operator-set cap would be blown; reschedule a short
+                    // way out so we keep checking each tick. Without the
+                    // accountant (DI hasn't supplied one in tests, or
+                    // budget is 0) TryReserve always returns true.
+                    var beaconCost = LinkClassDefaults.AirtimeSecondsEstimate(ch.LinkClass, AirtimeKind.Beacon);
+                    if (airtime is { } acct && !acct.TryReserve(beaconCost, $"beacon {kv.Key}/{ch.ChannelKey}"))
+                    {
+                        // Try again in a quarter of the regular interval —
+                        // budgets free up as old entries roll out of the
+                        // 60-min window, so we don't want to block this
+                        // channel for the full beacon interval.
+                        var deferSec = Math.Max(15, Math.Max(5, ch.BeaconIntervalSeconds) / 4);
+                        nextEmit[key] = now.AddSeconds(deferSec);
+                        continue;
+                    }
+
                     var beacon = new BeaconFrame(
                         Callsign: options.CurrentValue.Callsign,
                         Hops: 0,
@@ -286,6 +304,17 @@ public sealed class DiscoveryService(
             if (delayMs > 0)
             {
                 await Task.Delay(TimeSpan.FromMilliseconds(delayMs), timeProvider, ct);
+            }
+            // Plan B7 — solicit replies count against the same budget as
+            // scheduled beacons. Skip the reply if the budget says no;
+            // we'll catch the soliciting peer on the next regular beacon.
+            var solicitCost = LinkClassDefaults.AirtimeSecondsEstimate(ch.LinkClass, AirtimeKind.Solicit);
+            if (airtime is { } acct && !acct.TryReserve(solicitCost, $"solicit-reply {bearer.Name}/{ch.ChannelKey}"))
+            {
+                logger.LogInformation(
+                    "DiscoveryService: budget exhausted, NOT replying to solicit from {0} on {1}/{2}",
+                    rs.Solicit.Callsign, bearer.Name, rs.ChannelKey);
+                return;
             }
             var beacon = new BeaconFrame(
                 Callsign: options.CurrentValue.Callsign,

@@ -1,3 +1,4 @@
+using dapps.client.Discovery;
 using dapps.core.Models;
 using Microsoft.Extensions.Options;
 
@@ -26,8 +27,24 @@ public sealed class ProbeSchedulerService(
     Database database,
     IOptionsMonitor<SystemOptions> options,
     TimeProvider timeProvider,
-    ILogger<ProbeSchedulerService> logger) : BackgroundService
+    ILogger<ProbeSchedulerService> logger,
+    AirtimeAccountant? airtime = null,
+    OutboundActivityTracker? activityTracker = null) : BackgroundService
 {
+    /// <summary>
+    /// Plan B7 — clock the strategy dispatcher consults for "what time
+    /// is it locally?". Production uses the system local-time zone;
+    /// tests inject a deterministic offset so they don't depend on the
+    /// CI host's TZ. (TimeProvider.LocalTimeZone is a recent addition
+    /// — see <see cref="LocalTimeZone"/>.)
+    /// </summary>
+    public TimeZoneInfo LocalTimeZone { get; init; } = TimeZoneInfo.Local;
+
+    /// <summary>How often to wake during the disabled-or-deferred path
+    /// when the strategy says "not yet" (Overnight outside window,
+    /// WhenQuiet with recent activity). Tunable for tests.</summary>
+    public TimeSpan StrategyPollInterval { get; init; } = TimeSpan.FromMinutes(5);
+
     /// <summary>Delay before the first sweep after startup. Long enough
     /// for AGW reconnect, MQTT broker init, and the first beacon round
     /// to land — probing into a node that just booted produces noise
@@ -55,6 +72,8 @@ public sealed class ProbeSchedulerService(
         try { await Task.Delay(StartupDelay, timeProvider, stoppingToken); }
         catch (OperationCanceledException) { return; }
 
+        DateTime? lastSweepCompletedAt = null;
+
         while (!stoppingToken.IsCancellationRequested)
         {
             var opts = options.CurrentValue;
@@ -65,9 +84,25 @@ public sealed class ProbeSchedulerService(
                 continue;
             }
 
+            // Plan B7 — strategy dispatcher decides whether THIS tick
+            // is the right time to sweep. FixedInterval is the pre-B7
+            // shape (sweep, then sleep PIH hours). Overnight runs once
+            // per local-time day inside the configured window.
+            // WhenQuiet runs on the same fixed cadence but defers if
+            // the forwarder is currently busy.
+            var decision = ShouldRunSweep(opts, lastSweepCompletedAt);
+            if (!decision.RunNow)
+            {
+                logger.LogDebug("Probe sweep deferred: {Reason}", decision.Reason);
+                try { await Task.Delay(decision.SleepFor, timeProvider, stoppingToken); }
+                catch (OperationCanceledException) { return; }
+                continue;
+            }
+
             try
             {
                 await SweepAsync(opts, stoppingToken);
+                lastSweepCompletedAt = timeProvider.GetUtcNow().UtcDateTime;
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -78,16 +113,81 @@ public sealed class ProbeSchedulerService(
                 logger.LogError(ex, "Probe sweep failed");
             }
 
-            var hours = Math.Max(1, opts.ProbeIntervalHours);
-            try { await Task.Delay(TimeSpan.FromHours(hours), timeProvider, stoppingToken); }
+            try { await Task.Delay(decision.SleepFor, timeProvider, stoppingToken); }
             catch (OperationCanceledException) { return; }
         }
     }
 
+    /// <summary>
+    /// Plan B7 — strategy-aware "is it time to sweep?" decision. Pure
+    /// function of (now, options, last-sweep-time, forwarder-activity);
+    /// no side effects. Returned <c>SleepFor</c> is the interval to
+    /// wait before the next decision (whether or not we sweep this
+    /// tick).
+    /// </summary>
+    public Decision ShouldRunSweep(SystemOptions opts, DateTime? lastSweepCompletedAt)
+    {
+        var nowUtc = timeProvider.GetUtcNow().UtcDateTime;
+        var hours = Math.Max(1, opts.ProbeIntervalHours);
+        var fixedInterval = TimeSpan.FromHours(hours);
+
+        switch (opts.ProbeStrategy)
+        {
+            case ProbeStrategy.Overnight:
+            {
+                var nowLocal = TimeZoneInfo.ConvertTimeFromUtc(nowUtc, LocalTimeZone);
+                var inWindow = IsInOvernightWindow(nowLocal.Hour, opts.ProbeOvernightStartHour, opts.ProbeOvernightEndHour);
+                var sweptRecently = lastSweepCompletedAt is { } at
+                    && (nowUtc - at) < TimeSpan.FromHours(23);
+                if (inWindow && !sweptRecently)
+                {
+                    return new Decision(true, StrategyPollInterval, "in overnight window, no sweep within last 23h");
+                }
+                return new Decision(false, StrategyPollInterval,
+                    inWindow ? "in overnight window but already swept today" : "outside overnight window");
+            }
+            case ProbeStrategy.WhenQuiet:
+            {
+                var idle = activityTracker?.IdleFor();
+                var quietWindow = TimeSpan.FromSeconds(Math.Max(1, opts.ProbeQuietWindowSeconds));
+                var quiet = idle is null || idle >= quietWindow;
+                if (quiet)
+                {
+                    return new Decision(true, fixedInterval, "forwarder quiet for {idle}");
+                }
+                // Recheck soon — quiet windows arrive on the order of
+                // forwarder ticks (5s), no point sleeping a full hour.
+                return new Decision(false, TimeSpan.FromSeconds(Math.Max(15, opts.ProbeQuietWindowSeconds / 4)),
+                    $"forwarder active ({idle} ago), waiting for quiet");
+            }
+            case ProbeStrategy.FixedInterval:
+            default:
+                return new Decision(true, fixedInterval, "fixed-interval cadence");
+        }
+    }
+
+    /// <summary>True if <paramref name="hour"/> ∈ [start, end). Handles
+    /// the straddle-midnight case (start &gt; end means 22→6 type
+    /// windows). Edge case: start == end is treated as "always" so
+    /// nobody accidentally locks themselves out by mis-typing.</summary>
+    internal static bool IsInOvernightWindow(int hour, int start, int end)
+    {
+        if (start == end) return true;
+        return start < end
+            ? hour >= start && hour < end
+            : hour >= start || hour < end;
+    }
+
+    public sealed record Decision(bool RunNow, TimeSpan SleepFor, string Reason);
+
     /// <summary>Walk every eligible probe target once, sequentially with
     /// jitter between probes. Public so a triggered "sweep now" path
     /// can call into the same machinery; the scheduler loop calls it
-    /// internally on its cadence.</summary>
+    /// internally on its cadence. Plan B7: budget-aware — when the
+    /// airtime accountant says no, the remaining targets are skipped
+    /// for this sweep and resume next time. Operator-triggered
+    /// single-callsign probes from <see cref="ProbeAndRecordAsync"/>
+    /// bypass the budget; that's an explicit human action.</summary>
     public async Task SweepAsync(SystemOptions opts, CancellationToken ct)
     {
         var targets = await EnumerateTargets(opts);
@@ -98,10 +198,26 @@ public sealed class ProbeSchedulerService(
         }
 
         logger.LogInformation("Probe sweep: {0} target(s)", targets.Count);
+        // Probe sessions go over AGW (B6.1 is AGW-only by design); use
+        // the VHF/UHF-FM estimate as the per-probe airtime cost.
+        // Refining this per-callsign would need to know each peer's
+        // link class, which we don't reliably have for non-discovered
+        // manual neighbours.
+        var probeCost = LinkClassDefaults.AirtimeSecondsEstimate(LinkClass.VhfUhfFm, AirtimeKind.ProbeSession);
+
         for (var i = 0; i < targets.Count; i++)
         {
             ct.ThrowIfCancellationRequested();
             var t = targets[i];
+
+            if (airtime is { } acct && !acct.TryReserve(probeCost, $"probe {t.Callsign}"))
+            {
+                logger.LogInformation(
+                    "Probe sweep stopping early: airtime budget exhausted after {0}/{1} probe(s)",
+                    i, targets.Count);
+                return;
+            }
+
             await ProbeAndRecordAsync(opts.Callsign, t.Callsign, t.BpqPort, ct);
             if (i < targets.Count - 1)
             {

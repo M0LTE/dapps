@@ -86,6 +86,11 @@ public static class DbStartup
         InsertIfNotPresent(db, options, "OpportunisticPollEnabled", "true", logger);
         InsertIfNotPresent(db, options, "ScheduledPollEnabled", "false", logger);
         InsertIfNotPresent(db, options, "PollIntervalHours", "6", logger);
+        InsertIfNotPresent(db, options, "DiscoveryAirtimeBudgetSecondsPerHour", "0", logger);
+        InsertIfNotPresent(db, options, "ProbeStrategy", nameof(ProbeStrategy.FixedInterval), logger);
+        InsertIfNotPresent(db, options, "ProbeOvernightStartHour", "2", logger);
+        InsertIfNotPresent(db, options, "ProbeOvernightEndHour", "6", logger);
+        InsertIfNotPresent(db, options, "ProbeQuietWindowSeconds", "300", logger);
 
         ValidateRequiredConfig(db, logger);
 
