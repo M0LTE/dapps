@@ -1,0 +1,48 @@
+[Unit]
+Description=DAPPS - Distributed Asynchronous Packet Pub-Sub
+Documentation=https://github.com/M0LTE/dapps
+After=network.target linbpq.service
+# We can start without linbpq up — DAPPS will retry the AGW connection
+# on its own — but ordering after linbpq makes the happy path quick.
+Wants=linbpq.service
+
+[Service]
+Type=simple
+User=dapps
+Group=dapps
+EnvironmentFile=/etc/dapps.env
+WorkingDirectory=/var/lib/dapps
+ExecStart=/opt/dapps/dapps
+Restart=on-failure
+RestartSec=5
+
+# Operationally-fatal config errors that won't fix themselves on
+# restart. dapps exits with these specific codes:
+#   78 — fatal config (e.g. MQTT port held by another process). The
+#        operator has to change a setting before retrying. Without
+#        this, dapps would crash-loop nine times before hitting
+#        systemd's default StartLimitBurst back-off.
+RestartPreventExitStatus=78
+
+# Bind the HTTP listener — loopback by default. Change to
+# http://0.0.0.0:5000 to expose the dashboard on the LAN
+# (set the sysop password through the browser first).
+Environment=ASPNETCORE_URLS=http://127.0.0.1:5000
+
+# Hardening — DAPPS only needs its binary, its DB, and TCP.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/dapps
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=true
+LockPersonality=true
+RestrictRealtime=true
+
+[Install]
+WantedBy=multi-user.target

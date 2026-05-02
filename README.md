@@ -434,48 +434,19 @@ sudo install -m 640 -o root -g dapps /dev/stdin /etc/dapps.env <<EOF
 EOF
 ```
 
-**Write `/etc/systemd/system/dapps.service`:**
+**Install `/etc/systemd/system/dapps.service`:**
 
-```ini
-[Unit]
-Description=DAPPS - Distributed Asynchronous Packet Pub-Sub
-Documentation=https://github.com/M0LTE/dapps
-After=network.target linbpq.service
-Wants=linbpq.service
+A ready-to-use unit file lives in [`scripts/dapps.service`](scripts/dapps.service). Drop it into place:
 
-[Service]
-Type=simple
-User=dapps
-Group=dapps
-EnvironmentFile=/etc/dapps.env
-WorkingDirectory=/var/lib/dapps
-ExecStart=/opt/dapps/dapps
-Restart=on-failure
-RestartSec=5
-
-# Bind the HTTP listener — loopback by default. Change to
-# http://0.0.0.0:5000 to expose the dashboard on the LAN
-# (set the sysop password through the browser first).
-Environment=ASPNETCORE_URLS=http://127.0.0.1:5000
-
-# Hardening — DAPPS only needs its binary, its DB, and TCP.
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=/var/lib/dapps
-PrivateDevices=true
-ProtectKernelTunables=true
-ProtectKernelModules=true
-ProtectControlGroups=true
-RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
-RestrictNamespaces=true
-LockPersonality=true
-RestrictRealtime=true
-
-[Install]
-WantedBy=multi-user.target
+```sh
+sudo curl -L --fail \
+    -o /etc/systemd/system/dapps.service \
+    https://raw.githubusercontent.com/M0LTE/dapps/master/scripts/dapps.service
 ```
+
+Or copy from a local clone (`sudo install -m 644 scripts/dapps.service /etc/systemd/system/`).
+
+The unit binds the dashboard to `127.0.0.1:5000` by default (loopback only — set the sysop password through the browser before exposing on the LAN), runs as the unprivileged `dapps` user with the standard systemd hardening flags, and includes `RestartPreventExitStatus=78` so dapps doesn't crash-loop on operationally-fatal config errors (e.g. when an MQTT port conflict means restarting won't help — the journal will surface a clear error and dapps will stop, instead of retrying forever).
 
 **Enable + start:**
 

@@ -8,6 +8,7 @@ using dapps.core.Routing;
 using dapps.core.Services;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.Extensions.Options;
+using System.Net.Sockets;
 // OpenAPI / Scalar dropped in the .NET 8 rollback — the native
 // OpenAPI generation (AddOpenApi / MapOpenApi) is a .NET 9+ API.
 // To revisit once we're back on a newer .NET runtime.
@@ -189,4 +190,33 @@ app.UseMiddleware<AdminAuthMiddleware>();
 app.MapControllers();
 app.MapRazorPages();
 
-app.Run();
+try
+{
+    app.Run();
+}
+catch (Exception ex) when (IsFatalConfigError(ex))
+{
+    // Operationally-fatal config errors that won't fix themselves on
+    // restart. Exit with code 78 — paired with
+    // RestartPreventExitStatus=78 in the systemd unit (see
+    // scripts/dapps.service) so systemd stops the crash-loop and
+    // surfaces the actionable journal message instead. The host has
+    // already logged a critical line via MqttBrokerService /
+    // similar; we just translate the exit code.
+    Environment.Exit(78);
+}
+
+static bool IsFatalConfigError(Exception ex)
+{
+    // Walk the inner-exception chain — the host's RunAsync wraps
+    // service-startup exceptions, so the SocketException can be one
+    // or two levels deep.
+    for (var e = ex; e is not null; e = e.InnerException)
+    {
+        if (e is SocketException se && se.SocketErrorCode == SocketError.AddressAlreadyInUse)
+        {
+            return true;
+        }
+    }
+    return false;
+}
