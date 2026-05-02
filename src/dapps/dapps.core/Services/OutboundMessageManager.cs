@@ -25,7 +25,8 @@ public class OutboundMessageManager(
     IEnumerable<IDappsBackhaul> backhauls,
     IRoutingAlgorithm routingAlgorithm,
     IRoutingContext routingContext,
-    OperationalMetrics? metrics = null)
+    OperationalMetrics? metrics = null,
+    OutboundActivityTracker? activityTracker = null)
 {
     private readonly ILogger logger = loggerFactory.CreateLogger<OutboundMessageManager>();
     private readonly IReadOnlyList<IDappsBackhaul> backhauls = backhauls.ToList();
@@ -156,6 +157,7 @@ public class OutboundMessageManager(
         {
             logger.LogInformation("Remote end accepted message {0} (via {1})", message.Id, backhaul.GetType().Name);
             metrics.RecordForwardSuccess(route.Callsign, message.Payload.Length);
+            activityTracker?.RecordTransmission();
             await database.MarkMessageAsForwarded(message.Id);
         }
         else
@@ -202,6 +204,7 @@ public class OutboundMessageManager(
             if (result.Accepted)
             {
                 metrics.RecordForwardSuccess(route.Callsign, message.Payload.Length);
+                activityTracker?.RecordTransmission();
             }
             else
             {

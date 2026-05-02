@@ -664,6 +664,11 @@ public class Database(
         await Upsert(connection, options, systemOptions.OpportunisticPollEnabled.ToString(), nameof(systemOptions.OpportunisticPollEnabled));
         await Upsert(connection, options, systemOptions.ScheduledPollEnabled.ToString(), nameof(systemOptions.ScheduledPollEnabled));
         await Upsert(connection, options, systemOptions.PollIntervalHours.ToString(), nameof(systemOptions.PollIntervalHours));
+        await Upsert(connection, options, systemOptions.DiscoveryAirtimeBudgetSecondsPerHour.ToString(), nameof(systemOptions.DiscoveryAirtimeBudgetSecondsPerHour));
+        await Upsert(connection, options, systemOptions.ProbeStrategy.ToString(), nameof(systemOptions.ProbeStrategy));
+        await Upsert(connection, options, systemOptions.ProbeOvernightStartHour.ToString(), nameof(systemOptions.ProbeOvernightStartHour));
+        await Upsert(connection, options, systemOptions.ProbeOvernightEndHour.ToString(), nameof(systemOptions.ProbeOvernightEndHour));
+        await Upsert(connection, options, systemOptions.ProbeQuietWindowSeconds.ToString(), nameof(systemOptions.ProbeQuietWindowSeconds));
     }
 
     private static async Task Upsert(SQLiteAsyncConnection connection, List<DbSystemOption> options, string value, string field)
@@ -716,6 +721,26 @@ public class Database(
                 && int.TryParse(polli, out var polliParsed) && polliParsed > 0
                 ? polliParsed
                 : 6,
+            DiscoveryAirtimeBudgetSecondsPerHour = options.TryGetValue(nameof(SystemOptions.DiscoveryAirtimeBudgetSecondsPerHour), out var atb)
+                && int.TryParse(atb, out var atbParsed) && atbParsed >= 0
+                ? atbParsed
+                : 0,
+            ProbeStrategy = options.TryGetValue(nameof(SystemOptions.ProbeStrategy), out var ps)
+                && Enum.TryParse<ProbeStrategy>(ps, ignoreCase: true, out var psParsed)
+                ? psParsed
+                : ProbeStrategy.FixedInterval,
+            ProbeOvernightStartHour = options.TryGetValue(nameof(SystemOptions.ProbeOvernightStartHour), out var psh)
+                && int.TryParse(psh, out var pshParsed) && pshParsed is >= 0 and <= 23
+                ? pshParsed
+                : 2,
+            ProbeOvernightEndHour = options.TryGetValue(nameof(SystemOptions.ProbeOvernightEndHour), out var peh)
+                && int.TryParse(peh, out var pehParsed) && pehParsed is >= 0 and <= 23
+                ? pehParsed
+                : 6,
+            ProbeQuietWindowSeconds = options.TryGetValue(nameof(SystemOptions.ProbeQuietWindowSeconds), out var pqw)
+                && int.TryParse(pqw, out var pqwParsed) && pqwParsed > 0
+                ? pqwParsed
+                : 300,
         };
     }
 

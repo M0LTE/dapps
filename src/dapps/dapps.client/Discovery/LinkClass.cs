@@ -104,4 +104,60 @@ public static class LinkClassDefaults
         LinkClass.Hf => 86400,    // 24h — propagation closes overnight
         _ => 5400,
     };
+
+    /// <summary>
+    /// Plan B7 — coarse per-class airtime estimate for a single
+    /// discovery-class transmission. Used by the airtime accountant
+    /// to decide whether a beacon, solicit, or probe fits inside the
+    /// operator's trailing-hour budget. Off by an order of magnitude
+    /// in either direction is fine; the budget is an order-of-
+    /// magnitude cap, not a precision regulator. Numbers reflect
+    /// "small frame on this kind of link" — beacons are ~300 B in
+    /// practice, probe sessions are several hundred bytes of round-
+    /// trip across the same link rate.
+    /// </summary>
+    public static double AirtimeSecondsEstimate(LinkClass linkClass, AirtimeKind kind) => kind switch
+    {
+        AirtimeKind.Beacon => linkClass switch
+        {
+            LinkClass.LanMulticast => 0.001,
+            LinkClass.InternetIp => 0.01,
+            LinkClass.VhfUhfFm => 2.0,        // ~300 B at 1200 baud
+            LinkClass.MeshCore => 0.5,        // ~5 kbps LoRa typical
+            LinkClass.Hf => 8.0,              // ~300 B at 300 baud
+            _ => 1.0,
+        },
+        AirtimeKind.Solicit => linkClass switch
+        {
+            // Solicit frames are tiny (callsign + version) — ~50 B.
+            // Order of magnitude shorter than a beacon on every class.
+            LinkClass.LanMulticast => 0.001,
+            LinkClass.InternetIp => 0.005,
+            LinkClass.VhfUhfFm => 0.4,
+            LinkClass.MeshCore => 0.1,
+            LinkClass.Hf => 1.5,
+            _ => 0.2,
+        },
+        AirtimeKind.ProbeSession => linkClass switch
+        {
+            // Probe = AGW connect + DAPPSv1> banner + peers + disconnect.
+            // Several hundred bytes round-trip — call it 4× a beacon.
+            LinkClass.LanMulticast => 0.005,
+            LinkClass.InternetIp => 0.05,
+            LinkClass.VhfUhfFm => 8.0,
+            LinkClass.MeshCore => 2.0,
+            LinkClass.Hf => 32.0,
+            _ => 4.0,
+        },
+        _ => 0.0,
+    };
+}
+
+/// <summary>Kinds of discovery-class transmission tracked by the
+/// airtime accountant. See <see cref="LinkClassDefaults.AirtimeSecondsEstimate"/>.</summary>
+public enum AirtimeKind
+{
+    Beacon,
+    Solicit,
+    ProbeSession,
 }

@@ -83,6 +83,30 @@ builder.Services.AddOptions<SystemOptions>().Configure<OptionsRepo, ILogger<Syst
         && pollHours > 0
         ? pollHours
         : 6;
+    o.DiscoveryAirtimeBudgetSecondsPerHour = int.TryParse(
+        options.SingleOrDefault(opt => opt.Option == "DiscoveryAirtimeBudgetSecondsPerHour")?.Value, out var atb)
+        && atb >= 0
+        ? atb
+        : 0;
+    o.ProbeStrategy = Enum.TryParse<ProbeStrategy>(
+        options.SingleOrDefault(opt => opt.Option == "ProbeStrategy")?.Value, ignoreCase: true, out var ps)
+        ? ps
+        : ProbeStrategy.FixedInterval;
+    o.ProbeOvernightStartHour = int.TryParse(
+        options.SingleOrDefault(opt => opt.Option == "ProbeOvernightStartHour")?.Value, out var psh)
+        && psh is >= 0 and <= 23
+        ? psh
+        : 2;
+    o.ProbeOvernightEndHour = int.TryParse(
+        options.SingleOrDefault(opt => opt.Option == "ProbeOvernightEndHour")?.Value, out var peh)
+        && peh is >= 0 and <= 23
+        ? peh
+        : 6;
+    o.ProbeQuietWindowSeconds = int.TryParse(
+        options.SingleOrDefault(opt => opt.Option == "ProbeQuietWindowSeconds")?.Value, out var pqws)
+        && pqws > 0
+        ? pqws
+        : 300;
 
     logger.LogInformation($"Callsign: {o.Callsign}");
     logger.LogInformation($"BPQ AGW: {o.NodeHost}:{o.AgwPort} (default port byte {o.DefaultBpqPort})");
@@ -91,7 +115,8 @@ builder.Services.AddOptions<SystemOptions>().Configure<OptionsRepo, ILogger<Syst
     logger.LogInformation($"App-interface auth required: {o.AuthRequired}");
     logger.LogInformation($"Update check: {(o.UpdateCheckEnabled ? "enabled" : "disabled")}");
     logger.LogInformation($"Routing algorithm: {o.RoutingAlgorithm}");
-    logger.LogInformation($"Connected-mode probing: {(o.ProbingEnabled ? $"enabled (every {o.ProbeIntervalHours}h)" : "disabled")}");
+    logger.LogInformation($"Connected-mode probing: {(o.ProbingEnabled ? $"enabled (strategy={o.ProbeStrategy}, every {o.ProbeIntervalHours}h)" : "disabled")}");
+    logger.LogInformation($"Discovery airtime budget: {(o.DiscoveryAirtimeBudgetSecondsPerHour > 0 ? $"{o.DiscoveryAirtimeBudgetSecondsPerHour}s/hour" : "unlimited")}");
 });
 
 builder.Services.AddHttpClient();
@@ -102,6 +127,13 @@ builder.Services.AddHttpClient();
 // `Advance(30s)` deterministically fast-forwards every service that
 // uses it. Production wires the system clock.
 builder.Services.AddSingleton(TimeProvider.System);
+
+// Plan B7 — single airtime budget shared by every discovery-class
+// transmission (beacons, solicit replies, probes). OutboundActivity-
+// Tracker is the WhenQuiet probe-strategy oracle; the forwarder
+// pings it on every successful send.
+builder.Services.AddSingleton<AirtimeAccountant>();
+builder.Services.AddSingleton<OutboundActivityTracker>();
 
 builder.Services.AddSingleton<UpdateChecker>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<UpdateChecker>());
