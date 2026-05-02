@@ -72,6 +72,7 @@ public class DbStartup(ILogger<DbStartup> logger) : IHostedService
         InsertIfNotPresent(options, "ProbeIntervalHours", "24");
         InsertIfNotPresent(options, "FragmentThresholdBytes", "4096");
         InsertIfNotPresent(options, "FragmentReassemblyTimeoutSeconds", "604800");
+        InsertIfNotPresent(options, "OpportunisticPollEnabled", "true");
 
         ValidateRequiredConfig();
 

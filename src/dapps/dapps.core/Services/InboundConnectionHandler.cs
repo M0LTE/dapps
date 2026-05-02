@@ -116,6 +116,11 @@ public class InboundConnectionHandler(
                     logger.LogInformation("Client is asking for our peers");
                     await HandlePeers(stream, stoppingToken);
                 }
+                else if (cmd == Command.Rev)
+                {
+                    logger.LogInformation("Client is asking for queued mail (rev)");
+                    await HandleRev(stream, command, stoppingToken);
+                }
             }
         }
         finally
@@ -138,6 +143,14 @@ public class InboundConnectionHandler(
         /// a read-only view of our neighbour / discovered-peer tables.
         /// </summary>
         Peers,
+        /// <summary>
+        /// Plan F3 — reverse forwarding. Client asks "got mail for me?";
+        /// we drain matching outbound queue entries via the same
+        /// ihave/send/data/ack pattern we'd use to push, then re-emit
+        /// the <c>DAPPSv1&gt;</c> prompt to signal we're done. Optional
+        /// trailing id list for selective drain (<c>rev id1 id2 …</c>).
+        /// </summary>
+        Rev,
     }
 
     private static readonly string[] exitCommands = ["q", "bye", "quit", "exit"];
@@ -180,6 +193,13 @@ public class InboundConnectionHandler(
             // but `who` is the verb a sysop already types at a node prompt
             // so it's a natural alias.
             return Command.Peers;
+        }
+
+        if (parts[0] == "rev")
+        {
+            // F3 reverse forward: bare "rev" drains everything for the
+            // caller; "rev id1 id2 …" drains the named subset.
+            return Command.Rev;
         }
 
         return null;
@@ -237,6 +257,86 @@ public class InboundConnectionHandler(
         await stream.WriteAsync(Encoding.UTF8.GetBytes(sb.ToString()), ct);
         await stream.FlushAsync(ct);
         logger.LogInformation("Sent {0} peer record(s) to {1}", emitted.Count, sourceCallsign);
+    }
+
+    /// <summary>
+    /// Plan F3 — reverse forwarding. The caller has asked us to drain
+    /// queued mail destined for them; we walk the outbound queue,
+    /// emitting <c>ihave</c> / <c>data</c> exchanges as the SENDER,
+    /// then re-emit the <c>DAPPSv1&gt;</c> prompt so the caller's
+    /// poll loop knows we're done.
+    ///
+    /// Final-destination only: we drain messages whose <c>destination</c>
+    /// suffix matches the caller's base callsign. Transit messages
+    /// (caller is just a known forwarder for somewhere else) are
+    /// deliberately not included — the caller's <c>rev</c> is for
+    /// THEIR mail, not for them to act as a downstream relay.
+    /// </summary>
+    private async Task HandleRev(Stream stream, string command, CancellationToken ct)
+    {
+        var parts = command.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var requestedIds = parts.Skip(1).ToList();   // empty = drain all
+        var callerBase = sourceCallsign.Split('-')[0];
+
+        var queue = await database.GetMessagesForCaller(callerBase, requestedIds);
+
+        // Sender state machine: reuse DappsProtocolClient but skip its
+        // ReadInitialPromptAsync — we're already mid-session, the
+        // client doesn't owe us another prompt.
+        var protocol = new DappsProtocolClient(stream, loggerFactory);
+        var drained = 0;
+        foreach (var msg in queue)
+        {
+            // Residual TTL: same calculation OutboundMessageManager
+            // does on outbound. An expired message would be dropped
+            // by the TtlSweeper eventually but might be sitting in
+            // the queue right now; skip rather than offer it.
+            int? residualTtl = msg.Ttl is { } ttl
+                ? TtlMath.Residual(ttl, msg.CreatedAt, DateTime.UtcNow)
+                : null;
+            if (residualTtl is <= 0) continue;
+
+            try
+            {
+                var offered = await protocol.OfferMessageAsync(
+                    msg.Id, msg.Salt, DappsMessage.MessageFormat.Plain,
+                    msg.Destination, msg.Payload.Length, ct,
+                    ttl: residualTtl,
+                    originator: string.IsNullOrEmpty(msg.OriginatorCallsign) ? null : msg.OriginatorCallsign,
+                    masterId: msg.MasterId,
+                    fragmentIndex: msg.FragmentIndex,
+                    fragmentTotal: msg.FragmentTotal);
+                if (!offered)
+                {
+                    logger.LogInformation("rev drain: caller declined {0}", msg.Id);
+                    continue;
+                }
+                var sent = await protocol.SendMessageAsync(msg.Id, msg.Payload, ct);
+                if (sent)
+                {
+                    await database.MarkMessageAsForwarded(msg.Id);
+                    drained++;
+                }
+            }
+            catch (Exception ex)
+            {
+                // One failed exchange shouldn't bail the whole drain —
+                // the caller might still want subsequent queued
+                // messages. The link layer will tear us down if it's
+                // really gone.
+                logger.LogWarning(ex, "rev drain: send of {0} failed", msg.Id);
+            }
+        }
+
+        logger.LogInformation(
+            "rev drain to {0}: {1}/{2} messages sent (selective={3})",
+            sourceCallsign, drained, queue.Count, requestedIds.Count > 0);
+
+        // Done draining. Re-emit DAPPSv1> so the caller's poll loop
+        // sees a clean "ready for next command" signal that's distinct
+        // from another `ihave` arriving.
+        await stream.WriteAsync(Encoding.UTF8.GetBytes("DAPPSv1>\n"), ct);
+        await stream.FlushAsync(ct);
     }
 
     private async Task HandleMessageOffer(Stream stream, string command, CancellationToken stoppingToken)

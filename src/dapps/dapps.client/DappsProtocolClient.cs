@@ -231,6 +231,194 @@ public class DappsProtocolClient(Stream stream, ILoggerFactory loggerFactory)
     /// peer.</summary>
     public sealed record DiscoveredPeerInfo(string Callsign, string Source, int? BpqPort);
 
+    /// <summary>One message yielded by the rev drain. Captures the
+    /// fields a caller's <see cref="Backhaul.IBackhaulInbox"/>
+    /// would need to deliver as if the message had arrived via push.
+    /// Plan F3.</summary>
+    public sealed record PolledMessage(
+        string Id,
+        string Destination,
+        long? Salt,
+        int? Ttl,
+        byte[] Payload,
+        string? Originator,
+        string? MasterId,
+        int? FragmentIndex,
+        int? FragmentTotal);
+
+    /// <summary>
+    /// Plan F3 — reverse forwarding from the client side. Send
+    /// <c>rev</c> (or <c>rev id1 id2 …</c> for selective drain) and
+    /// then yield each message the server pushes back via the
+    /// <c>ihave</c>/<c>data</c>/<c>ack</c> exchange. Returns when the
+    /// server signals "drained" by re-emitting the <c>DAPPSv1&gt;</c>
+    /// prompt.
+    ///
+    /// The hash of each fragment's payload is verified against its
+    /// <c>id</c> + <c>s=</c> salt before yielding, matching what the
+    /// regular receive path does. Bad-hash messages are NAK'd back to
+    /// the server with <c>bad &lt;id&gt;</c> and not yielded.
+    /// </summary>
+    public async IAsyncEnumerable<PolledMessage> PollAsync(
+        IReadOnlyList<string>? requestedIds,
+        [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
+    {
+        var cmd = (requestedIds is { Count: > 0 })
+            ? "rev " + string.Join(' ', requestedIds) + "\n"
+            : "rev\n";
+        await stream.WriteAsync(Encoding.UTF8.GetBytes(cmd), ct);
+        await stream.FlushAsync(ct);
+
+        while (true)
+        {
+            var line = await ReadLineAsync(ct);
+            if (line.Length == 0)
+            {
+                // EOF mid-poll; treat as drained. Anything we already
+                // yielded the caller has consumed.
+                yield break;
+            }
+            // Server's "drained" marker. Distinct from `ihave` because
+            // the prompt has a `>` and no spaces.
+            if (line == "DAPPSv1>") yield break;
+
+            if (!line.StartsWith("ihave ", StringComparison.Ordinal))
+            {
+                // Unexpected line shape; ignore (forward-compat) and
+                // keep reading.
+                continue;
+            }
+
+            var (offerOk, parsed) = TryParseOffer(line);
+            if (!offerOk || parsed is null)
+            {
+                // Malformed offer — NAK with the id we could pluck out
+                // (or ?? as a placeholder) and move on.
+                var fallbackId = parsed?.Id ?? "??";
+                await stream.WriteAsync(Encoding.UTF8.GetBytes($"no {fallbackId}\n"), ct);
+                await stream.FlushAsync(ct);
+                continue;
+            }
+
+            // Always accept — the client asked for this; "no" is
+            // reserved for when the receiver has a strong reason to
+            // decline (none today).
+            await stream.WriteAsync(Encoding.UTF8.GetBytes($"send {parsed.Id}\n"), ct);
+            await stream.FlushAsync(ct);
+
+            // Server responds with `data <id>\n` followed by raw bytes.
+            var dataHeader = await ReadLineAsync(ct);
+            if (dataHeader != $"data {parsed.Id}")
+            {
+                logger.LogWarning("rev poll: expected 'data {0}', got '{1}' — bailing", parsed.Id, dataHeader);
+                yield break;
+            }
+            var payload = new byte[parsed.Length];
+            await ReadExactlyAsync(payload, ct);
+
+            // Hash check before yielding — same contract as the
+            // regular receiver. Bad payloads get NAK'd; the server
+            // can choose to retry or move on.
+            var computed = DappsMessage.ComputeHash(payload, parsed.Salt)[..7];
+            if (computed != parsed.Id)
+            {
+                logger.LogWarning("rev poll: hash mismatch on {0}; NAKing", parsed.Id);
+                await stream.WriteAsync(Encoding.UTF8.GetBytes($"bad {parsed.Id}\n"), ct);
+                await stream.FlushAsync(ct);
+                continue;
+            }
+
+            await stream.WriteAsync(Encoding.UTF8.GetBytes($"ack {parsed.Id}\n"), ct);
+            await stream.FlushAsync(ct);
+
+            yield return new PolledMessage(
+                Id: parsed.Id,
+                Destination: parsed.Destination,
+                Salt: parsed.Salt,
+                Ttl: parsed.Ttl,
+                Payload: payload,
+                Originator: parsed.Originator,
+                MasterId: parsed.MasterId,
+                FragmentIndex: parsed.FragmentIndex,
+                FragmentTotal: parsed.FragmentTotal);
+        }
+    }
+
+    /// <summary>
+    /// Read exactly <paramref name="buffer"/> bytes from the stream,
+    /// using the per-read inactivity timeout that
+    /// <see cref="ReadWithTimeoutAsync"/> applies. Loops until full
+    /// or surfaces a <see cref="TimeoutException"/> from a stalled peer.
+    /// </summary>
+    private async Task ReadExactlyAsync(byte[] buffer, CancellationToken ct)
+    {
+        var off = 0;
+        while (off < buffer.Length)
+        {
+            var n = await ReadWithTimeoutAsync(buffer.AsMemory(off), ct);
+            if (n == 0)
+            {
+                throw new IOException(
+                    $"rev poll: stream ended after {off} of {buffer.Length} payload bytes");
+            }
+            off += n;
+        }
+    }
+
+    /// <summary>Pure parser for the small subset of <c>ihave</c> the
+    /// client poll loop needs. Avoids pulling the dapps.core
+    /// IHaveValidator dependency into dapps.client. Returns
+    /// (true, parsed) on success or (false, partial) when the
+    /// minimum fields aren't present.</summary>
+    private static (bool Ok, ParsedOffer? Offer) TryParseOffer(string line)
+    {
+        // line: "ihave <id> len=N fmt=p dst=… [s=…] [ttl=…] [src=…] [mid=… frag=N/M] …"
+        var parts = line.Split(' ');
+        if (parts.Length < 4 || parts[0] != "ihave") return (false, null);
+        var id = parts[1];
+        string? destination = null;
+        int? len = null;
+        long? salt = null;
+        int? ttl = null;
+        string? originator = null;
+        string? masterId = null;
+        int? fragIndex = null;
+        int? fragTotal = null;
+        for (var i = 2; i < parts.Length; i++)
+        {
+            var kv = parts[i];
+            var eq = kv.IndexOf('=');
+            if (eq <= 0) continue;
+            var key = kv[..eq];
+            var value = kv[(eq + 1)..];
+            switch (key)
+            {
+                case "len": if (int.TryParse(value, out var l)) len = l; break;
+                case "dst": destination = value; break;
+                case "s": if (long.TryParse(value, out var s)) salt = s; break;
+                case "ttl": if (int.TryParse(value, out var t)) ttl = t; break;
+                case "src": originator = value; break;
+                case "mid": masterId = value; break;
+                case "frag":
+                    var slash = value.IndexOf('/');
+                    if (slash > 0 && slash < value.Length - 1
+                        && int.TryParse(value.AsSpan(0, slash), out var fn)
+                        && int.TryParse(value.AsSpan(slash + 1), out var fm)
+                        && fn >= 1 && fm >= 2 && fn <= fm)
+                    {
+                        fragIndex = fn; fragTotal = fm;
+                    }
+                    break;
+            }
+        }
+        if (destination is null || len is null) return (false, new ParsedOffer(id, "", 0, null, null, null, null, null, null));
+        return (true, new ParsedOffer(id, destination, len.Value, salt, ttl, originator, masterId, fragIndex, fragTotal));
+    }
+
+    private sealed record ParsedOffer(
+        string Id, string Destination, int Length, long? Salt, int? Ttl,
+        string? Originator, string? MasterId, int? FragmentIndex, int? FragmentTotal);
+
     /// <summary>
     /// Reads a line terminated by <c>\n</c>, <c>\r</c>, or <c>\r\n</c>.
     /// Leading line terminators are skipped (so a stranded <c>\n</c>

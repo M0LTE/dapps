@@ -97,6 +97,19 @@ public class SystemOptions
     public int FragmentReassemblyTimeoutSeconds { get; set; } = 7 * 24 * 3600;
 
     /// <summary>
+    /// Plan F3 — opportunistic poll on every successful push. After
+    /// <see cref="dapps.client.Backhaul.Dappsv1SessionBackhaul"/>
+    /// finishes pushing a message, send <c>rev</c> on the same session
+    /// to drain anything the remote has queued for us. Free in
+    /// connection-time terms (the link is already up) and turns every
+    /// outbound session into a bidirectional drain — the difference
+    /// between "B has my mail until B can reach me" and "B has my mail
+    /// until I push to B." Default true; disable for nodes that want
+    /// to push without ever pulling.
+    /// </summary>
+    public bool OpportunisticPollEnabled { get; set; } = true;
+
+    /// <summary>
     /// Which routing algorithm composition to use. Two stacks are
     /// shipped today; both wrap <see cref="dapps.core.Routing.StaticRoutingAlgorithm"/>
     /// so operator overrides always win.

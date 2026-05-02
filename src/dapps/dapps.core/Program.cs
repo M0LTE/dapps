@@ -66,6 +66,8 @@ builder.Services.AddOptions<SystemOptions>().Configure<OptionsRepo, ILogger<Syst
         && fragTimeout > 0
         ? fragTimeout
         : 7 * 24 * 3600;
+    o.OpportunisticPollEnabled = !bool.TryParse(
+        options.SingleOrDefault(opt => opt.Option == "OpportunisticPollEnabled")?.Value, out var opp) || opp;
 
     logger.LogInformation($"Callsign: {o.Callsign}");
     logger.LogInformation($"BPQ AGW: {o.NodeHost}:{o.AgwPort} (default port byte {o.DefaultBpqPort})");
@@ -181,7 +183,15 @@ builder.Services.AddSingleton<IDappsOutboundTransport>(sp =>
 builder.Services.AddSingleton<UdpDatagramBackhaul>(sp =>
     new UdpDatagramBackhaul(sp.GetRequiredService<ILoggerFactory>()));
 builder.Services.AddSingleton<IDappsBackhaul>(sp => sp.GetRequiredService<UdpDatagramBackhaul>());
-builder.Services.AddSingleton<IDappsBackhaul, Dappsv1SessionBackhaul>();
+builder.Services.AddSingleton<IDappsBackhaul>(sp => new Dappsv1SessionBackhaul(
+    sp.GetRequiredService<IDappsOutboundTransport>(),
+    sp.GetRequiredService<ILoggerFactory>(),
+    // F3 opportunistic poll: hand the backhaul the inbox so it can
+    // deliver any messages the remote has queued for us, plus a
+    // live read of the operator toggle (re-checked per push so a
+    // /Config flip takes effect on the next session).
+    opportunisticInbox: sp.GetRequiredService<IBackhaulInbox>(),
+    opportunisticEnabled: () => sp.GetRequiredService<IOptionsMonitor<SystemOptions>>().CurrentValue.OpportunisticPollEnabled));
 builder.Services.AddSingleton<IBackhaulInbox, DatabaseAndMqttInbox>();
 builder.Services.AddHostedService<UdpDatagramListener>();
 

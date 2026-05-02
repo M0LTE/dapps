@@ -148,6 +148,12 @@ The following command may be sent by the calling node to request that the remote
 rev\n
 ```
 
+The remote drains every queued message whose final destination's callsign-base matches the caller's, then re-emits `DAPPSv1>` to signal "drained." Each drained message uses the regular `ihave / send / data / ack` exchange — same wire shape as a push, just with the calling station as the receiver. Selective polling is also supported: `rev <id1> <id2> ...\n` narrows to that exact id set.
+
+`rev` only drains messages where the **caller is the final destination**. Transit messages (caller is just a known forwarder for somewhere else) are not included — `rev` is for the caller's own mail.
+
+DAPPS instances opportunistically `rev` at the end of every successful push: the session is already up, the ack just landed, so draining anything queued for us is free. The behaviour is on by default and switchable via `SystemOptions.OpportunisticPollEnabled`.
+
 ### Multiple messages
 
 `ihave` and `send` may be sent multiple times in a session. `send` may be followed by multiple message ids, space separated, to signify that the remote server wants to accept multiple messages which have been offered.
@@ -239,7 +245,7 @@ Very much work in progress.
 - application interface and a sample app
 - packaging / distribution
 - automatic routing (route discovery) between DAPPS instances
-- `rev` command - polling for waiting remote messages - not a huge priority because, like with mail, if both partners are set up for forward connections and immediate sending, polling should not be required
+- `rev` command — polling for waiting remote messages. Implemented in F3a: server drains the matching outbound queue, opportunistic-rev fires on every push so each session is bidirectional. Scheduled polling for nodes that don't push often is F3b.
 - compatibility with nodes other than BPQ
 - a human-interactive mode in the node application - to allow a human to enter a message by hand for testing/fun
 - multi-part messages
