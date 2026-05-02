@@ -1,6 +1,8 @@
-using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
+using System.Text;
+using DotNet.Testcontainers.Builders;
+using DotNet.Testcontainers.Containers;
 
 namespace dapps.core.tests.Integration;
 
@@ -22,6 +24,11 @@ namespace dapps.core.tests.Integration;
 /// the upstream linbpq test runs on natively. Bridge networking with
 /// distinct container IPs has not been verified to work for AGW
 /// dispatch and is avoided.
+///
+/// Closes #5 — same Testcontainers migration as
+/// <see cref="LinbpqIntegrationFixture"/>. Container B uses
+/// <c>WithNetworkMode("container:&lt;A's id&gt;")</c> so its loopback is
+/// A's, and its AGW port is published via A's port mappings.
 /// </summary>
 public sealed class TwoInstanceLinbpqFixture : IAsyncLifetime
 {
@@ -47,109 +54,76 @@ public sealed class TwoInstanceLinbpqFixture : IAsyncLifetime
     /// peer instance.</summary>
     public int AxipPortIndex => 1;
 
-    private string? _containerIdA;
-    private string? _containerIdB;
-    private string? _tempDirA;
-    private string? _tempDirB;
+    private IContainer? _containerA;
+    private IContainer? _containerB;
 
     public async ValueTask InitializeAsync()
     {
-        AgwPortA = PickFreeHostPort();
-        AgwPortB = PickFreeHostPort();
+        var configA = Encoding.UTF8.GetBytes(RenderConfig(
+            nodeCall: CallsignA, nodeAlias: "AAA",
+            applCall: ApplCallA, applAlias: "APPLA",
+            agwInsidePort: InsideAgwPortA, axipInsidePort: InsideAxipPortA,
+            peerCall: CallsignB, peerApplCall: ApplCallB, peerAxipInsidePort: InsideAxipPortB,
+            telnetInsidePort: 18011, httpInsidePort: 18021,
+            netromInsidePort: 18031, fbbInsidePort: 18041, apiInsidePort: 18051));
 
-        _tempDirA = Path.Combine(Path.GetTempPath(), "dapps-bpqA-" + Guid.NewGuid().ToString("N")[..8]);
-        _tempDirB = Path.Combine(Path.GetTempPath(), "dapps-bpqB-" + Guid.NewGuid().ToString("N")[..8]);
-        Directory.CreateDirectory(_tempDirA);
-        Directory.CreateDirectory(_tempDirB);
+        var configB = Encoding.UTF8.GetBytes(RenderConfig(
+            nodeCall: CallsignB, nodeAlias: "BBB",
+            applCall: ApplCallB, applAlias: "APPLB",
+            agwInsidePort: InsideAgwPortB, axipInsidePort: InsideAxipPortB,
+            peerCall: CallsignA, peerApplCall: ApplCallA, peerAxipInsidePort: InsideAxipPortA,
+            telnetInsidePort: 18012, httpInsidePort: 18022,
+            netromInsidePort: 18032, fbbInsidePort: 18042, apiInsidePort: 18052));
 
-        await File.WriteAllTextAsync(Path.Combine(_tempDirA, "bpq32.cfg"),
-            RenderConfig(
-                nodeCall: CallsignA, nodeAlias: "AAA",
-                applCall: ApplCallA, applAlias: "APPLA",
-                agwInsidePort: InsideAgwPortA, axipInsidePort: InsideAxipPortA,
-                peerCall: CallsignB, peerApplCall: ApplCallB, peerAxipInsidePort: InsideAxipPortB,
-                telnetInsidePort: 18011, httpInsidePort: 18021,
-                netromInsidePort: 18031, fbbInsidePort: 18041, apiInsidePort: 18051));
+        // A publishes both AGW ports. Because B shares A's netns, B's
+        // AGW port is also reachable on the host via A's port mapping.
+        _containerA = new ContainerBuilder()
+            .WithImage(Image)
+            .WithResourceMapping(configA, "/data/bpq32.cfg")
+            .WithPortBinding(InsideAgwPortA, assignRandomHostPort: true)
+            .WithPortBinding(InsideAgwPortB, assignRandomHostPort: true)
+            .WithWaitStrategy(Wait.ForUnixContainer().UntilPortIsAvailable(InsideAgwPortA))
+            .Build();
 
-        await File.WriteAllTextAsync(Path.Combine(_tempDirB, "bpq32.cfg"),
-            RenderConfig(
-                nodeCall: CallsignB, nodeAlias: "BBB",
-                applCall: ApplCallB, applAlias: "APPLB",
-                agwInsidePort: InsideAgwPortB, axipInsidePort: InsideAxipPortB,
-                peerCall: CallsignA, peerApplCall: ApplCallA, peerAxipInsidePort: InsideAxipPortA,
-                telnetInsidePort: 18012, httpInsidePort: 18022,
-                netromInsidePort: 18032, fbbInsidePort: 18042, apiInsidePort: 18052));
+        await _containerA.StartAsync();
+        AgwPortA = _containerA.GetMappedPublicPort(InsideAgwPortA);
+        AgwPortB = _containerA.GetMappedPublicPort(InsideAgwPortB);
 
-        var nameA = "dapps-bpq-A-" + Guid.NewGuid().ToString("N")[..8];
-        var nameB = "dapps-bpq-B-" + Guid.NewGuid().ToString("N")[..8];
+        // B shares A's netns. No port bindings here — A's already
+        // publish them. Testcontainers.NET doesn't expose
+        // `--network=container:X` directly, so we drop into the
+        // create-parameter modifier and set HostConfig.NetworkMode.
+        // The wait strategy runs from inside B's filesystem; pinning
+        // it on B's AGW port works because that port is bound inside
+        // the shared netns.
+        var aId = _containerA.Id;
+        _containerB = new ContainerBuilder()
+            .WithImage(Image)
+            .WithResourceMapping(configB, "/data/bpq32.cfg")
+            .WithCreateParameterModifier(p => p.HostConfig.NetworkMode = $"container:{aId}")
+            .WithWaitStrategy(Wait.ForUnixContainer().UntilPortIsAvailable(InsideAgwPortB))
+            .Build();
 
-        // A publishes both AGW ports (B shares A's netns, so its AGW port
-        // also reaches the host through A's port mapping).
-        var argsA = $"run -d --name {nameA} " +
-                    $"-v {_tempDirA}:/data " +
-                    $"-p {AgwPortA}:{InsideAgwPortA} -p {AgwPortB}:{InsideAgwPortB} " +
-                    $"{Image}";
-        _containerIdA = await DockerRun(argsA);
+        await _containerB.StartAsync();
 
-        var argsB = $"run -d --name {nameB} " +
-                    $"--network=container:{nameA} " +
-                    $"-v {_tempDirB}:/data " +
-                    $"{Image}";
-        _containerIdB = await DockerRun(argsB);
-
-        await WaitForTcp(Host, AgwPortA, TimeSpan.FromSeconds(20));
-        await WaitForTcp(Host, AgwPortB, TimeSpan.FromSeconds(20));
         // Tiny grace period: linbpq's AGW listener accepts immediately but
         // the AXIP UDP socket binds a moment later.
         await Task.Delay(2000);
+
+        // Sanity check from the host side — both AGW ports should be
+        // reachable. The wait strategies above polled from inside the
+        // container; this confirms the host-side mapping landed.
+        await WaitForTcp(Host, AgwPortA, TimeSpan.FromSeconds(5));
+        await WaitForTcp(Host, AgwPortB, TimeSpan.FromSeconds(5));
     }
 
     public async ValueTask DisposeAsync()
     {
-        await TryStop(_containerIdB);
-        await TryStop(_containerIdA);
-        await TryCleanupTemp(_tempDirA);
-        await TryCleanupTemp(_tempDirB);
-    }
-
-    private static async Task TryStop(string? containerId)
-    {
-        if (containerId is null) return;
-        try { await DockerRun($"stop -t 1 {containerId}"); }
-        catch { /* best effort */ }
-        try { await DockerRun($"rm -f {containerId}"); }
-        catch { /* best effort */ }
-    }
-
-    private static async Task TryCleanupTemp(string? dir)
-    {
-        if (dir is null || !Directory.Exists(dir)) return;
-        try
-        {
-            // Files are root-owned (created inside the container); chown
-            // them back via a throwaway container before deleting.
-            await DockerRun($"run --rm -v {dir}:/x debian:bookworm-slim sh -c \"rm -rf /x/* /x/.* 2>/dev/null || true\"");
-        }
-        catch { /* best effort */ }
-        try { Directory.Delete(dir, recursive: true); } catch { /* best effort */ }
-    }
-
-    private static async Task<string> DockerRun(string args)
-    {
-        var psi = new ProcessStartInfo("docker", args)
-        {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-        };
-        var p = Process.Start(psi)!;
-        await p.WaitForExitAsync();
-        var stdout = await p.StandardOutput.ReadToEndAsync();
-        if (p.ExitCode != 0)
-        {
-            var stderr = await p.StandardError.ReadToEndAsync();
-            throw new InvalidOperationException($"docker {args.Split(' ')[0]} failed (exit {p.ExitCode}): {stderr}");
-        }
-        return stdout.Trim();
+        // Dispose B first — sharing A's netns means killing A pulls B's
+        // network out from under it. Reverse-order shutdown is the
+        // graceful path.
+        if (_containerB is not null) await _containerB.DisposeAsync();
+        if (_containerA is not null) await _containerA.DisposeAsync();
     }
 
     private static string RenderConfig(
@@ -202,15 +176,6 @@ public sealed class TwoInstanceLinbpqFixture : IAsyncLifetime
         ***
 
         """;
-
-    private static int PickFreeHostPort()
-    {
-        var l = new TcpListener(IPAddress.Loopback, 0);
-        l.Start();
-        var port = ((IPEndPoint)l.LocalEndpoint).Port;
-        l.Stop();
-        return port;
-    }
 
     private static async Task WaitForTcp(string host, int port, TimeSpan timeout)
     {

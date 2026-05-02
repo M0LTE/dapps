@@ -1,6 +1,6 @@
-using System.Diagnostics;
-using System.Net;
-using System.Net.Sockets;
+using System.Text;
+using DotNet.Testcontainers.Builders;
+using DotNet.Testcontainers.Containers;
 
 namespace dapps.core.tests.Integration;
 
@@ -8,6 +8,13 @@ namespace dapps.core.tests.Integration;
 /// Spins up a single m0lte/linbpq container with AGW exposed to the host
 /// over a random port. Sufficient for tests that exercise AgwOutboundTransport's
 /// frame layout against a real BPQ AGW listener and its connect-failure path.
+///
+/// Closes #5 — the prior implementation shelled out to <c>docker run</c>
+/// directly because Testcontainers' default port-readiness check timed
+/// out before BPQ finished binding AGW. Solved here by an explicit
+/// generous timeout on the wait strategy and skipping the bind-mount
+/// entirely (config is sent via <c>WithResourceMapping</c>, so there's
+/// no root-owned host file to clean up afterwards).
 ///
 /// A two-instance topology (AXIP-UDP between containers, A→B AGW connect via
 /// APPL1CALL) was attempted but ran into a BPQ-side issue where inbound 'C'
@@ -32,65 +39,39 @@ public sealed class LinbpqIntegrationFixture : IAsyncLifetime
     /// only routable port in the single-instance config.</summary>
     public int BpqPortIndex => 0;
 
-    private string? _containerId;
-    private string? _tempDir;
+    private IContainer? _container;
 
     public async ValueTask InitializeAsync()
     {
-        AgwPort = PickFreeHostPort();
+        var configBytes = Encoding.UTF8.GetBytes(RenderConfig());
 
-        _tempDir = Path.Combine(Path.GetTempPath(), "dapps-bpq-" + Guid.NewGuid().ToString("N")[..8]);
-        Directory.CreateDirectory(_tempDir);
-        await File.WriteAllTextAsync(Path.Combine(_tempDir, "bpq32.cfg"), RenderConfig());
+        _container = new ContainerBuilder()
+            .WithImage(Image)
+            .WithResourceMapping(configBytes, "/data/bpq32.cfg")
+            .WithPortBinding(InsideAgwPort, assignRandomHostPort: true)
+            // BPQ's entrypoint takes a few seconds to bind AGW; 60 s is
+            // the Testcontainers default and is plenty here. Listening
+            // on the AGW port is the right ready signal — once it's up,
+            // tests can issue connects.
+            .WithWaitStrategy(Wait.ForUnixContainer().UntilPortIsAvailable(InsideAgwPort))
+            .Build();
 
-        // Direct `docker run` — Testcontainers' readiness checks were flaky
-        // against this image (the entrypoint takes a few seconds to bind
-        // AGW, by which point Testcontainers had given up).
-        var name = "dapps-bpq-" + Guid.NewGuid().ToString("N")[..8];
-        var args = $"run -d --name {name} -v {_tempDir}:/data -p {AgwPort}:{InsideAgwPort} {Image}";
-        _containerId = await DockerRun(args);
+        await _container.StartAsync();
+        AgwPort = _container.GetMappedPublicPort(InsideAgwPort);
 
-        await WaitForTcp(Host, AgwPort, TimeSpan.FromSeconds(20));
+        // Tiny grace: a handful of tests issued a connect immediately
+        // after the AGW port appeared and saw transient connection
+        // resets while BPQ finished post-bind init. Two seconds matches
+        // the previous shell-out fixture and is empirically enough.
         await Task.Delay(2000);
     }
 
     public async ValueTask DisposeAsync()
     {
-        if (_containerId is not null)
+        if (_container is not null)
         {
-            try { await DockerRun($"stop -t 1 {_containerId}"); }
-            catch { /* best effort — --rm handles teardown */ }
+            await _container.DisposeAsync();
         }
-        if (_tempDir is not null && Directory.Exists(_tempDir))
-        {
-            // Files inside are root-owned (created by the container); chown
-            // them back to the host user via a throwaway container before
-            // deleting from the host.
-            try
-            {
-                await DockerRun($"run --rm -v {_tempDir}:/x debian:bookworm-slim sh -c \"rm -rf /x/* /x/.* 2>/dev/null || true\"");
-            }
-            catch { /* best effort */ }
-            try { Directory.Delete(_tempDir, recursive: true); } catch { /* best effort */ }
-        }
-    }
-
-    private static async Task<string> DockerRun(string args)
-    {
-        var psi = new ProcessStartInfo("docker", args)
-        {
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-        };
-        var p = Process.Start(psi)!;
-        await p.WaitForExitAsync();
-        var stdout = await p.StandardOutput.ReadToEndAsync();
-        if (p.ExitCode != 0)
-        {
-            var stderr = await p.StandardError.ReadToEndAsync();
-            throw new InvalidOperationException($"docker {args.Split(' ')[0]} failed (exit {p.ExitCode}): {stderr}");
-        }
-        return stdout.Trim();
     }
 
     private string RenderConfig() =>
@@ -110,36 +91,6 @@ public sealed class LinbpqIntegrationFixture : IAsyncLifetime
         " MAXSESSIONS=10\n" +
         $" USER=test,test,{LocalCallsign},,SYSOP\n" +
         "ENDPORT\n";
-
-    private static int PickFreeHostPort()
-    {
-        var l = new TcpListener(IPAddress.Loopback, 0);
-        l.Start();
-        var port = ((IPEndPoint)l.LocalEndpoint).Port;
-        l.Stop();
-        return port;
-    }
-
-    private static async Task WaitForTcp(string host, int port, TimeSpan timeout)
-    {
-        var deadline = DateTime.UtcNow + timeout;
-        Exception? last = null;
-        while (DateTime.UtcNow < deadline)
-        {
-            try
-            {
-                using var c = new TcpClient();
-                await c.ConnectAsync(host, port).WaitAsync(TimeSpan.FromMilliseconds(500));
-                return;
-            }
-            catch (Exception ex)
-            {
-                last = ex;
-                await Task.Delay(200);
-            }
-        }
-        throw new TimeoutException($"linbpq AGW port {port} did not open within {timeout} (last error: {last?.Message})");
-    }
 }
 
 [CollectionDefinition("Linbpq integration", DisableParallelization = true)]
