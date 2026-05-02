@@ -87,7 +87,7 @@ public sealed class F1MultiHopForwardingTests : IAsyncLifetime
         var routingAlgorithm = new StaticRoutingAlgorithm(NullLogger<StaticRoutingAlgorithm>.Instance);
         inbox = new DatabaseAndMqttInbox(
             database, broker, events, optionsMonitor,
-            routingAlgorithm, routingContext,
+            routingAlgorithm, routingContext, TimeProvider.System,
             NullLogger<DatabaseAndMqttInbox>.Instance);
 
         outbound = new OutboundMessageManager(

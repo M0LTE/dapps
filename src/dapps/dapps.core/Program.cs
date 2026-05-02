@@ -56,6 +56,16 @@ builder.Services.AddOptions<SystemOptions>().Configure<OptionsRepo, ILogger<Syst
         && probeInterval > 0
         ? probeInterval
         : 24;
+    o.FragmentThresholdBytes = int.TryParse(
+        options.SingleOrDefault(opt => opt.Option == "FragmentThresholdBytes")?.Value, out var fragThr)
+        && fragThr >= 0
+        ? fragThr
+        : 4096;
+    o.FragmentReassemblyTimeoutSeconds = int.TryParse(
+        options.SingleOrDefault(opt => opt.Option == "FragmentReassemblyTimeoutSeconds")?.Value, out var fragTimeout)
+        && fragTimeout > 0
+        ? fragTimeout
+        : 7 * 24 * 3600;
 
     logger.LogInformation($"Callsign: {o.Callsign}");
     logger.LogInformation($"BPQ AGW: {o.NodeHost}:{o.AgwPort} (default port byte {o.DefaultBpqPort})");

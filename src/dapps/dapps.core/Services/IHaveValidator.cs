@@ -19,7 +19,15 @@ public sealed record IHaveOffer(
     string Destination,
     int? Ttl,                               // residual lifetime in seconds, null = unset
     Dictionary<string, string> AdditionalHeaders,
-    string? Originator = null);             // src= — originating callsign (F1), null when sender pre-dates F1
+    string? Originator = null,              // src= — originating callsign (F1), null when sender pre-dates F1
+    string? MasterId = null,                // mid= — F2 multi-part: opaque grouping id, null = not fragmented
+    FragmentInfo? Fragment = null);         // frag=N/M — F2 multi-part fragment index/total, null = not fragmented
+
+/// <summary>F2 multi-part fragment metadata. Index is 1-based; total is
+/// the number of fragments in the original payload. Both must satisfy
+/// <c>0 &lt; Index ≤ Total</c>; Total must be ≥ 2 (a single-fragment
+/// "M=1" message is just a regular message, no fragmentation needed).</summary>
+public sealed record FragmentInfo(int Index, int Total);
 
 public sealed record OfferValidationResult
 {
@@ -47,7 +55,7 @@ public static class IHaveValidator
     private const int ChkValueLength = 4;
 
     private static readonly HashSet<string> ReservedKeys = new(StringComparer.Ordinal)
-        { "len", "fmt", "s", "clen", "dst", "chk", "ttl", "src" };
+        { "len", "fmt", "s", "clen", "dst", "chk", "ttl", "src", "mid", "frag" };
 
     public static OfferValidationResult Validate(string ihaveCommand)
     {
@@ -140,7 +148,52 @@ public static class IHaveValidator
             originator = srcVal;
         }
 
-        return OfferValidationResult.Success(new IHaveOffer(id, len, fmt, salt, clen, dst, ttl, headers, originator));
+        // mid= and frag=N/M — F2 multi-part. Both present together or
+        // both absent; mid= alone means "fragmented but how-many-of-
+        // how-many is missing" (rejected); frag= alone means "fragment
+        // metadata without an id to group on" (also rejected). Total
+        // must be ≥ 2; a single-fragment message is just a normal
+        // message, no fragmentation needed.
+        string? masterId = null;
+        FragmentInfo? fragment = null;
+        var hasMid = kvps.TryGetValue("mid", out var midVal) && !string.IsNullOrEmpty(midVal);
+        var hasFrag = kvps.TryGetValue("frag", out var fragVal) && !string.IsNullOrEmpty(fragVal);
+        if (hasMid != hasFrag)
+        {
+            return OfferValidationResult.Fail(id,
+                "mid= and frag= must both be present or both absent (multi-part requires both)");
+        }
+        if (hasMid && hasFrag)
+        {
+            masterId = midVal!;
+
+            // frag wire form is "N/M"; both N and M positive integers,
+            // N ≤ M, M ≥ 2.
+            var slash = fragVal!.IndexOf('/');
+            if (slash <= 0 || slash == fragVal.Length - 1)
+            {
+                return OfferValidationResult.Fail(id, $"frag= must be N/M; got '{fragVal}'");
+            }
+            if (!int.TryParse(fragVal.AsSpan(0, slash), NumberStyles.None, CultureInfo.InvariantCulture, out var fragN)
+                || !int.TryParse(fragVal.AsSpan(slash + 1), NumberStyles.None, CultureInfo.InvariantCulture, out var fragM))
+            {
+                return OfferValidationResult.Fail(id, $"frag= N/M parts must be non-negative integers; got '{fragVal}'");
+            }
+            if (fragM < 2)
+            {
+                return OfferValidationResult.Fail(id,
+                    "frag= total must be ≥ 2; single-part messages must omit mid/frag entirely");
+            }
+            if (fragN < 1 || fragN > fragM)
+            {
+                return OfferValidationResult.Fail(id,
+                    $"frag= index must satisfy 1 ≤ N ≤ M; got {fragN}/{fragM}");
+            }
+            fragment = new FragmentInfo(fragN, fragM);
+        }
+
+        return OfferValidationResult.Success(new IHaveOffer(
+            id, len, fmt, salt, clen, dst, ttl, headers, originator, masterId, fragment));
     }
 
     /// <summary>

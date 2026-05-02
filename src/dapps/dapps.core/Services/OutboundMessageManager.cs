@@ -106,7 +106,12 @@ public class OutboundMessageManager(
                         Ttl: residualTtl,
                         Payload: message.Payload,
                         Originator: originator,
-                        SourceRoute: nh.SourceRoute);
+                        SourceRoute: nh.SourceRoute,
+                        // F2 multi-part: forwarder re-emits mid= + frag=N/M
+                        // verbatim so the message stays groupable across hops.
+                        MasterId: message.MasterId,
+                        FragmentIndex: message.FragmentIndex,
+                        FragmentTotal: message.FragmentTotal);
                     await ForwardAndObserveAsync(message, nh.Route, bm, optionsValue, stoppingToken);
                     break;
 
@@ -184,7 +189,10 @@ public class OutboundMessageManager(
                 Payload: message.Payload,
                 Originator: originator,
                 FloodHopsRemaining: flood.HopBudget,
-                TraversedHops: flood.TraversedHops);
+                TraversedHops: flood.TraversedHops,
+                MasterId: message.MasterId,
+                FragmentIndex: message.FragmentIndex,
+                FragmentTotal: message.FragmentTotal);
 
             var backhaul = backhauls.FirstOrDefault(b => b.CanHandle(route));
             if (backhaul is null) continue;

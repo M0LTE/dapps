@@ -59,7 +59,8 @@ public sealed class DatabaseAndMqttInboxTests : IAsyncLifetime
         var routingContext = new DatabaseRoutingContext(database, optionsMonitor);
         var routingAlgorithm = new StaticRoutingAlgorithm(NullLogger<StaticRoutingAlgorithm>.Instance);
         inbox = new DatabaseAndMqttInbox(database, broker, new InboundEventBus(),
-            optionsMonitor, routingAlgorithm, routingContext, NullLogger<DatabaseAndMqttInbox>.Instance);
+            optionsMonitor, routingAlgorithm, routingContext, TimeProvider.System,
+            NullLogger<DatabaseAndMqttInbox>.Instance);
 
         await broker.StartAsync(CancellationToken.None);
     }

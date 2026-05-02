@@ -65,7 +65,10 @@ public sealed class Dappsv1SessionBackhaul : IDappsBackhaul
                     message.Payload.Length,
                     ct,
                     ttl: message.Ttl,
-                    originator: message.Originator))
+                    originator: message.Originator,
+                    masterId: message.MasterId,
+                    fragmentIndex: message.FragmentIndex,
+                    fragmentTotal: message.FragmentTotal))
             {
                 return BackhaulSendResult.Fail($"offer rejected for {message.Id}");
             }

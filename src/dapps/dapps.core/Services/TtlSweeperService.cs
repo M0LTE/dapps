@@ -12,6 +12,7 @@ namespace dapps.core.Services;
 public class TtlSweeperService(
     Database database,
     TimeProvider timeProvider,
+    Microsoft.Extensions.Options.IOptionsMonitor<dapps.core.Models.SystemOptions> options,
     ILogger<TtlSweeperService> logger) : BackgroundService
 {
     public TimeSpan SweepInterval { get; init; } = TimeSpan.FromMinutes(1);
@@ -42,9 +43,10 @@ public class TtlSweeperService(
 
     private async Task SweepOnce()
     {
+        var now = timeProvider.GetUtcNow().UtcDateTime;
         try
         {
-            var deleted = await database.DeleteExpired(timeProvider.GetUtcNow().UtcDateTime);
+            var deleted = await database.DeleteExpired(now);
             if (deleted > 0)
             {
                 logger.LogInformation("TTL sweeper deleted {0} expired row(s)", deleted);
@@ -53,6 +55,27 @@ public class TtlSweeperService(
         catch (Exception ex)
         {
             logger.LogError(ex, "TTL sweeper threw");
+        }
+
+        // F2: drop incomplete fragment reassemblies whose first fragment
+        // arrived more than FragmentReassemblyTimeoutSeconds ago. Long
+        // window by default (7 days) — HF / mesh propagation gaps
+        // legitimately last days, and we'd rather hold the partial
+        // bytes than throw away most of a near-complete message.
+        try
+        {
+            var timeout = TimeSpan.FromSeconds(options.CurrentValue.FragmentReassemblyTimeoutSeconds);
+            var fragmentsDropped = await database.SweepStaleFragments(now - timeout);
+            if (fragmentsDropped > 0)
+            {
+                logger.LogInformation(
+                    "TTL sweeper dropped {0} stale fragment row(s) older than {1}",
+                    fragmentsDropped, timeout);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Fragment sweep threw");
         }
     }
 }

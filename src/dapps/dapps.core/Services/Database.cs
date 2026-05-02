@@ -84,10 +84,42 @@ public class Database(
     /// </summary>
     public async Task<string> SubmitOutboundMessage(string appName, string destCallsign, byte[] payload, int? ttlSeconds = null)
     {
-        var salt = (long)(timeProvider.GetUtcNow().UtcDateTime - DateTime.UnixEpoch).TotalMilliseconds;
-        var id = DappsMessage.ComputeHash(payload, salt)[..7];
         var destination = $"{appName}@{destCallsign}";
         var ourCall = options.CurrentValue.Callsign;
+        var threshold = options.CurrentValue.FragmentThresholdBytes;
+
+        // F2 multi-part: split payloads above the threshold into N
+        // fragment rows. Each fragment is its own DbMessage with a
+        // shared MasterId and a 1-based FragmentIndex. The forwarder
+        // picks them up individually; the destination's inbox
+        // reassembles. Threshold = 0 disables fragmentation.
+        if (threshold > 0 && payload.Length > threshold)
+        {
+            var masterSalt = (long)(timeProvider.GetUtcNow().UtcDateTime - DateTime.UnixEpoch).TotalMilliseconds;
+            var masterId = DappsMessage.ComputeHash(payload, masterSalt)[..7];
+            var total = (payload.Length + threshold - 1) / threshold;
+            for (var i = 0; i < total; i++)
+            {
+                var offset = i * threshold;
+                var len = Math.Min(threshold, payload.Length - offset);
+                var chunk = new byte[len];
+                Buffer.BlockCopy(payload, offset, chunk, 0, len);
+                // Each fragment gets its own salt + per-fragment id.
+                // Bump masterSalt to keep ids distinct across fragments
+                // while staying related (same time-base).
+                var fragSalt = masterSalt + i;
+                var fragId = DappsMessage.ComputeHash(chunk, fragSalt)[..7];
+                await SaveMessage(
+                    fragId, chunk, fragSalt, destination,
+                    sourceCallsign: ourCall, "{}", ttl: ttlSeconds,
+                    originatorCallsign: ourCall,
+                    masterId: masterId, fragmentIndex: i + 1, fragmentTotal: total);
+            }
+            return masterId;
+        }
+
+        var salt = (long)(timeProvider.GetUtcNow().UtcDateTime - DateTime.UnixEpoch).TotalMilliseconds;
+        var id = DappsMessage.ComputeHash(payload, salt)[..7];
         // Local submission: we are both the link-source AND the
         // originator. Recorded explicitly so re-forwards downstream
         // surface us in the receiver's dapps-origin user property.
@@ -102,7 +134,7 @@ public class Database(
         return data;
     }
 
-    internal async Task SaveMessage(string id, byte[] buffer, long? salt, string destination, string sourceCallsign, string additionalProperties, int? ttl, string originatorCallsign = "", byte? floodHopsRemaining = null, string? sourceRouteCsv = null, string? traversedHopsCsv = null)
+    internal async Task SaveMessage(string id, byte[] buffer, long? salt, string destination, string sourceCallsign, string additionalProperties, int? ttl, string originatorCallsign = "", byte? floodHopsRemaining = null, string? sourceRouteCsv = null, string? traversedHopsCsv = null, string? masterId = null, int? fragmentIndex = null, int? fragmentTotal = null)
     {
         var connection = DbInfo.GetAsyncConnection();
 
@@ -128,6 +160,9 @@ public class Database(
             FloodHopsRemaining = floodHopsRemaining,
             SourceRouteCsv = sourceRouteCsv,
             TraversedHopsCsv = traversedHopsCsv,
+            MasterId = masterId,
+            FragmentIndex = fragmentIndex,
+            FragmentTotal = fragmentTotal,
         });
     }
 
@@ -154,6 +189,9 @@ public class Database(
             AdditionalProperties = JsonSerializer.Serialize(offer.AdditionalHeaders),
             Ttl = offer.Ttl,
             CreatedAt = timeProvider.GetUtcNow().UtcDateTime,
+            MasterId = offer.MasterId,
+            FragmentIndex = offer.Fragment?.Index,
+            FragmentTotal = offer.Fragment?.Total,
         });
 
         logger.LogInformation("Saved metadata for offer {0}", offer.Id);
@@ -621,6 +659,8 @@ public class Database(
         await Upsert(connection, options, systemOptions.RoutingAlgorithm, nameof(systemOptions.RoutingAlgorithm));
         await Upsert(connection, options, systemOptions.ProbingEnabled.ToString(), nameof(systemOptions.ProbingEnabled));
         await Upsert(connection, options, systemOptions.ProbeIntervalHours.ToString(), nameof(systemOptions.ProbeIntervalHours));
+        await Upsert(connection, options, systemOptions.FragmentThresholdBytes.ToString(), nameof(systemOptions.FragmentThresholdBytes));
+        await Upsert(connection, options, systemOptions.FragmentReassemblyTimeoutSeconds.ToString(), nameof(systemOptions.FragmentReassemblyTimeoutSeconds));
     }
 
     private static async Task Upsert(SQLiteAsyncConnection connection, List<DbSystemOption> options, string value, string field)
@@ -657,6 +697,14 @@ public class Database(
                 && int.TryParse(pih, out var pihParsed) && pihParsed > 0
                 ? pihParsed
                 : 24,
+            FragmentThresholdBytes = options.TryGetValue(nameof(SystemOptions.FragmentThresholdBytes), out var ftb)
+                && int.TryParse(ftb, out var ftbParsed) && ftbParsed >= 0
+                ? ftbParsed
+                : 4096,
+            FragmentReassemblyTimeoutSeconds = options.TryGetValue(nameof(SystemOptions.FragmentReassemblyTimeoutSeconds), out var frt)
+                && int.TryParse(frt, out var frtParsed) && frtParsed > 0
+                ? frtParsed
+                : 7 * 24 * 3600,
         };
     }
 
@@ -699,5 +747,71 @@ public class Database(
         var deleted = await DbInfo.GetAsyncConnection().ExecuteAsync(
             "delete from probednodes where callsign=?", callsign);
         return deleted > 0;
+    }
+
+    // ── Fragment reassembly buffer (F2) ────────────────────────────
+
+    /// <summary>
+    /// Insert (or refresh, on a re-arrival of the same fragment) a
+    /// DbFragment row. Idempotent on the (masterId, index) primary
+    /// key. <see cref="DbFragment.FirstSeenAt"/> is preserved across
+    /// upserts — the stale-fragment sweep clock is set by the original
+    /// arrival, not the latest copy. Plan F2.
+    /// </summary>
+    internal async Task UpsertFragment(DbFragment fragment)
+    {
+        fragment.Key = DbFragment.MakeKey(fragment.MasterId, fragment.FragmentIndex);
+        var connection = DbInfo.GetAsyncConnection();
+        var existing = await connection.FindAsync<DbFragment>(fragment.Key);
+        if (existing is null)
+        {
+            await connection.InsertAsync(fragment);
+            return;
+        }
+        // Re-arrival of an already-stored fragment. Preserve the
+        // original FirstSeenAt so the sweep deadline doesn't drift.
+        fragment.FirstSeenAt = existing.FirstSeenAt;
+        await connection.UpdateAsync(fragment);
+    }
+
+    /// <summary>All currently-stored fragments for a master id, ordered
+    /// by index. Empty if no fragments have arrived for that
+    /// master.</summary>
+    internal async Task<IReadOnlyList<DbFragment>> GetFragmentsForMaster(string masterId)
+    {
+        var connection = DbInfo.GetAsyncConnection();
+        return await connection.QueryAsync<DbFragment>(
+            "select * from fragments where MasterId=? order by FragmentIndex asc", masterId);
+    }
+
+    /// <summary>Drop every fragment row for the given master id.
+    /// Called after successful reassembly so the row's payload bytes
+    /// don't sit on disk twice (once in fragments + once in the
+    /// assembled DbMessage).</summary>
+    internal async Task DeleteFragmentsForMaster(string masterId)
+    {
+        await DbInfo.GetAsyncConnection().ExecuteAsync(
+            "delete from fragments where MasterId=?", masterId);
+    }
+
+    /// <summary>Drop fragment rows whose FirstSeenAt is older than
+    /// <paramref name="cutoff"/>. Called by the TTL sweeper on a slow
+    /// cadence. Returns the number of rows deleted (across all
+    /// master ids).</summary>
+    internal async Task<int> SweepStaleFragments(DateTime cutoff)
+    {
+        var connection = DbInfo.GetAsyncConnection();
+        return await connection.ExecuteAsync(
+            "delete from fragments where FirstSeenAt < ?", cutoff.Ticks);
+    }
+
+    /// <summary>For dashboard/debug — list every fragment row, newest
+    /// first by first-seen time. Useful when an incomplete reassembly
+    /// is hanging around and the sysop wants to know what's missing.</summary>
+    public async Task<IReadOnlyList<DbFragment>> GetAllFragments()
+    {
+        var connection = DbInfo.GetAsyncConnection();
+        return await connection.QueryAsync<DbFragment>(
+            "select * from fragments order by FirstSeenAt desc, FragmentIndex asc");
     }
 }
