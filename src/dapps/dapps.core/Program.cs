@@ -157,7 +157,10 @@ builder.Services.AddHostedService<HeartbeatPublisher>();
 // admin cookie.
 builder.Services.AddMcpServer()
     .WithHttpTransport()
-    .WithTools<dapps.core.Mcp.DappsHealthTools>();
+    .WithTools<dapps.core.Mcp.DappsHealthTools>()
+    .WithTools<dapps.core.Mcp.DappsNetworkTools>()
+    .WithTools<dapps.core.Mcp.DappsRoutingTools>()
+    .WithTools<dapps.core.Mcp.DappsMessageTools>();
 
 builder.Services.AddSingleton<UpdateChecker>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<UpdateChecker>());

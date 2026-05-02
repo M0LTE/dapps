@@ -308,6 +308,19 @@ public class Database(
             "select * from messages order by CreatedAt desc limit ?", limit);
     }
 
+    /// <summary>Single-message lookup by id. Returns null if the row
+    /// has been delivered + cleaned up or never existed. Used by the
+    /// MCP tools (Plan M) to surface a specific message's state to
+    /// an operator-assistant ("explain why abc1234 didn't ship").</summary>
+    public async Task<DbMessage?> GetMessage(string id)
+        => await DbInfo.GetAsyncConnection().FindAsync<DbMessage>(id);
+
+    /// <summary>Every manual route-hint row. Mirrors
+    /// <see cref="GetRouteHint(string)"/> but for the whole table.</summary>
+    public async Task<IReadOnlyList<DbRouteHint>> GetRouteHintsAsync()
+        => await DbInfo.GetAsyncConnection().QueryAsync<DbRouteHint>(
+            "select * from routehints order by Destination");
+
     /// <summary>Total message-table row count, for dashboard summaries.</summary>
     public async Task<int> CountMessages()
     {
