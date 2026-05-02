@@ -367,11 +367,14 @@ Single Razor Pages dashboard at `/`. Covers: callsign, BPQ AGW reachability prob
 
 Deferred for follow-up: filter by app/callsign/status, click-for-payload-preview, dedicated routes view (DbRouteHint is mostly gone post-A2 anyway), logs-tail page (sysops can use stdout / journalctl). Filed as items here so they're not lost.
 
-### D2. Exercising the system *(send-test-message done; SSE + ihave terminal deferred)*
+### D2. Exercising the system *(done)*
 
-Send-test-message form on the dashboard POSTs into `Database.SubmitOutboundMessage` — same path an app would take via REST/MQTT. Useful for verifying a node-to-node link without writing an app first.
+Three surfaces:
+- **Send-test-message form on the dashboard** — POSTs into `Database.SubmitOutboundMessage` (same path an app would take via REST/MQTT). Useful for verifying a node-to-node link without writing an app first.
+- **`/Inbound`** — Razor page that opens an `EventSource` against `/Events/inbound` and live-tails every message landed by the inbox layer (after persist + MQTT inject) into a streaming table. Newest first; capped at 500 visible rows so the DOM doesn't grow unbounded on a busy node. Status pill flips between connecting / live / reconnecting based on the EventSource state.
+- **`/IHave`** — Razor page with a compose form exposing every operator-relevant field (app, destination, payload, optional TTL). The OnPost handler calls `Database.SubmitOutboundMessage` directly — same as the dashboard's send-test, just with the on-air `ihave` line preview shown after submit so an operator can see exactly how the message will appear on the wire.
 
-The "subscribe to inbound" SSE view and the "manual ihave" terminal are still useful but bigger surfaces; deferred. Both have natural homes once the dashboard grows beyond a single page (separate `/Inbound` and `/IHave` Razor pages).
+Both pages link from the dashboard header. AdminAuthMiddleware gates them behind the existing admin cookie.
 
 ### D3. Configuration UI
 
