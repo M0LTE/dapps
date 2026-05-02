@@ -470,11 +470,18 @@ Operator state is per-callsign in `DbPolledNode` (PK Callsign, LastPolledAt, Las
 
 8 new tests in `F3PollSchedulerTests` covering target enumeration (no neighbours / AGW only / UDP excluded / opt-out excluded) and `PollAndRecordAsync` shape (success-clean, success-with-message, fail-then-succeed counter reset, opt-out preservation across result update).
 
-### F4. Protocol versioning policy
+### F4. Protocol versioning policy *(done)*
 
-Pre-emptive decision before the next breaking change: do we cut `DAPPSv2>` for any incompatible wire change, or stay on `v1` forever and use feature negotiation (`have=feature1,feature2` on the prompt or in `ihave` headers)?
+Decision pinned in `README.md` "On-air protocol" → "Versioning":
 
-Weak preference: bump on any incompatible wire change. The prompt is the natural carrier and `v2` clients can offer to talk `v1` if they detect it. But pin the answer in writing before the next change.
+- Forward-compatible additions (new optional `ihave` headers, new commands) stay on the current prompt — receivers ignore unknown headers and respond `?` to unrecognised commands. F1 (`src=`), F2 (`mid=`, `frag=`), B6.1 (`peers`), F3 (`rev`) all rode `DAPPSv1>` under this rule.
+- Incompatible changes (removed required fields, changed semantics, restructured frame syntax) bump the prompt — `DAPPSv2>` etc. Clean version cuts beat patching `v1` and hoping every implementation interprets the patch identically.
+- Newer implementations SHOULD downgrade on detection — a `v2` client SHOULD speak `v1` to a node that emits `DAPPSv1>` if it can. The prompt is the natural carrier (first thing on the wire, before any state has been built up).
+- The UDP datagram codec (`BackhaulMessage` binary format) versions independently — its own version byte, hard-fail on mismatch. Currently at v6 after the F2 fragment-header fix in #71. Independent because the two formats serve different bearers and evolve on different schedules.
+
+The "feature negotiation on the prompt" alternative was rejected: it lets implementations drift in subtle ways that look fine in pairwise testing and break in N-way deployments. A version literal forces the conversation.
+
+Pre-shipping caveat — also in the README — applies until non-author operators are on the air: while there's nobody to coordinate with, breaking changes still get to skip the version-bump, because the compatibility tape buys nothing. Policy fully kicks in when the first independent operator picks DAPPS up.
 
 ### F5. Authenticated message origin (signing)
 
