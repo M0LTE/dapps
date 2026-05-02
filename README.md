@@ -32,6 +32,15 @@ When connecting to a DAPPS instance, expect a prompt:
 DAPPSv1>\n
 ```
 
+### Versioning
+
+The session-protocol version is the suffix on the prompt — `DAPPSv1>` today, `DAPPSv2>` etc. for future incompatible rewrites. Policy:
+
+- **Forward-compatible additions stay on the current version.** New optional `ihave` headers (e.g. `mid=` and `frag=N/M` added in F2; `src=` added in F1) and new commands (e.g. `peers`, `rev`) ride the existing prompt. Receivers MUST ignore unknown headers and SHOULD respond `?` to unrecognised commands. This is how the protocol grows by default.
+- **Bump the prompt on any incompatible wire change.** Removed required fields, changed semantics of existing fields, or restructured frame syntax all qualify. A clean version cut beats sticking a patch on `v1` and hoping every implementation interprets it the same way.
+- **Newer implementations SHOULD speak older versions.** A `v2` client connecting to a node that emits `DAPPSv1>` SHOULD downgrade to `v1` mode for that session if it can. The prompt is the natural carrier — it's the first thing on the wire, before any state has been built up.
+- **The UDP datagram codec versions independently.** The `BackhaulMessage` binary codec (used by the UDP and future MeshCore datagram bearers) has its own version byte — bump on any wire-format change, hard-fail on mismatch. Independent of the on-air session-protocol version because the two formats serve different bearers and evolve on different schedules.
+
 ### Offering a message
 
 The fully-decorated form of an offer line is:
