@@ -481,6 +481,8 @@ Decision pinned in `README.md` "On-air protocol" → "Versioning":
 
 The "feature negotiation on the prompt" alternative was rejected: it lets implementations drift in subtle ways that look fine in pairwise testing and break in N-way deployments. A version literal forces the conversation.
 
+Pre-shipping caveat — also in the README — applies until non-author operators are on the air: while there's nobody to coordinate with, breaking changes still get to skip the version-bump, because the compatibility tape buys nothing. Policy fully kicks in when the first independent operator picks DAPPS up.
+
 ### F5. Authenticated message origin (signing)
 
 Mentioned in the original gist. Long-term: messages signed by the source node so the recipient can verify the origin chain hasn't been tampered with. Pointless without a ham-radio-friendly identity layer; defer indefinitely until that exists.

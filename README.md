@@ -41,6 +41,8 @@ The session-protocol version is the suffix on the prompt — `DAPPSv1>` today, `
 - **Newer implementations SHOULD speak older versions.** A `v2` client connecting to a node that emits `DAPPSv1>` SHOULD downgrade to `v1` mode for that session if it can. The prompt is the natural carrier — it's the first thing on the wire, before any state has been built up.
 - **The UDP datagram codec versions independently.** The `BackhaulMessage` binary codec (used by the UDP and future MeshCore datagram bearers) has its own version byte — bump on any wire-format change, hard-fail on mismatch. Independent of the on-air session-protocol version because the two formats serve different bearers and evolve on different schedules.
 
+**Pre-shipping caveat.** Until DAPPS has non-author operators on the air, the policy above describes the destination, not the daily reality. While there are no users to coordinate with, breaking changes to either format are still fair game without a version bump — it's faster, simpler, and the cost of compatibility tape that nobody benefits from is real. The policy fully kicks in when the first independent operator picks DAPPS up; the version mechanism on both formats is preserved through the pre-shipping period precisely so that transition is mechanical rather than retrofitted.
+
 ### Offering a message
 
 The fully-decorated form of an offer line is:
