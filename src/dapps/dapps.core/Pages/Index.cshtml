@@ -648,7 +648,17 @@ else
     </form>
 </details>
 
-<h2>Discovery channels</h2>
+<h2>Discovery channels
+    @{
+        var atb = Model.DiscoveryAirtimeBudgetSecondsPerHour;
+        var atc = Model.DiscoveryAirtimeConsumedSecondsLastHour;
+        var atPctText = atb > 0
+            ? $"{atc:0.0}/{atb}s/h ({(int)Math.Min(100, Math.Round(atc * 100.0 / atb))}%)"
+            : $"{atc:0.0}s/h (unlimited)";
+        var atClass = atb > 0 && atc / atb >= 0.9 ? "warn" : "";
+    }
+    <span class="pill @atClass" title="Plan B7 — total discovery airtime in the trailing hour. Set DiscoveryAirtimeBudgetSecondsPerHour in /Config to enforce a cap, and per-channel caps below.">@atPctText</span>
+</h2>
 @if (Model.DiscoveryChannels.Count == 0)
 {
     <p class="muted">No discovery channels configured.</p>
@@ -664,6 +674,7 @@ else
                 <th>Cost</th>
                 <th>Beacon every</th>
                 <th>Advertised TTL</th>
+                <th title="Per-channel airtime cap (B7). 0 = use the global budget only.">Channel budget</th>
                 <th>Enabled</th>
                 <th></th>
             </tr>
@@ -678,6 +689,7 @@ else
                 <td class="numeric">@c.CostHint</td>
                 <td class="numeric">@c.BeaconIntervalSeconds s</td>
                 <td class="numeric">@c.AdvertisedTtlSeconds s</td>
+                <td class="numeric">@(c.AirtimeBudgetSecondsPerHour > 0 ? $"{c.AirtimeBudgetSecondsPerHour}s/h" : "—")</td>
                 <td>@(c.Enabled ? "yes" : "no")</td>
                 <td>
                     <button class="link-btn" onclick="dappsSolicitChannel(@c.Id)" title="Send a 'who's there?' solicit on this channel; reachable peers reply with their normal beacon (B6.2)">solicit</button>
@@ -707,6 +719,7 @@ else
                 <option>InternetIp</option>
             </select>
         </label>
+        <label>Channel airtime budget (seconds/hour, 0 = unlimited) <input name="airtimeBudgetSecondsPerHour" type="number" min="0" max="3600" value="0" /></label>
         <button type="submit">Add / update</button>
     </form>
 </details>
@@ -1146,6 +1159,7 @@ else
             Bearer: f.bearer.value,
             ChannelKey: f.channelKey.value,
             LinkClass: f.linkClass.value,
+            AirtimeBudgetSecondsPerHour: parseInt(f.airtimeBudgetSecondsPerHour.value, 10) || 0,
         };
         if (await dappsPostJson('/DiscoveryChannels', body)) location.reload();
     }

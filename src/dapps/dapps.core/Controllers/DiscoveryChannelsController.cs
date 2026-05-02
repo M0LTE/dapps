@@ -32,7 +32,8 @@ public class DiscoveryChannelsController(Database database, DiscoveryService dis
             AdvertisedTtlSeconds: c.AdvertisedTtlSeconds,
             CostHint: c.CostHint,
             Enabled: c.Enabled,
-            Notes: c.Notes));
+            Notes: c.Notes,
+            AirtimeBudgetSecondsPerHour: c.AirtimeBudgetSecondsPerHour));
     }
 
     [HttpPost]
@@ -55,6 +56,7 @@ public class DiscoveryChannelsController(Database database, DiscoveryService dis
             CostHint = model.CostHint,
             Enabled = model.Enabled,
             Notes = model.Notes ?? "",
+            AirtimeBudgetSecondsPerHour = model.AirtimeBudgetSecondsPerHour,
         });
         return NoContent();
     }
@@ -114,4 +116,5 @@ public sealed record DiscoveryChannelModel(
     int AdvertisedTtlSeconds = 0,
     int CostHint = 0,
     bool Enabled = true,
-    string? Notes = null);
+    string? Notes = null,
+    int AirtimeBudgetSecondsPerHour = 0);

@@ -283,7 +283,7 @@ Two scratchpad items folded into one PR because they're the same shape: pick the
 
 13 new tests across `AirtimeAccountantTests` (7 — budget zero allows; within-budget allows; over-budget rejects; entries age out; runtime budget reduction enforced; negative-estimate clamp; consumed-seconds rolls forward) and `ProbeStrategyTests` (6 — FixedInterval immediate; Overnight inside-window/outside-window/already-swept-this-night; Overnight straddle-midnight window math; WhenQuiet recent-activity defers / no-history fires).
 
-Skipped explicitly: per-channel budget overrides (one global is enough until we have a use case where it isn't), an airtime-meter on the dashboard (the accountant exposes `ConsumedSecondsLastHour` so this is one Razor card away when wanted), and a CLI subcommand for "show me the budget" (operators read `/Config` for now).
+B7 follow-ups landed in a separate PR: per-channel airtime budgets via `DbDiscoveryChannel.AirtimeBudgetSecondsPerHour` (0 = use the global cap; reservations must fit under both ceilings when both are set, with a key on each entry so per-channel buckets sum independently), an airtime-meter pill on the Discovery channels dashboard heading showing trailing-hour consumption against the global cap (warns at ≥90%), per-channel "Channel budget" column in the channels table + corresponding "Add channel" form input, and a `dapps --show-config` CLI subcommand that walks the persisted systemoptions table and prints `DAPPS_SCREAMING_SNAKE=value` pairs without booting the host.
 
 ## Phase C — deployable, runnable for sysops
 
