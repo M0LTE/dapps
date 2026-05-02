@@ -78,13 +78,19 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
     });
 builder.Services.AddSingleton<OutboundMessageManager>();
 // B5 routing seam — IRoutingAlgorithm is the strategy, IRoutingContext
-// is the slice of node state it reads. PassiveLearningAlgorithm wraps
-// StaticRoutingAlgorithm: static precedence (manual / discovered /
-// hint) wins, learned routes (from F1 src= observations) fill in
-// where static would have given up. PR-C adds bounded-flood fallback.
+// is the slice of node state it reads. Three algorithms layered as
+// decorators: FloodFallbackAlgorithm (outermost) → PassiveLearningAlgorithm
+// → StaticRoutingAlgorithm. Resolution order:
+//   1. Static precedence: manual neighbour / discovered peer / route hint.
+//   2. Learned routes: from passive observation of F1 src= on inbound.
+//   3. Bounded flood: send to all direct neighbours with a hop budget.
 builder.Services.AddSingleton<IRoutingContext, DatabaseRoutingContext>();
 builder.Services.AddSingleton<StaticRoutingAlgorithm>();
-builder.Services.AddSingleton<IRoutingAlgorithm, PassiveLearningAlgorithm>();
+builder.Services.AddSingleton<PassiveLearningAlgorithm>();
+builder.Services.AddSingleton<IRoutingAlgorithm>(sp =>
+    new FloodFallbackAlgorithm(
+        sp.GetRequiredService<PassiveLearningAlgorithm>(),
+        sp.GetRequiredService<ILogger<FloodFallbackAlgorithm>>()));
 // Auto-forwarder: ticks DoRun on a short cadence so submitted messages
 // move without a manual /Message/dorun poke. Manual poke still works.
 builder.Services.AddHostedService<OutboundForwarderService>();

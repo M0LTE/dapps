@@ -79,18 +79,16 @@ declare -A NEIGHBOURS=(
     [F]="E"
 )
 
-# Route hints — pre-B5 force-the-relay. Each entry "<destLetter>:<nextHopLetter>".
-# At each hop, the resolver sees the destination, looks up the hint, and
-# forwards to the corresponding neighbour. Chains hop-by-hop until the
-# destination is itself a direct neighbour.
-declare -A ROUTE_HINTS=(
-    [A]="C:B D:B E:B F:B"
-    [B]="D:C E:C F:C"
-    [C]="A:B F:E"
-    [D]="A:C B:C E:C F:C"
-    [E]="A:C B:C D:C"
-    [F]="A:E B:E C:E D:E"
-)
+# Route hints — used to be pre-B5 "force the relay" entries here, but
+# B5 (PR-B passive learning + PR-C bounded flood) means the network
+# converges from cold-start without any explicit hints. The simulator
+# is a clean validation of that: only direct neighbours are configured;
+# all multi-hop routing is discovered by passive learning, with the
+# bounded flood handling the very first message to a never-seen
+# destination. Keep the array empty so cold-start exercises the flood
+# path; future tests can add hints back in to validate operator
+# overrides if needed.
+declare -A ROUTE_HINTS=( [A]="" [B]="" [C]="" [D]="" [E]="" [F]="" )
 
 mkdir -p "$SIM_DIR" "$BIN_DIR"
 

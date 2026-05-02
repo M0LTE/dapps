@@ -29,6 +29,25 @@ public sealed class DatabaseAndMqttInbox(
         string sourceCallsign,
         CancellationToken ct)
     {
+        // Flood deduplication (B5): a message arriving with FloodHopsRemaining
+        // set is part of an in-flight bounded flood. Multiple flood paths can
+        // converge at this node from different neighbours; we only process
+        // the first arrival and silently drop subsequent copies. The dedup
+        // key is (id, link-source) — different upstreams might be legitimate
+        // independent floods of distinct messages with the same id (rare,
+        // but possible if two senders salt-collide). Including the link
+        // source means we'll dedup re-arrivals from the SAME upstream
+        // without conflating them with arrivals from DIFFERENT upstreams.
+        if (message.FloodHopsRemaining is { } _)
+        {
+            if (await routingContext.HasSeenFloodAsync(message.Id, sourceCallsign, ct))
+            {
+                logger.LogDebug("Flood {0} from {1} dropped — already seen", message.Id, sourceCallsign);
+                return;
+            }
+            await routingContext.RecordFloodSeenAsync(message.Id, sourceCallsign, ct);
+        }
+
         // Hand the message to the routing algorithm BEFORE persistence —
         // passive-learning algorithms care about the (originator, link-source)
         // pair, and that pair is only meaningful here at the wire boundary.
@@ -50,7 +69,13 @@ public sealed class DatabaseAndMqttInbox(
             sourceCallsign,
             headersJson,
             message.Ttl,
-            originatorCallsign: originator);
+            originatorCallsign: originator,
+            // Floods carry a per-hop budget; preserve it on the queued
+            // row so the next forwarder tick re-floods at the right
+            // remaining-hops level (decremented by FloodFallbackAlgorithm
+            // when it picks this row up). For non-flood messages this
+            // stays null.
+            floodHopsRemaining: message.FloodHopsRemaining);
 
         if (DestinationParser.IsLocal(message.Destination, options.CurrentValue.Callsign))
         {

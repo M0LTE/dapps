@@ -20,7 +20,8 @@ public sealed record BackhaulMessage(
     byte[] Payload,
     IReadOnlyDictionary<string, string>? Headers = null,
     string? Originator = null,
-    string? LinkSourceCallsign = null);
+    string? LinkSourceCallsign = null,
+    byte? FloodHopsRemaining = null);
 
 // LinkSourceCallsign: the *immediate sender's* callsign, distinct from
 // Originator (the F1 end-to-end source). Carried on bearers that don't
@@ -34,3 +35,10 @@ public sealed record BackhaulMessage(
 // AGW already identifies the link source from the C-frame's CallFrom
 // field, so AGW-bearer SendAsync may leave this null; the inbound
 // path uses the AGW-supplied identity directly.
+//
+// FloodHopsRemaining: when set, this message is a B5 cold-start
+// flood. Each forwarding hop decrements before re-flooding; the
+// flood stops when the value reaches zero. null means "this is a
+// regular routed message, not a flood." The bounded-flood fallback
+// (FloodFallbackAlgorithm) is the only thing that originates floods;
+// other algorithms / inbox handlers just propagate them.

@@ -59,4 +59,10 @@ public interface IRoutingContext
     /// <summary>Returns the new failure count, or -1 if the row was
     /// deleted (invalidation threshold hit).</summary>
     Task<int> RecordLearnedRouteFailureAsync(string destinationBaseCallsign, int invalidationThreshold, CancellationToken ct);
+
+    // ── Flood-deduplication state (PR-C) ──────────────────────────
+
+    Task<bool> HasSeenFloodAsync(string messageId, string linkSourceCallsign, CancellationToken ct);
+
+    Task RecordFloodSeenAsync(string messageId, string linkSourceCallsign, CancellationToken ct);
 }
