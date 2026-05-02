@@ -1,3 +1,4 @@
+using System.Text;
 using dapps.client;
 using dapps.client.Transport;
 using Microsoft.Extensions.Logging;
@@ -119,5 +120,155 @@ public sealed class NodeProber(
             logger.LogInformation("Probe failed: {0} ({1})", remoteCallsign, ex.Message);
             return new ProbeResult(remoteCallsign, bpqPort, false, ex.Message, at, peers);
         }
+    }
+
+    /// <summary>
+    /// Plan B6.1 Phase 2b — probe through a BPQ node prompt rather
+    /// than direct to a DAPPS APPLICATION callsign. Connect lands at
+    /// the node's command prompt (e.g. <c>READNG:GB7RDG}</c>); we
+    /// type <paramref name="applicationCommand"/> + CR (default
+    /// <c>DAPPS</c>), expect the BPQ APPLICATION dispatcher to
+    /// route us into the DAPPS slot, and then proceed with the
+    /// regular <c>DAPPSv1&gt;</c> handshake + optional peers query.
+    ///
+    /// Banner heuristic: read until the wire goes idle for a short
+    /// window (<see cref="DefaultBannerIdle"/>, 500 ms). Works for any
+    /// BPQ-style prompt regardless of the operator's banner text — we
+    /// don't pattern-match the prompt, just the silence after it.
+    /// </summary>
+    public async Task<ProbeResult> ProbeViaNodeCallAsync(
+        string localCallsign,
+        string remoteNodeCall,
+        int bpqPort,
+        CancellationToken ct,
+        string applicationCommand = "DAPPS",
+        bool fetchPeers = true)
+    {
+        var at = timeProvider.GetUtcNow().UtcDateTime;
+        IReadOnlyList<DappsProtocolClient.DiscoveredPeerInfo> peers = [];
+        try
+        {
+            await using var connection = await transport.ConnectAsync(
+                localCallsign: localCallsign,
+                remoteCallsign: remoteNodeCall,
+                bpqPortNumber: bpqPort,
+                stoppingToken: ct);
+
+            var stream = connection.Stream;
+
+            // Read the node banner + prompt. We don't parse it — we
+            // wait for the wire to go quiet, which is a reliable
+            // proxy for "the prompt is now waiting for input".
+            var banner = await ReadUntilIdleAsync(stream, DefaultBannerTotal, DefaultBannerIdle, ct);
+            if (banner.Length == 0)
+            {
+                return new ProbeResult(remoteNodeCall, bpqPort, false,
+                    "no banner from node prompt", at, peers);
+            }
+            logger.LogDebug("Node banner from {0}: {1}", remoteNodeCall, banner.Replace('\n', ' ').Replace('\r', ' '));
+
+            // Send the application command. Plain CR — BPQ's node
+            // accepts both \r and \r\n; CR-only matches what an
+            // operator at a packet-radio terminal would send.
+            await stream.WriteAsync(Encoding.ASCII.GetBytes(applicationCommand + "\r").AsMemory(), ct);
+            await stream.FlushAsync(ct);
+
+            var protocol = new DappsProtocolClient(stream, loggerFactory);
+            if (!await protocol.ReadInitialPromptAsync(ct))
+            {
+                return new ProbeResult(remoteNodeCall, bpqPort, false,
+                    $"sent '{applicationCommand}' to node prompt but no DAPPSv1> reply (banner was: {Snippet(banner)})",
+                    at, peers);
+            }
+
+            if (fetchPeers)
+            {
+                try
+                {
+                    peers = await protocol.RequestPeersAsync(ct);
+                    logger.LogInformation(
+                        "Node-prompt probe ok: {0} via '{1}' command on port {2} (got {3} peer record(s))",
+                        remoteNodeCall, applicationCommand, bpqPort, peers.Count);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogInformation(
+                        "Node-prompt probe ok but peers query failed: {0} on port {1} ({2})",
+                        remoteNodeCall, bpqPort, ex.Message);
+                }
+            }
+            else
+            {
+                logger.LogInformation(
+                    "Node-prompt probe ok: {0} via '{1}' command on port {2}",
+                    remoteNodeCall, applicationCommand, bpqPort);
+            }
+            return new ProbeResult(remoteNodeCall, bpqPort, true, "", at, peers);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogInformation("Node-prompt probe failed: {0} ({1})", remoteNodeCall, ex.Message);
+            return new ProbeResult(remoteNodeCall, bpqPort, false, ex.Message, at, peers);
+        }
+    }
+
+    private static readonly TimeSpan DefaultBannerTotal = TimeSpan.FromSeconds(8);
+    private static readonly TimeSpan DefaultBannerIdle = TimeSpan.FromMilliseconds(500);
+
+    /// <summary>
+    /// Read from <paramref name="stream"/> until either no bytes have
+    /// arrived for <paramref name="idleWindow"/> (treated as "the
+    /// prompt is now idle, waiting for input") or
+    /// <paramref name="totalTimeout"/> elapses overall. Returns
+    /// whatever ASCII bytes were collected — empty string when no
+    /// data ever arrived (which the caller surfaces as a failure).
+    ///
+    /// Internal so the unit test can substitute its own fake stream
+    /// without going through the transport layer.
+    /// </summary>
+    internal static async Task<string> ReadUntilIdleAsync(
+        Stream stream,
+        TimeSpan totalTimeout,
+        TimeSpan idleWindow,
+        CancellationToken ct)
+    {
+        var buffer = new byte[2048];
+        var sb = new StringBuilder();
+        var totalDeadline = DateTime.UtcNow + totalTimeout;
+        while (true)
+        {
+            var remaining = totalDeadline - DateTime.UtcNow;
+            if (remaining <= TimeSpan.Zero) return sb.ToString();
+            // Once we've seen any bytes, switch from the long total
+            // wait to the short idle window — silence after data
+            // means the prompt has finished writing.
+            var perReadTimeout = sb.Length > 0
+                ? (idleWindow < remaining ? idleWindow : remaining)
+                : remaining;
+            using var iterCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            iterCts.CancelAfter(perReadTimeout);
+            int n;
+            try
+            {
+                n = await stream.ReadAsync(buffer.AsMemory(), iterCts.Token);
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                // Idle / total deadline — return what we have.
+                return sb.ToString();
+            }
+            if (n == 0) return sb.ToString();   // EOF
+            sb.Append(Encoding.ASCII.GetString(buffer, 0, n));
+        }
+    }
+
+    private static string Snippet(string s)
+    {
+        var clean = s.Replace('\r', ' ').Replace('\n', ' ').Trim();
+        return clean.Length <= 80 ? clean : clean[..77] + "...";
     }
 }

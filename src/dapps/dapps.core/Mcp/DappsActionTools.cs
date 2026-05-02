@@ -21,6 +21,7 @@ public sealed class DappsActionTools(
     ProbeSchedulerService probeScheduler,
     PollSchedulerService pollScheduler,
     DiscoveryService discovery,
+    NodeProber prober,
     IOptionsMonitor<SystemOptions> options)
 {
     [McpServerTool(Name = "run_probe")]
@@ -90,6 +91,35 @@ public sealed class DappsActionTools(
     {
         await pollScheduler.SweepAsync(options.CurrentValue, ct);
         return "poll sweep completed";
+    }
+
+    [McpServerTool(Name = "probe_via_nodecall")]
+    [Description(
+        "Plan B6.1 Phase 2b — probe a BPQ NODECALL (not a DAPPS application callsign) by connecting " +
+        "to the node prompt, typing an application command (default 'DAPPS') + CR, and waiting for the " +
+        "DAPPSv1> handshake. Banner detection is heuristic: read until the wire goes idle for 500 ms, " +
+        "treat that as 'prompt waiting for input', then send the command. Banner-text-agnostic — works " +
+        "for any BPQ-style prompt. Use this when the operator knows a remote BPQ has DAPPS configured " +
+        "as an APPLICATION but you only know the NODECALL, not the DAPPS callsign. The peers query then " +
+        "returns the DAPPS peers the remote knows about, which the agent can run_probe directly.")]
+    public async Task<NodeProber.ProbeResult> ProbeViaNodeCallAsync(
+        [Description("Target BPQ NODECALL, case-insensitive (e.g. 'GB7RDG', 'M0LTE'). NOT the DAPPS application callsign.")]
+        string nodeCall,
+        [Description("BPQ port byte (0-indexed) to use for the connect.")]
+        int bpqPort,
+        CancellationToken ct,
+        [Description("Application command to type at the node prompt. Default 'DAPPS' — operators with a different APPLICATIONS= name need to override.")]
+        string applicationCommand = "DAPPS")
+    {
+        if (string.IsNullOrWhiteSpace(nodeCall))
+            throw new ArgumentException("nodeCall is required", nameof(nodeCall));
+        return await prober.ProbeViaNodeCallAsync(
+            options.CurrentValue.Callsign,
+            nodeCall.Trim().ToUpperInvariant(),
+            bpqPort,
+            ct,
+            applicationCommand: applicationCommand,
+            fetchPeers: true);
     }
 
     [McpServerTool(Name = "run_solicit")]
