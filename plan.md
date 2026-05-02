@@ -442,9 +442,25 @@ Where this shines is the corner DAPPS is most under-served on today: HF broadcas
 
 **Where it'd land**: alongside a real broadcast surface — e.g. "DAPPS bulletin" one-to-many, no-ack, fountain-coded over HF — as its own transport profile coexisting with F2's classic chunking. F2's `frag=N/M` doesn't preclude this; they're different shapes for different jobs.
 
-### F3. `rev` polling
+### F3. `rev` polling *(F3a done; F3b queued)*
 
-Documented in the spec since v1 ("polling for messages") but deliberately deprioritized — with forward connections both ways, polling shouldn't be needed. Keep on the back-burner; revisit if a real deployment turns out to need it.
+#### F3a — server rev + opportunistic poll on push *(done)*
+
+Spec form: `rev\n` drains every queued message whose final destination is the caller, then re-emits `DAPPSv1>`. Selective form `rev <id1> <id2> …\n` narrows. Same `ihave / send / data / ack` exchange as a push; the caller becomes the receiver. Final-destination only — transit messages aren't drained (the caller's `rev` is for their own mail, not for them to act as a downstream relay).
+
+Server: `InboundConnectionHandler` parses `Command.Rev`, calls `Database.GetMessagesForCaller(callerBase, requestedIds)`, then runs the sender state machine via `DappsProtocolClient.OfferMessageAsync` / `SendMessageAsync` over the existing inbound stream. Successful drains mark the row `Forwarded=1`. TTL-expired rows are skipped (sweeper picks them up later).
+
+Client: `DappsProtocolClient.PollAsync` issues `rev` (or `rev <ids>`), reads `ihave` lines, accepts each, hash-validates the payload, ACKs (or NAKs), and yields a `PolledMessage` per accepted message via `IAsyncEnumerable`. Returns when the server emits `DAPPSv1>`.
+
+Opportunistic poll is on by default — `Dappsv1SessionBackhaul.SendAsync` follows every successful push with `rev` over the same session and hands each polled message to `IBackhaulInbox.DeliverAsync` exactly as if it had arrived via push. `SystemOptions.OpportunisticPollEnabled` toggle (default true) — operators can flip via `/Config`. Free in connection-time terms; turns every outbound session into a bidirectional drain, which is the difference between "B has my mail until B can reach me" and "B has my mail until I push to B."
+
+13 new tests across `F3PollClientTests` (5 — empty drain, selective ids, single-message round-trip, hash-mismatch NAK, F2-fragment header passthrough), `F3PollServerTests` (5 — the database query in isolation + the inbound handler with rev), `Dappsv1SessionBackhaulOpportunisticPollTests` (3 — opportunistic-on, opportunistic-off, no-inbox).
+
+F2 ↔ F3 compose naturally: a multi-part message stuck mid-forward at B sits in B's queue as N fragment rows. When A polls B (or pushes to B and opportunistically polls), B drains them. A's inbox routes each fragment to the reassembly buffer, eventually reassembles. No special interop code needed beyond passing `mid=` / `frag=N/M` through `PolledMessage` (which it does).
+
+#### F3b — scheduled poll + dashboard *(queued)*
+
+For nodes that don't push often (read-only consumers, scheduled HF stations) the opportunistic mode never fires. A periodic `PollSchedulerService` mirroring `ProbeSchedulerService` walks known neighbours on a slow cadence, opens a session, sends `rev`, drains, disconnects. `SystemOptions.ScheduledPollEnabled` (off by default), `PollIntervalHours` (default 6). Dashboard panel + REST. Lands in the next PR.
 
 ### F4. Protocol versioning policy
 

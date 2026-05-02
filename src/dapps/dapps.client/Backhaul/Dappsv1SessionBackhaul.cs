@@ -19,11 +19,24 @@ public sealed class Dappsv1SessionBackhaul : IDappsBackhaul
     private readonly IDappsOutboundTransport transport;
     private readonly ILoggerFactory loggerFactory;
     private readonly ILogger logger;
+    private readonly IBackhaulInbox? opportunisticInbox;
+    private readonly Func<bool>? opportunisticEnabled;
 
     public Dappsv1SessionBackhaul(IDappsOutboundTransport transport, ILoggerFactory loggerFactory)
+        : this(transport, loggerFactory, opportunisticInbox: null, opportunisticEnabled: null)
+    {
+    }
+
+    public Dappsv1SessionBackhaul(
+        IDappsOutboundTransport transport,
+        ILoggerFactory loggerFactory,
+        IBackhaulInbox? opportunisticInbox,
+        Func<bool>? opportunisticEnabled)
     {
         this.transport = transport;
         this.loggerFactory = loggerFactory;
+        this.opportunisticInbox = opportunisticInbox;
+        this.opportunisticEnabled = opportunisticEnabled;
         logger = loggerFactory.CreateLogger<Dappsv1SessionBackhaul>();
     }
 
@@ -76,6 +89,37 @@ public sealed class Dappsv1SessionBackhaul : IDappsBackhaul
             if (!await protocol.SendMessageAsync(message.Id, message.Payload, ct))
             {
                 return BackhaulSendResult.Fail($"payload rejected for {message.Id}");
+            }
+
+            // Plan F3 — opportunistic poll. The session is open, the
+            // ack just landed; if the operator's enabled the feature
+            // and we have a place to deliver inbound, send `rev` and
+            // drain anything the remote has queued for us. Failures
+            // here don't flip the SendResult to fail — the push was
+            // the actual ask, the drain is a bonus.
+            if (opportunisticInbox is not null && (opportunisticEnabled?.Invoke() ?? false))
+            {
+                try
+                {
+                    await foreach (var polled in protocol.PollAsync(requestedIds: null, ct))
+                    {
+                        var inbound = new BackhaulMessage(
+                            Id: polled.Id,
+                            Destination: polled.Destination,
+                            Salt: polled.Salt,
+                            Ttl: polled.Ttl,
+                            Payload: polled.Payload,
+                            Originator: polled.Originator,
+                            MasterId: polled.MasterId,
+                            FragmentIndex: polled.FragmentIndex,
+                            FragmentTotal: polled.FragmentTotal);
+                        await opportunisticInbox.DeliverAsync(inbound, route.Callsign, ct);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Opportunistic poll of {0} failed (push already succeeded)", route.Callsign);
+                }
             }
 
             return BackhaulSendResult.Ok();

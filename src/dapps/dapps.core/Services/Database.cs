@@ -661,6 +661,7 @@ public class Database(
         await Upsert(connection, options, systemOptions.ProbeIntervalHours.ToString(), nameof(systemOptions.ProbeIntervalHours));
         await Upsert(connection, options, systemOptions.FragmentThresholdBytes.ToString(), nameof(systemOptions.FragmentThresholdBytes));
         await Upsert(connection, options, systemOptions.FragmentReassemblyTimeoutSeconds.ToString(), nameof(systemOptions.FragmentReassemblyTimeoutSeconds));
+        await Upsert(connection, options, systemOptions.OpportunisticPollEnabled.ToString(), nameof(systemOptions.OpportunisticPollEnabled));
     }
 
     private static async Task Upsert(SQLiteAsyncConnection connection, List<DbSystemOption> options, string value, string field)
@@ -705,6 +706,8 @@ public class Database(
                 && int.TryParse(frt, out var frtParsed) && frtParsed > 0
                 ? frtParsed
                 : 7 * 24 * 3600,
+            OpportunisticPollEnabled = !options.TryGetValue(nameof(SystemOptions.OpportunisticPollEnabled), out var oppp)
+                || !bool.TryParse(oppp, out var oppParsed) || oppParsed,
         };
     }
 
@@ -813,5 +816,53 @@ public class Database(
         var connection = DbInfo.GetAsyncConnection();
         return await connection.QueryAsync<DbFragment>(
             "select * from fragments order by FirstSeenAt desc, FragmentIndex asc");
+    }
+
+    // ── F3 rev poll: messages we'd hand to a polling caller ─────────
+
+    /// <summary>
+    /// Plan F3 — return outbound queue entries whose final destination
+    /// matches <paramref name="callerBaseCallsign"/> (the SSID-stripped
+    /// base of the polling station's callsign). These are the messages
+    /// that the rev handler would drain to a station calling <c>rev</c>.
+    ///
+    /// When <paramref name="requestedIds"/> is empty, returns every
+    /// matching un-forwarded row. When non-empty, narrows to that
+    /// specific set — used for selective polling
+    /// (<c>rev id1 id2 ...</c>).
+    ///
+    /// Final destination only — we don't drain transit messages where
+    /// the caller is just a known forwarder; the caller's session is
+    /// for THEIR mail, not for them to act as a downstream relay
+    /// (that's a separate request shape; design decision in plan F3).
+    /// </summary>
+    internal async Task<IReadOnlyList<DbMessage>> GetMessagesForCaller(
+        string callerBaseCallsign, IReadOnlyList<string> requestedIds)
+    {
+        var connection = DbInfo.GetAsyncConnection();
+        // Two cases on the wire: "app@CALL" (no SSID) and
+        // "app@CALL-N" (with SSID). The two `like` patterns cover both
+        // and the C# filter below pins the base-callsign suffix exactly
+        // (so e.g. caller "N0THEM" doesn't pick up dst="app@N0THEMA").
+        var rows = await connection.QueryAsync<DbMessage>(
+            "select * from messages where forwarded=0 and (destination like ? or destination like ?) " +
+            "order by CreatedAt asc",
+            $"%@{callerBaseCallsign}",
+            $"%@{callerBaseCallsign}-%");
+        var matching = rows
+            .Where(r => MatchesCallerBase(r.Destination, callerBaseCallsign))
+            .ToList();
+        if (requestedIds.Count == 0) return matching;
+        var idSet = requestedIds.ToHashSet(StringComparer.Ordinal);
+        return matching.Where(r => idSet.Contains(r.Id)).ToList();
+    }
+
+    private static bool MatchesCallerBase(string destination, string callerBase)
+    {
+        var at = destination.LastIndexOf('@');
+        if (at < 0 || at == destination.Length - 1) return false;
+        var destCall = destination[(at + 1)..];
+        var destBase = destCall.Split('-')[0];
+        return string.Equals(destBase, callerBase, StringComparison.OrdinalIgnoreCase);
     }
 }
