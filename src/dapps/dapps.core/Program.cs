@@ -36,6 +36,10 @@ builder.Services.AddOptions<SystemOptions>().Configure<OptionsRepo, ILogger<Syst
         options.SingleOrDefault(opt => opt.Option == "AuthRequired")?.Value, out var auth) && auth;
     o.UpdateCheckEnabled = !bool.TryParse(
         options.SingleOrDefault(opt => opt.Option == "UpdateCheckEnabled")?.Value, out var uce) || uce;
+    o.RoutingAlgorithm = options.SingleOrDefault(opt => opt.Option == "RoutingAlgorithm")?.Value
+        is { Length: > 0 } ra
+        ? ra
+        : "passive-flood";
 
     logger.LogInformation($"Callsign: {o.Callsign}");
     logger.LogInformation($"BPQ AGW: {o.NodeHost}:{o.AgwPort} (default port byte {o.DefaultBpqPort})");
@@ -43,6 +47,7 @@ builder.Services.AddOptions<SystemOptions>().Configure<OptionsRepo, ILogger<Syst
     logger.LogInformation($"UDP datagram listener: {(o.UdpListenPort > 0 ? $":{o.UdpListenPort}" : "disabled")}");
     logger.LogInformation($"App-interface auth required: {o.AuthRequired}");
     logger.LogInformation($"Update check: {(o.UpdateCheckEnabled ? "enabled" : "disabled")}");
+    logger.LogInformation($"Routing algorithm: {o.RoutingAlgorithm}");
 });
 
 builder.Services.AddHttpClient();
@@ -78,19 +83,49 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
     });
 builder.Services.AddSingleton<OutboundMessageManager>();
 // B5 routing seam — IRoutingAlgorithm is the strategy, IRoutingContext
-// is the slice of node state it reads. Three algorithms layered as
-// decorators: FloodFallbackAlgorithm (outermost) → PassiveLearningAlgorithm
-// → StaticRoutingAlgorithm. Resolution order:
-//   1. Static precedence: manual neighbour / discovered peer / route hint.
-//   2. Learned routes: from passive observation of F1 src= on inbound.
-//   3. Bounded flood: send to all direct neighbours with a hop budget.
+// is the slice of node state it reads. Two stacks shipped today;
+// SystemOptions.RoutingAlgorithm picks one at startup. Both wrap
+// StaticRoutingAlgorithm so manual operator overrides always win.
+//
+//   passive-flood (default): FloodFallbackAlgorithm →
+//     PassiveLearningAlgorithm → StaticRoutingAlgorithm. Stores per-
+//     destination next-hop only; floods on cold-start.
+//
+//   meshcore: MeshCoreLikeRoutingAlgorithm → StaticRoutingAlgorithm.
+//     Stores full discovered paths in DbDiscoveredPath; subsequent
+//     sends embed the route on the wire as SourceRoute.
 builder.Services.AddSingleton<IRoutingContext, DatabaseRoutingContext>();
 builder.Services.AddSingleton<StaticRoutingAlgorithm>();
 builder.Services.AddSingleton<PassiveLearningAlgorithm>();
 builder.Services.AddSingleton<IRoutingAlgorithm>(sp =>
-    new FloodFallbackAlgorithm(
-        sp.GetRequiredService<PassiveLearningAlgorithm>(),
-        sp.GetRequiredService<ILogger<FloodFallbackAlgorithm>>()));
+{
+    var optsValue = sp.GetRequiredService<IOptionsMonitor<SystemOptions>>().CurrentValue;
+    var lf = sp.GetRequiredService<ILoggerFactory>();
+    var startupLog = sp.GetRequiredService<ILogger<Program>>();
+    var staticAlg = sp.GetRequiredService<StaticRoutingAlgorithm>();
+    switch ((optsValue.RoutingAlgorithm ?? "passive-flood").ToLowerInvariant())
+    {
+        case "meshcore":
+            startupLog.LogInformation("Routing stack: MeshCoreLikeRoutingAlgorithm → StaticRoutingAlgorithm");
+            return new MeshCoreLikeRoutingAlgorithm(staticAlg, lf.CreateLogger<MeshCoreLikeRoutingAlgorithm>());
+        case "passive-flood":
+        default:
+            // Unknown values fall through to the safe default rather
+            // than failing startup — operators editing the option by
+            // hand will see a recognisable algorithm running and a
+            // log line they can grep for.
+            if (!string.Equals(optsValue.RoutingAlgorithm, "passive-flood", StringComparison.OrdinalIgnoreCase))
+            {
+                startupLog.LogWarning(
+                    "Unknown RoutingAlgorithm '{0}'; falling back to passive-flood",
+                    optsValue.RoutingAlgorithm);
+            }
+            startupLog.LogInformation("Routing stack: FloodFallback → PassiveLearning → Static");
+            return new FloodFallbackAlgorithm(
+                sp.GetRequiredService<PassiveLearningAlgorithm>(),
+                lf.CreateLogger<FloodFallbackAlgorithm>());
+    }
+});
 // Auto-forwarder: ticks DoRun on a short cadence so submitted messages
 // move without a manual /Message/dorun poke. Manual poke still works.
 builder.Services.AddHostedService<OutboundForwarderService>();

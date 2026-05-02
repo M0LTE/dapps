@@ -65,4 +65,16 @@ public interface IRoutingContext
     Task<bool> HasSeenFloodAsync(string messageId, string linkSourceCallsign, CancellationToken ct);
 
     Task RecordFloodSeenAsync(string messageId, string linkSourceCallsign, CancellationToken ct);
+
+    // ── Discovered paths (MeshCore-flavoured algorithm) ───────────
+
+    Task UpsertDiscoveredPathAsync(string destinationBaseCallsign, IReadOnlyList<string> intermediates, CancellationToken ct);
+
+    Task<DbDiscoveredPath?> GetDiscoveredPathAsync(string destinationBaseCallsign, CancellationToken ct);
+
+    Task RecordDiscoveredPathSuccessAsync(string destinationBaseCallsign, CancellationToken ct);
+
+    /// <summary>Returns the new failure count, or -1 if the row was
+    /// deleted (invalidation threshold hit).</summary>
+    Task<int> RecordDiscoveredPathFailureAsync(string destinationBaseCallsign, int invalidationThreshold, CancellationToken ct);
 }

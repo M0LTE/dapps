@@ -93,7 +93,7 @@ public class Database(ILogger<Database> logger, IOptionsMonitor<SystemOptions> o
         return data;
     }
 
-    internal async Task SaveMessage(string id, byte[] buffer, long? salt, string destination, string sourceCallsign, string additionalProperties, int? ttl, string originatorCallsign = "", byte? floodHopsRemaining = null)
+    internal async Task SaveMessage(string id, byte[] buffer, long? salt, string destination, string sourceCallsign, string additionalProperties, int? ttl, string originatorCallsign = "", byte? floodHopsRemaining = null, string? sourceRouteCsv = null, string? traversedHopsCsv = null)
     {
         var connection = DbInfo.GetAsyncConnection();
 
@@ -117,6 +117,8 @@ public class Database(ILogger<Database> logger, IOptionsMonitor<SystemOptions> o
             Ttl = ttl,
             CreatedAt = DateTime.UtcNow,
             FloodHopsRemaining = floodHopsRemaining,
+            SourceRouteCsv = sourceRouteCsv,
+            TraversedHopsCsv = traversedHopsCsv,
         });
     }
 
@@ -525,6 +527,76 @@ public class Database(ILogger<Database> logger, IOptionsMonitor<SystemOptions> o
             "delete from flood_seen where SeenAt < ?", cutoff.Ticks);
     }
 
+    // ── Discovered paths (MeshCore-flavoured algorithm) ─────────────
+
+    /// <summary>
+    /// Record (or refresh) the intermediate-hop path to a destination.
+    /// The most-recent observation wins; failure counter resets when
+    /// the path itself changes (a different intermediate set is fresh
+    /// evidence of liveness over the new path).
+    /// </summary>
+    internal async Task UpsertDiscoveredPathAsync(string destinationBaseCallsign, IReadOnlyList<string> intermediates, DateTime now)
+    {
+        var connection = DbInfo.GetAsyncConnection();
+        var csv = DbDiscoveredPath.ToCsv(intermediates);
+        var existing = await connection.FindAsync<DbDiscoveredPath>(destinationBaseCallsign);
+        if (existing is null)
+        {
+            await connection.InsertAsync(new DbDiscoveredPath
+            {
+                DestinationBaseCallsign = destinationBaseCallsign,
+                IntermediatesCsv = csv,
+                LastSeenAt = now,
+                LastUsedAt = DateTime.MinValue,
+                ConsecutiveFailures = 0,
+            });
+            return;
+        }
+
+        existing.LastSeenAt = now;
+        if (!string.Equals(existing.IntermediatesCsv, csv, StringComparison.OrdinalIgnoreCase))
+        {
+            existing.IntermediatesCsv = csv;
+            existing.ConsecutiveFailures = 0;
+        }
+        await connection.UpdateAsync(existing);
+    }
+
+    internal async Task<DbDiscoveredPath?> GetDiscoveredPathAsync(string destinationBaseCallsign)
+        => await DbInfo.GetAsyncConnection().FindAsync<DbDiscoveredPath>(destinationBaseCallsign);
+
+    internal async Task RecordDiscoveredPathSuccessAsync(string destinationBaseCallsign, DateTime now)
+    {
+        var connection = DbInfo.GetAsyncConnection();
+        var row = await connection.FindAsync<DbDiscoveredPath>(destinationBaseCallsign);
+        if (row is null) return;
+        row.ConsecutiveFailures = 0;
+        row.LastUsedAt = now;
+        await connection.UpdateAsync(row);
+    }
+
+    internal async Task<int> RecordDiscoveredPathFailureAsync(string destinationBaseCallsign, int invalidationThreshold)
+    {
+        var connection = DbInfo.GetAsyncConnection();
+        var row = await connection.FindAsync<DbDiscoveredPath>(destinationBaseCallsign);
+        if (row is null) return 0;
+        row.ConsecutiveFailures++;
+        if (row.ConsecutiveFailures >= invalidationThreshold)
+        {
+            await connection.DeleteAsync<DbDiscoveredPath>(destinationBaseCallsign);
+            return -1;
+        }
+        await connection.UpdateAsync(row);
+        return row.ConsecutiveFailures;
+    }
+
+    /// <summary>All current discovered paths — for dashboard / debug.</summary>
+    public async Task<IReadOnlyList<DbDiscoveredPath>> GetDiscoveredPathsAsync()
+    {
+        var connection = DbInfo.GetAsyncConnection();
+        return await connection.QueryAsync<DbDiscoveredPath>("select * from discoveredpaths order by LastSeenAt desc");
+    }
+
     internal async Task SaveSystemOptions(SystemOptions systemOptions)
     {
         var connection = DbInfo.GetAsyncConnection();
@@ -537,6 +609,7 @@ public class Database(ILogger<Database> logger, IOptionsMonitor<SystemOptions> o
         await Upsert(connection, options, systemOptions.Callsign, nameof(systemOptions.Callsign));
         await Upsert(connection, options, systemOptions.MqttPort.ToString(), nameof(systemOptions.MqttPort));
         await Upsert(connection, options, systemOptions.UpdateCheckEnabled.ToString(), nameof(systemOptions.UpdateCheckEnabled));
+        await Upsert(connection, options, systemOptions.RoutingAlgorithm, nameof(systemOptions.RoutingAlgorithm));
     }
 
     private static async Task Upsert(SQLiteAsyncConnection connection, List<DbSystemOption> options, string value, string field)
@@ -564,6 +637,9 @@ public class Database(ILogger<Database> logger, IOptionsMonitor<SystemOptions> o
             MqttPort = int.Parse(options[nameof(SystemOptions.MqttPort)]),
             UpdateCheckEnabled = !options.TryGetValue(nameof(SystemOptions.UpdateCheckEnabled), out var uce)
                 || !bool.TryParse(uce, out var uceParsed) || uceParsed,
+            RoutingAlgorithm = options.TryGetValue(nameof(SystemOptions.RoutingAlgorithm), out var ra) && !string.IsNullOrEmpty(ra)
+                ? ra
+                : "passive-flood",
         };
     }
 }

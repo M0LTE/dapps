@@ -92,6 +92,71 @@ public class BackhaulMessageCodecTests
     }
 
     [Fact]
+    public void RoundTrip_SourceRoute_PreservesOrderedHops()
+    {
+        var input = new BackhaulMessage(
+            Id: "abcdeff",
+            Destination: "app@G0DST-1",
+            Salt: 1L,
+            Ttl: 600,
+            Payload: "x"u8.ToArray(),
+            SourceRoute: new[] { "G0HOP1-1", "G0HOP2-2", "G0HOP3" });
+
+        var decoded = BackhaulMessageCodec.Decode(BackhaulMessageCodec.Encode(input));
+
+        decoded.SourceRoute.Should().NotBeNull();
+        decoded.SourceRoute!.Should().Equal("G0HOP1-1", "G0HOP2-2", "G0HOP3");
+    }
+
+    [Fact]
+    public void RoundTrip_TraversedHops_PreservesOrderedHops()
+    {
+        var input = new BackhaulMessage(
+            Id: "abcdeff",
+            Destination: "app@G0DST-1",
+            Salt: null,
+            Ttl: null,
+            Payload: "x"u8.ToArray(),
+            FloodHopsRemaining: 3,
+            TraversedHops: new[] { "G0A", "G0B-2", "G0C-9" });
+
+        var decoded = BackhaulMessageCodec.Decode(BackhaulMessageCodec.Encode(input));
+
+        decoded.TraversedHops.Should().NotBeNull();
+        decoded.TraversedHops!.Should().Equal("G0A", "G0B-2", "G0C-9");
+        decoded.FloodHopsRemaining.Should().Be(3);
+    }
+
+    [Fact]
+    public void RoundTrip_BothListsEmpty_DoesNotEncodeListBytes()
+    {
+        // Empty lists must not flip the flag bits — empty-vs-null
+        // distinction matters for source-routed semantics ("source
+        // routed with no remaining hops" vs "no source route at all"),
+        // and the codec round-trip needs to preserve which one it is.
+        var input = new BackhaulMessage(
+            Id: "abcdeff",
+            Destination: "app@G0DST",
+            Salt: null,
+            Ttl: null,
+            Payload: "x"u8.ToArray(),
+            SourceRoute: Array.Empty<string>(),
+            TraversedHops: Array.Empty<string>());
+
+        var encoded = BackhaulMessageCodec.Encode(input);
+        var decoded = BackhaulMessageCodec.Decode(encoded);
+
+        // Empty lists round-trip as null — the flag bit is the only
+        // signal of presence, and an empty list collapses to "absent"
+        // on the wire to save bytes. Senders that need to distinguish
+        // empty from null at the algorithm layer can recover by
+        // looking at FloodHopsRemaining (flood) or by having SaveMessage
+        // store an empty CSV column (source-routed in-transit).
+        decoded.SourceRoute.Should().BeNull();
+        decoded.TraversedHops.Should().BeNull();
+    }
+
+    [Fact]
     public void RoundTrip_LargePayload_StaysBinaryFaithful()
     {
         // 5 KB exercises the 4-byte payload-length field's range and gives

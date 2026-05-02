@@ -52,4 +52,16 @@ public sealed class DatabaseRoutingContext(
 
     public Task RecordFloodSeenAsync(string messageId, string linkSourceCallsign, CancellationToken ct)
         => database.RecordFloodSeenAsync(messageId, linkSourceCallsign, DateTime.UtcNow);
+
+    public Task UpsertDiscoveredPathAsync(string destinationBaseCallsign, IReadOnlyList<string> intermediates, CancellationToken ct)
+        => database.UpsertDiscoveredPathAsync(destinationBaseCallsign, intermediates, DateTime.UtcNow);
+
+    public Task<DbDiscoveredPath?> GetDiscoveredPathAsync(string destinationBaseCallsign, CancellationToken ct)
+        => database.GetDiscoveredPathAsync(destinationBaseCallsign);
+
+    public Task RecordDiscoveredPathSuccessAsync(string destinationBaseCallsign, CancellationToken ct)
+        => database.RecordDiscoveredPathSuccessAsync(destinationBaseCallsign, DateTime.UtcNow);
+
+    public Task<int> RecordDiscoveredPathFailureAsync(string destinationBaseCallsign, int invalidationThreshold, CancellationToken ct)
+        => database.RecordDiscoveredPathFailureAsync(destinationBaseCallsign, invalidationThreshold);
 }
