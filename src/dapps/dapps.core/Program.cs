@@ -6,12 +6,20 @@ using dapps.client.Transport.Agw;
 using dapps.core.Models;
 using dapps.core.Routing;
 using dapps.core.Services;
+using dapps.core.Updater;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.Extensions.Options;
 using System.Net.Sockets;
 // OpenAPI / Scalar dropped in the .NET 8 rollback — the native
 // OpenAPI generation (AddOpenApi / MapOpenApi) is a .NET 9+ API.
 // To revisit once we're back on a newer .NET runtime.
+
+// Plan C5.2 — CLI side-doors that don't boot the host.
+// Recognised: --version, --check-update, --apply-update, --rollback.
+// Returning before CreateBuilder runs means these work even when the
+// on-disk dapps.db is incompatible / a port is wedged / the callsign
+// is unset, which is exactly when --rollback is most useful.
+if (UpdaterCli.TryHandle(args, out var cliExitCode)) return cliExitCode;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -62,6 +70,11 @@ builder.Services.AddOptions<SystemOptions>().Configure<OptionsRepo, ILogger<Syst
 builder.Services.AddHttpClient();
 builder.Services.AddSingleton<UpdateChecker>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<UpdateChecker>());
+
+// Plan C5.2 — the unprivileged dapps daemon only writes the request
+// marker / reads the status file. The actual update work runs in the
+// privileged dapps-updater.service via `dapps --apply-update`.
+builder.Services.AddSingleton<IUpdaterFileSystem, RealUpdaterFileSystem>();
 
 builder.Services.AddSingleton<MqttBrokerService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<MqttBrokerService>());
@@ -203,8 +216,9 @@ catch (Exception ex) when (IsFatalConfigError(ex))
     // surfaces the actionable journal message instead. The host has
     // already logged a critical line via MqttBrokerService /
     // similar; we just translate the exit code.
-    Environment.Exit(78);
+    return 78;
 }
+return 0;
 
 static bool IsFatalConfigError(Exception ex)
 {
