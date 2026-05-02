@@ -2,6 +2,7 @@ using dapps.core.Models;
 using Microsoft.Extensions.Options;
 using MQTTnet;
 using MQTTnet.Server;
+using System.Net.Sockets;
 using System.Text;
 
 namespace dapps.core.Services;
@@ -54,7 +55,36 @@ public sealed class MqttBrokerService(
         server.ClientSubscribedTopicAsync += OnClientSubscribedTopic;
         server.ClientDisconnectedAsync += OnClientDisconnected;
 
-        await server.StartAsync();
+        try
+        {
+            await server.StartAsync();
+        }
+        catch (SocketException ex) when (ex.SocketErrorCode == SocketError.AddressAlreadyInUse)
+        {
+            // The host's default exception handler logs a noisy
+            // "Hosting failed to start" stack trace and crash-loops via
+            // systemd's Restart=on-failure. Operators running into this
+            // hit it as e.g. a co-located mosquitto container holding
+            // :1883 — the cause is operational, not a bug. Surface a
+            // single short actionable line so the journal shows what to
+            // do, then rethrow as a clean InvalidOperationException so
+            // the host's stack-trace dump references *our* message
+            // rather than a buried Bind() / MQTTnet internals chain.
+            //
+            // Once a sysop notices the journal log, they typically:
+            //   - set DAPPS_MQTT_PORT=11883 (or another free port) and
+            //     update systemoptions.MqttPort to match (env var only
+            //     seeds on first start; existing rows persist), or
+            //   - stop whatever else holds the port (often mosquitto
+            //     for an unrelated BPQ tooling stack).
+            var msg =
+                $"MQTT broker port {opts.MqttPort} is already in use. " +
+                $"Another process holds it (often a docker-published mosquitto). " +
+                $"Free the port, or POST {{\"MqttPort\":<free-port>}} to /Config and restart " +
+                $"to use a different port.";
+            logger.LogCritical(msg);
+            throw new InvalidOperationException(msg, ex);
+        }
         logger.LogInformation("MQTT broker listening on :{port} (auth required: {auth})",
             opts.MqttPort, opts.AuthRequired);
     }
