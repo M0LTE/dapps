@@ -17,6 +17,7 @@ What's left is in the "Suggested ordering" near the bottom plus the open H beare
 - ~~MCP server endpoint exposing some DAPPS surface to LLMs~~ *(in progress — see Phase M)*
 - ~~**Global airtime budget for discovery.**~~ *(actioned — see B7 below)*
 - ~~**Probe strategies, not bare intervals.**~~ *(actioned — see B7 below)*
+- **Collaborative route gossip** — today every node discovers the mesh independently. Worth sharing what we've learned with neighbours; HF NVIS broadcast and/or QO-100 satellite as broadcast-shaped bearers; fountain codes for the unacked-broadcast shape. *(sketched — see B8 below)*
 
 ## Open tasks (issues filed)
 
@@ -268,6 +269,25 @@ Two scratchpad items folded into one PR because they're the same shape: pick the
 13 new tests across `AirtimeAccountantTests` (7 — budget zero allows; within-budget allows; over-budget rejects; entries age out; runtime budget reduction enforced; negative-estimate clamp; consumed-seconds rolls forward) and `ProbeStrategyTests` (6 — FixedInterval immediate; Overnight inside-window/outside-window/already-swept-this-night; Overnight straddle-midnight window math; WhenQuiet recent-activity defers / no-history fires).
 
 B7 follow-ups landed in a separate PR: per-channel airtime budgets via `DbDiscoveryChannel.AirtimeBudgetSecondsPerHour` (0 = use the global cap; reservations must fit under both ceilings when both are set, with a key on each entry so per-channel buckets sum independently), an airtime-meter pill on the Discovery channels dashboard heading showing trailing-hour consumption against the global cap (warns at ≥90%), per-channel "Channel budget" column in the channels table + corresponding "Add channel" form input, and a `dapps --show-config` CLI subcommand that walks the persisted systemoptions table and prints `DAPPS_SCREAMING_SNAKE=value` pairs without booting the host.
+
+### B8. Collaborative route gossip *(sketch)*
+
+Today every node discovers the mesh independently. B6.1 Phase 2's `peers` query *is* a small step toward sharing — when I successfully probe you I ask "who do you know?" and seed your neighbours as `via:<you>` candidates I then probe myself, so node *existence* propagates one-hop-at-a-time across the probe graph. What's missing is **route-state sharing**: I tell you "I successfully reached X via Y at hop-count N, save yourself the discovery cost." That's the AODV → DSDV/RIP step we deliberately didn't take.
+
+The trade-off is airtime. Passive-flood (B5 default) is "learn from what you see anyway, transmit nothing extra"; real route advertisement means periodic gossip that eats into the B7 discovery budget even when nothing changed. Cheapest middle ground: piggyback a small reachability TLV on the existing `peers` response (or beacon), so a single conversation that already had to happen carries route info as a free side-effect.
+
+Several axes worth thinking about before this is more than a sketch:
+
+- **When to gossip.** Tie to B7 strategies — a new `Overnight` route-gossip window (similar to the probe overnight window) lets nodes do the heavier "here's my full reachability table" exchange during local quiet hours. Ties to time-of-day NVIS propagation patterns too. The default could be: piggyback every conversation cheaply year-round, plus one fuller exchange overnight when airtime is cheap and link congestion is low.
+- **Bearer choice.** Topology info is broadcast-shaped, not point-to-point. Two interesting non-AGW bearers: (1) **HF NVIS broadcast** — fits the existing B6.2 solicit infrastructure; one node in the cluster transmits its known-routes table on the beacon channel and every receiver in the NVIS footprint absorbs it without anyone having to open a session. Asymmetric reach is the catch — a node hears the broadcast but the broadcaster doesn't know who heard. (2) **QO-100 satellite** — geostationary, continental-Europe-and-Africa footprint, near-zero propagation variance, no overnight-vs-daytime question. Different licence/equipment story (most operators don't have the dish), so it'd be opt-in for the operators who do; one QO-100-equipped node could bridge route info between otherwise-isolated terrestrial clusters.
+- **Fountain codes.** The Phase F4-deferred fountain-code work was rejected for messages because DAPPSv1 is acked point-to-point; broadcast topology gossip is exactly the unacked-broadcast shape fountain codes were built for. A single transmitter dribbling LT/Raptor symbols of "the current routing table" lets late-joining or briefly-dropped receivers reconstruct without a per-receiver retry storm. Worth revisiting the F4-deferred fountain code in this context — same library covers both.
+- **Loop / staleness defence.** Distance-vector classics: split horizon (don't tell Y about routes I learned from Y), poisoned reverse, hop-count cap, periodic re-advertisement so stale info ages out. Sequence numbers per advertisement so a receiver can tell "newer info from this originator" vs "echo of something I've seen."
+- **Trust.** Amateur regs require call-sign identification on every transmission so the *originator* is always known; whether we trust their reachability claim is a separate question. Cheapest defence is "treat advertised routes as candidates, not facts — re-probe before believing." Same shape as B6.1 Phase 2's `via:<callsign>` candidate handling.
+- **Negative info.** "I lost the link to X" is just as load-bearing as "I gained it." Cheapest way to carry it is per-destination sequence numbers + periodic re-ad — if a destination disappears from the latest table, receivers age it out after N missed cycles. Avoids needing an explicit withdrawal message.
+
+Wire shape (sketch only): extend `peers` with optional `route <callsign> hops=<n> via=<via-callsign> seq=<n>` lines, terminated as today by `end`. Forward-compat — older nodes ignore unknown line types. Per-destination row in a new `routedigest` table with `(Destination, ViaCallsign, Hops, AdvertisedBy, AdvertisedAt, SeqNo)` so the resolver can prefer learned-from-gossip routes when no direct probe row exists, treating them as second-class evidence (lower confidence than a probe-confirmed reach).
+
+**Status:** sketch. Worth doing once B8's airtime cost is cheaper than the discovery cost it replaces — i.e., once we have enough nodes that the per-pair probe matrix is meaningfully wasteful. With the current operator population (author + a handful) it's premature.
 
 ## Phase C — deployable, runnable for sysops
 
