@@ -687,6 +687,9 @@ public class Database(
         await Upsert(connection, options, systemOptions.HeartbeatIntervalSeconds.ToString(), nameof(systemOptions.HeartbeatIntervalSeconds));
         await Upsert(connection, options, systemOptions.AutoDiscoverViaNodeCall.ToString(), nameof(systemOptions.AutoDiscoverViaNodeCall));
         await Upsert(connection, options, systemOptions.NodePromptApplicationCommand, nameof(systemOptions.NodePromptApplicationCommand));
+        await Upsert(connection, options, systemOptions.TransmissionAuditEnabled.ToString(), nameof(systemOptions.TransmissionAuditEnabled));
+        await Upsert(connection, options, systemOptions.TransmissionAuditRetentionDays.ToString(), nameof(systemOptions.TransmissionAuditRetentionDays));
+        await Upsert(connection, options, systemOptions.TransmissionAuditMqttPublish.ToString(), nameof(systemOptions.TransmissionAuditMqttPublish));
     }
 
     private static async Task Upsert(SQLiteAsyncConnection connection, List<DbSystemOption> options, string value, string field)
@@ -771,6 +774,14 @@ public class Database(
                 && !string.IsNullOrEmpty(npac)
                 ? npac
                 : "DAPPS",
+            TransmissionAuditEnabled = !options.TryGetValue(nameof(SystemOptions.TransmissionAuditEnabled), out var tae)
+                || !bool.TryParse(tae, out var taeParsed) || taeParsed,
+            TransmissionAuditRetentionDays = options.TryGetValue(nameof(SystemOptions.TransmissionAuditRetentionDays), out var tard)
+                && int.TryParse(tard, out var tardParsed) && tardParsed >= 0
+                ? tardParsed
+                : 90,
+            TransmissionAuditMqttPublish = options.TryGetValue(nameof(SystemOptions.TransmissionAuditMqttPublish), out var tamp)
+                && bool.TryParse(tamp, out var tampParsed) && tampParsed,
         };
     }
 

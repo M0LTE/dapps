@@ -245,4 +245,35 @@ public class SystemOptions
     /// changing requires a restart.
     /// </summary>
     public string RoutingAlgorithm { get; set; } = "passive-flood";
+
+    /// <summary>
+    /// When true, every outbound transmission (beacon, solicit, probe,
+    /// forward, poll, ack, heartbeat) is logged to the
+    /// <see cref="DbTransmission"/> table for operator-side audit.
+    /// Default true - the storage cost is small (a few hundred rows
+    /// per day on a typical node) and the value is high for
+    /// post-mortems and regulatory traceability. Disable only if
+    /// you're storage-constrained on a tiny SD card.
+    /// </summary>
+    public bool TransmissionAuditEnabled { get; set; } = true;
+
+    /// <summary>
+    /// Days of <see cref="DbTransmission"/> rows the retention sweeper
+    /// keeps. Older rows are deleted on the sweeper's tick. Default
+    /// 90 days - enough for most "what happened last month" lookups
+    /// without growing the database without bound. Set to 0 to disable
+    /// automatic retention (keep everything; operator manages purges
+    /// manually).
+    /// </summary>
+    public int TransmissionAuditRetentionDays { get; set; } = 90;
+
+    /// <summary>
+    /// When true, every transmission audit row is also published to
+    /// MQTT topic <c>dapps/audit/tx</c> as a JSON document, so
+    /// operators with an existing MQTT-based monitoring stack can
+    /// scrape transmissions live. Off by default - opt in once you
+    /// know you want it (it's a per-transmission publish, so it's
+    /// noisier than the heartbeat).
+    /// </summary>
+    public bool TransmissionAuditMqttPublish { get; set; } = false;
 }

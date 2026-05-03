@@ -134,6 +134,34 @@ public sealed class MqttBrokerService(
         }
     }
 
+    /// <summary>
+    /// Non-retained publish on a fixed topic. Used by the transmission
+    /// audit log to live-stream every outbound transmission to
+    /// <c>dapps/audit/tx</c> for operators with an MQTT-shaped
+    /// monitoring stack. Non-retained because each row is a discrete
+    /// event - a late subscriber doesn't need to see yesterday's
+    /// transmissions, they want live tail.
+    /// </summary>
+    public async Task<bool> PublishAsync(string topic, byte[] payload, CancellationToken ct = default)
+    {
+        if (server is null) return false;
+        var msg = new MqttApplicationMessageBuilder()
+            .WithTopic(topic)
+            .WithPayload(payload)
+            .WithQualityOfServiceLevel(MQTTnet.Protocol.MqttQualityOfServiceLevel.AtMostOnce)
+            .Build();
+        try
+        {
+            await server.InjectApplicationMessage(new InjectedMqttApplicationMessage(msg));
+            return true;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "MQTT: publish to {0} failed", topic);
+            return false;
+        }
+    }
+
     public async Task InjectInboundMessage(DbMessage message)
     {
         if (server is null) return;

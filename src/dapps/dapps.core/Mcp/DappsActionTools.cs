@@ -45,7 +45,8 @@ public sealed class DappsActionTools(
                 $"No AGW route to {normalized} - add a /Neighbours row or wait for a beacon.");
         }
         return await probeScheduler.ProbeAndRecordAsync(
-            options.CurrentValue.Callsign, normalized, port, ct);
+            options.CurrentValue.Callsign, normalized, port, ct,
+            reason: "operator-triggered probe (MCP)");
     }
 
     [McpServerTool(Name = "run_probe_sweep")]
@@ -80,7 +81,8 @@ public sealed class DappsActionTools(
                 $"No AGW route to {normalized} - add a /Neighbours row first.");
         }
         return await pollScheduler.PollAndRecordAsync(
-            options.CurrentValue.Callsign, normalized, port, ct);
+            options.CurrentValue.Callsign, normalized, port, ct,
+            reason: "operator-triggered poll (MCP)");
     }
 
     [McpServerTool(Name = "run_poll_sweep")]

@@ -26,7 +26,8 @@ public class OutboundMessageManager(
     IRoutingAlgorithm routingAlgorithm,
     IRoutingContext routingContext,
     OperationalMetrics? metrics = null,
-    OutboundActivityTracker? activityTracker = null)
+    OutboundActivityTracker? activityTracker = null,
+    TransmissionAuditService? transmissionAudit = null)
 {
     private readonly ILogger logger = loggerFactory.CreateLogger<OutboundMessageManager>();
     private readonly IReadOnlyList<IDappsBackhaul> backhauls = backhauls.ToList();
@@ -151,7 +152,9 @@ public class OutboundMessageManager(
             return;
         }
 
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         var result = await backhaul.SendAsync(bm, route, optionsValue.Callsign, stoppingToken);
+        sw.Stop();
         await routingAlgorithm.ObserveForwardOutcomeAsync(message, route, result, routingContext, stoppingToken);
         if (result.Accepted)
         {
@@ -165,6 +168,20 @@ public class OutboundMessageManager(
             logger.LogError("Failed to forward message {0} to {1} via {2}: {3}",
                 message.Id, route.Callsign, backhaul.GetType().Name, result.Error);
             metrics.RecordForwardFailure(message.Id, route.Callsign, message.Payload.Length, result.Error);
+        }
+        if (transmissionAudit is { } ta)
+        {
+            await ta.RecordAsync(
+                kind: "forward",
+                bearer: route.UdpEndpoint is not null ? "udp" : "agw",
+                channelKey: route.BpqPort?.ToString() ?? "",
+                targetCallsign: route.Callsign,
+                messageId: message.Id,
+                bytes: message.Payload.Length,
+                reason: $"forwarder tick: route via {route.Callsign}",
+                success: result.Accepted,
+                durationMs: (int)sw.ElapsedMilliseconds,
+                errorTag: result.Accepted ? "" : (result.Error ?? "unknown"));
         }
     }
 
@@ -199,7 +216,9 @@ public class OutboundMessageManager(
             var backhaul = backhauls.FirstOrDefault(b => b.CanHandle(route));
             if (backhaul is null) continue;
 
+            var sw = System.Diagnostics.Stopwatch.StartNew();
             var result = await backhaul.SendAsync(bm, route, optionsValue.Callsign, stoppingToken);
+            sw.Stop();
             await routingAlgorithm.ObserveForwardOutcomeAsync(message, route, result, routingContext, stoppingToken);
             if (result.Accepted)
             {
@@ -209,6 +228,20 @@ public class OutboundMessageManager(
             else
             {
                 metrics.RecordForwardFailure(message.Id, route.Callsign, message.Payload.Length, result.Error);
+            }
+            if (transmissionAudit is { } ta)
+            {
+                await ta.RecordAsync(
+                    kind: "forward-flood",
+                    bearer: route.UdpEndpoint is not null ? "udp" : "agw",
+                    channelKey: route.BpqPort?.ToString() ?? "",
+                    targetCallsign: route.Callsign,
+                    messageId: message.Id,
+                    bytes: message.Payload.Length,
+                    reason: $"flood to neighbour (hop budget {flood.HopBudget})",
+                    success: result.Accepted,
+                    durationMs: (int)sw.ElapsedMilliseconds,
+                    errorTag: result.Accepted ? "" : (result.Error ?? "unknown"));
             }
         }
 

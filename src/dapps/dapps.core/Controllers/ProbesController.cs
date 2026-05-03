@@ -55,7 +55,8 @@ public class ProbesController(
         }
 
         var row = await scheduler.ProbeAndRecordAsync(
-            options.CurrentValue.Callsign, normalized, port, ct);
+            options.CurrentValue.Callsign, normalized, port, ct,
+            reason: "operator-triggered probe (REST)");
         return ToModel(row);
     }
 

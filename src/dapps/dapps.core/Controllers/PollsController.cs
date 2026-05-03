@@ -45,7 +45,8 @@ public class PollsController(
         }
 
         var row = await scheduler.PollAndRecordAsync(
-            options.CurrentValue.Callsign, normalized, port, ct);
+            options.CurrentValue.Callsign, normalized, port, ct,
+            reason: "operator-triggered poll (REST)");
         return ToModel(row);
     }
 

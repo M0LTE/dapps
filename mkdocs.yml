@@ -102,6 +102,7 @@ nav:
   - Tune: tune.md
   - Discovery & routing: discovery-and-routing.md
   - Operate: operate.md
+  - Audit log: audit.md
   - Update: update.md
   - MCP for assistants: mcp.md
   - App developers:

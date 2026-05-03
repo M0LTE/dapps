@@ -54,7 +54,8 @@ public sealed class DappsExplorationTools(
 
         var port = neighbourRow.BpqPort ?? options.CurrentValue.DefaultBpqPort;
         var (_, result) = await probeScheduler.ProbeAndRecordVerboseAsync(
-            options.CurrentValue.Callsign, normalized, port, ct, fetchPeers: true);
+            options.CurrentValue.Callsign, normalized, port, ct, fetchPeers: true,
+            reason: "operator-triggered explore_via_neighbour (MCP)");
 
         // Build the "what we already know" set: our own callsign +
         // every manual neighbour + every discovered peer + every
