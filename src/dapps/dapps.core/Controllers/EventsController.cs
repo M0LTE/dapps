@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using dapps.core.Models;
 using dapps.core.Services;
@@ -108,6 +109,59 @@ public sealed class EventsController(
             LocalInbox: inbox);
     }
 
+    /// <summary>
+    /// Payload preview for a single message id. The /Inbound page calls
+    /// this when the operator clicks a row to expand it: keeps the SSE
+    /// event itself small (no payload bytes flowing through every tab on
+    /// every delivery) and lets the preview pull from the messages table
+    /// even after the page has been open long enough to forget which
+    /// payload corresponded to which row.
+    ///
+    /// Returns up to <see cref="PayloadPreviewLimit"/> bytes; the rest is
+    /// truncated and the row's <c>truncated</c> flag flips on. Body is
+    /// presented as both UTF-8 text (with a <c>textValid</c> flag the
+    /// page uses to decide whether to fall back to hex) and a hex dump,
+    /// so binary payloads still tell the operator something.
+    /// </summary>
+    [HttpGet("payload/{id}")]
+    public async Task<ActionResult<PayloadPreview>> GetPayload(string id)
+    {
+        var msg = await database.GetMessage(id);
+        if (msg is null) return NotFound();
+
+        var bytes = msg.Payload ?? Array.Empty<byte>();
+        var truncated = bytes.Length > PayloadPreviewLimit;
+        var slice = truncated ? bytes.AsSpan(0, PayloadPreviewLimit).ToArray() : bytes;
+
+        string? text = null;
+        var textValid = false;
+        try
+        {
+            // strict=false would silently mask binary as replacement
+            // characters and lie to the operator about what arrived.
+            var enc = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+            text = enc.GetString(slice);
+            textValid = true;
+        }
+        catch (DecoderFallbackException)
+        {
+            text = null;
+            textValid = false;
+        }
+
+        return new PayloadPreview(
+            Id: msg.Id,
+            Destination: msg.Destination,
+            SourceCallsign: msg.SourceCallsign,
+            ByteLength: bytes.Length,
+            Truncated: truncated,
+            TextValid: textValid,
+            Text: text,
+            Hex: Convert.ToHexString(slice));
+    }
+
+    private const int PayloadPreviewLimit = 4 * 1024;
+
     [HttpGet("inbound")]
     public async Task GetInbound(CancellationToken ct)
     {
@@ -177,6 +231,16 @@ public sealed record VersionStatus(
     string? ReleaseUrl,
     bool IsAvailable,
     DateTime? FetchedAt);
+
+public sealed record PayloadPreview(
+    string Id,
+    string Destination,
+    string SourceCallsign,
+    int ByteLength,
+    bool Truncated,
+    bool TextValid,
+    string? Text,
+    string Hex);
 
 public sealed record DroppedMessageRow(
     string Id,

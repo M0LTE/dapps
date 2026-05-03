@@ -6,7 +6,7 @@ Living planning document. Aim is to get DAPPS into the hands of node operators w
 
 The protocol is fully specified (`README.md`'s "On-air protocol" section, including F4 versioning policy). The implementation matches the spec; the on-air format is byte-validated against real BPQ in CI via `m0lte/linbpq` (Testcontainers-managed). Local apps talk to DAPPS via MQTT (durable, idempotent on `dapps-id`) or REST. TTL forwarding works across multi-hop topologies. F1 end-to-end source tracking, F2 multi-part messages, F3 `rev` polling (opportunistic + scheduled) all done. B5 passive-learning routing + B5.1 MeshCore-flavoured DSR alternative both shipped. B6.1 connected-mode probe-and-map with transitive `peers` discovery, B6.2 HF-NVIS solicit-and-listen (on-demand + scheduled cadence), B7 single-counter discovery airtime budget with probe strategies, all live. C1 single-file native binaries publish via CI on five platforms; C2 env-var seeding plus `dapps --show-config`; C3 `/Health`, `/Operational`, decision-events ring + structured journal mirror, MQTT heartbeat; C4 install/upgrade docs in the README; C5.1 update-availability banner + C5.2 triggered self-update via privileged `dapps-updater.service`. D1-D4 dashboard MVP. E1-E4 developer guide complete. Phase M (#81-#85) — MCP server at `/mcp` with 26 operator-facing tools.
 
-What's left is in the "Suggested ordering" near the bottom plus the open H bearer-integration phase. The biggest remaining items are external-blocked (H1/H2 MeshCore hardware, H3 RHP awaiting BPQ support, F5 signing awaiting an identity layer) or not-yet-prioritised (Phase G second-language reference impl, scratchpad phone messenger app).
+What's left is in the "Suggested ordering" near the bottom plus the open H bearer-integration phase. The biggest remaining items are external-blocked (H1/H2 MeshCore hardware, H3 RHP awaiting BPQ support, F5 signing awaiting an identity layer), parked (C5.3 scheduled auto-update — banner + one-click + `trigger_update` MCP cover today's operator population), or not-yet-prioritised (Phase G second-language reference impl, scratchpad phone messenger app).
 
 ## Tom's scratchpad of ideas
 
@@ -17,6 +17,7 @@ What's left is in the "Suggested ordering" near the bottom plus the open H beare
 - ~~MCP server endpoint exposing some DAPPS surface to LLMs~~ *(in progress — see Phase M)*
 - ~~**Global airtime budget for discovery.**~~ *(actioned — see B7 below)*
 - ~~**Probe strategies, not bare intervals.**~~ *(actioned — see B7 below)*
+- **Collaborative route gossip** — today every node discovers the mesh independently. Worth sharing what we've learned with neighbours; HF NVIS broadcast and/or QO-100 satellite as broadcast-shaped bearers; fountain codes for the unacked-broadcast shape. *(sketched — see B8 below)*
 
 ## Open tasks (issues filed)
 
@@ -269,6 +270,25 @@ Two scratchpad items folded into one PR because they're the same shape: pick the
 
 B7 follow-ups landed in a separate PR: per-channel airtime budgets via `DbDiscoveryChannel.AirtimeBudgetSecondsPerHour` (0 = use the global cap; reservations must fit under both ceilings when both are set, with a key on each entry so per-channel buckets sum independently), an airtime-meter pill on the Discovery channels dashboard heading showing trailing-hour consumption against the global cap (warns at ≥90%), per-channel "Channel budget" column in the channels table + corresponding "Add channel" form input, and a `dapps --show-config` CLI subcommand that walks the persisted systemoptions table and prints `DAPPS_SCREAMING_SNAKE=value` pairs without booting the host.
 
+### B8. Collaborative route gossip *(sketch)*
+
+Today every node discovers the mesh independently. B6.1 Phase 2's `peers` query *is* a small step toward sharing — when I successfully probe you I ask "who do you know?" and seed your neighbours as `via:<you>` candidates I then probe myself, so node *existence* propagates one-hop-at-a-time across the probe graph. What's missing is **route-state sharing**: I tell you "I successfully reached X via Y at hop-count N, save yourself the discovery cost." That's the AODV → DSDV/RIP step we deliberately didn't take.
+
+The trade-off is airtime. Passive-flood (B5 default) is "learn from what you see anyway, transmit nothing extra"; real route advertisement means periodic gossip that eats into the B7 discovery budget even when nothing changed. Cheapest middle ground: piggyback a small reachability TLV on the existing `peers` response (or beacon), so a single conversation that already had to happen carries route info as a free side-effect.
+
+Several axes worth thinking about before this is more than a sketch:
+
+- **When to gossip.** Tie to B7 strategies — a new `Overnight` route-gossip window (similar to the probe overnight window) lets nodes do the heavier "here's my full reachability table" exchange during local quiet hours. Ties to time-of-day NVIS propagation patterns too. The default could be: piggyback every conversation cheaply year-round, plus one fuller exchange overnight when airtime is cheap and link congestion is low.
+- **Bearer choice.** Topology info is broadcast-shaped, not point-to-point. Two interesting non-AGW bearers: (1) **HF NVIS broadcast** — fits the existing B6.2 solicit infrastructure; one node in the cluster transmits its known-routes table on the beacon channel and every receiver in the NVIS footprint absorbs it without anyone having to open a session. Asymmetric reach is the catch — a node hears the broadcast but the broadcaster doesn't know who heard. (2) **QO-100 satellite** — geostationary, continental-Europe-and-Africa footprint, near-zero propagation variance, no overnight-vs-daytime question. Different licence/equipment story (most operators don't have the dish), so it'd be opt-in for the operators who do; one QO-100-equipped node could bridge route info between otherwise-isolated terrestrial clusters.
+- **Fountain codes.** The Phase F4-deferred fountain-code work was rejected for messages because DAPPSv1 is acked point-to-point; broadcast topology gossip is exactly the unacked-broadcast shape fountain codes were built for. A single transmitter dribbling LT/Raptor symbols of "the current routing table" lets late-joining or briefly-dropped receivers reconstruct without a per-receiver retry storm. Worth revisiting the F4-deferred fountain code in this context — same library covers both.
+- **Loop / staleness defence.** Distance-vector classics: split horizon (don't tell Y about routes I learned from Y), poisoned reverse, hop-count cap, periodic re-advertisement so stale info ages out. Sequence numbers per advertisement so a receiver can tell "newer info from this originator" vs "echo of something I've seen."
+- **Trust.** Amateur regs require call-sign identification on every transmission so the *originator* is always known; whether we trust their reachability claim is a separate question. Cheapest defence is "treat advertised routes as candidates, not facts — re-probe before believing." Same shape as B6.1 Phase 2's `via:<callsign>` candidate handling.
+- **Negative info.** "I lost the link to X" is just as load-bearing as "I gained it." Cheapest way to carry it is per-destination sequence numbers + periodic re-ad — if a destination disappears from the latest table, receivers age it out after N missed cycles. Avoids needing an explicit withdrawal message.
+
+Wire shape (sketch only): extend `peers` with optional `route <callsign> hops=<n> via=<via-callsign> seq=<n>` lines, terminated as today by `end`. Forward-compat — older nodes ignore unknown line types. Per-destination row in a new `routedigest` table with `(Destination, ViaCallsign, Hops, AdvertisedBy, AdvertisedAt, SeqNo)` so the resolver can prefer learned-from-gossip routes when no direct probe row exists, treating them as second-class evidence (lower confidence than a probe-confirmed reach).
+
+**Status:** sketch. Worth doing once B8's airtime cost is cheaper than the discovery cost it replaces — i.e., once we have enough nodes that the per-pair probe matrix is meaningfully wasteful. With the current operator population (author + a handful) it's premature.
+
 ## Phase C — deployable, runnable for sysops
 
 **Goal:** a sysop downloads a single binary for their platform from a GitHub Release, drops it next to a `dapps.db`, and it Just Works.
@@ -326,13 +346,13 @@ Systemd units live in `scripts/dapps-updater.service` + `.timer`. README install
 
 **What's NOT in this PR (deferred):** scheduled auto-update (C5.3), Windows/macOS triggered-update path, channel pinning, signature verification.
 
-#### C5.3 — Auto-update on a schedule
-Off by default. Operator opts in: "auto-update during quiet hours, randomised offset within a window."
+#### C5.3 — Auto-update on a schedule *(parked)*
 
-- Adds an `AutoUpdate=true` config option + a `QuietHours` window (default 02:00–05:00 local).
-- Updater runs in this window, checks, applies, restarts.
-- Skips if traffic was forwarded in the last N minutes (don't reboot mid-conversation).
-- Per-major-version pinning option ("auto-update within 0.x but not across 0→1") so a backwards-incompatible bump doesn't surprise people overnight.
+Originally sketched as: opt-in `AutoUpdate=true` + `QuietHours` window, skip if traffic was forwarded in the last N minutes, per-major-version pinning so a 0→1 bump doesn't surprise people overnight.
+
+Parked because the existing surfaces are already enough for the current operator population: the dashboard's update banner (C5.1) plus the one-click `/Update/apply` button (C5.2) plus the `trigger_update` MCP tool (Plan M) already give an operator — or an MCP-driven assistant — a "release is available, apply it" flow that takes seconds. A scheduled apply is a convenience for operators who don't watch the box at all, but those operators don't yet exist; today it's just author + a small handful of friendly nodes. Revisit when there's a real population whose nodes drift weeks behind because nobody clicks the button.
+
+Sketch retained above so the design intent isn't lost when we come back.
 
 #### Out of scope for now
 
@@ -356,7 +376,7 @@ Deferred for follow-up: filter by app/callsign/status, click-for-payload-preview
 
 Three surfaces:
 - **Send-test-message form on the dashboard** — POSTs into `Database.SubmitOutboundMessage` (same path an app would take via REST/MQTT). Useful for verifying a node-to-node link without writing an app first.
-- **`/Inbound`** — Razor page that opens an `EventSource` against `/Events/inbound` and live-tails every message landed by the inbox layer (after persist + MQTT inject) into a streaming table. Newest first; capped at 500 visible rows so the DOM doesn't grow unbounded on a busy node. Status pill flips between connecting / live / reconnecting based on the EventSource state.
+- **`/Inbound`** — Razor page that opens an `EventSource` against `/Events/inbound` and live-tails every message landed by the inbox layer (after persist + MQTT inject) into a streaming table. Newest first; capped at 500 visible rows so the DOM doesn't grow unbounded on a busy node. Status pill flips between connecting / live / reconnecting based on the EventSource state. App / source-callsign / destination filter inputs hide non-matching rows live (no server round-trip — the data's already in the DOM); clicking any row fetches `/Events/payload/<id>` and inline-expands a tabbed text/hex preview (capped at 4 KiB to keep the page small even on multi-MB messages, with a `truncated` flag and a `textValid` flag the UI uses to pick text-vs-hex on UTF-8 payloads). The payload endpoint's a deliberate separate fetch — it keeps the SSE event itself tiny so every browser tab subscribed to a busy node doesn't get hosed by payload bytes flowing through the stream.
 - **`/IHave`** — Razor page with a compose form exposing every operator-relevant field (app, destination, payload, optional TTL). The OnPost handler calls `Database.SubmitOutboundMessage` directly — same as the dashboard's send-test, just with the on-air `ihave` line preview shown after submit so an operator can see exactly how the message will appear on the wire.
 
 Both pages link from the dashboard header. AdminAuthMiddleware gates them behind the existing admin cookie.
@@ -571,10 +591,10 @@ Roughly:
 3. **C1 + C2 + C4** (docker image, config tooling, install docs) — gets the thing into one sysop's hands.
 4. **A4** (per-app auth) — *done*.
 5. **D1 + D2 + D3 + D4** (web UI: inspection / exercise / config / auth) — *MVP done*. SSE inbound feed + manual `ihave` terminal still pending under D2.
-6. **B1–B4** (channels-first-class discovery + cost-based resolver) — *done*. **B5** (learned-graph routing inside DAPPS, bearer-agnostic) — *done*. **B6.1** Phase 1 (direct-connect liveness probes) and Phase 2 (`peers` command + transitive discovery) — *done*. **B6.2** (HF NVIS solicit-and-listen) — *done* including scheduled cadence. **B7** (airtime budget + probe strategies) — *done*. Only **B6.1 Phase 2b** (node-prompt discovery against non-DAPPS NODECALLs) is still queued.
+6. **B1–B4** (channels-first-class discovery + cost-based resolver) — *done*. **B5** (learned-graph routing inside DAPPS, bearer-agnostic) — *done*. **B6.1** all phases (1: direct-connect liveness probes; 2: `peers` command + transitive discovery; 2b: node-prompt discovery against non-DAPPS NODECALLs, with auto-discovery wiring behind `AutoDiscoverViaNodeCall`) — *done*. **B6.2** (HF NVIS solicit-and-listen) — *done* including scheduled cadence. **B7** (airtime budget + probe strategies) — *done*.
 7. **E1–E4** (concepts + tutorial + reference + sample-app gallery) — *done*. Developer guide is complete; third-party app development is unlocked.
 8. **H** (concrete bearer integrations — MeshCore Companion, MeshCore KISS, RHP, …) on its own track, doesn't gate the routing or developer-guide work.
-9. **A3** — *done*. **C5.1** (update-availability banner) — *done*. **C5.2** (triggered self-update) — *done*. **C3** (health/logs/observability) — *done*. **D3, D4, F1–F4** all *done*. **C5.3** (scheduled auto-update) still queued.
+9. **A3** — *done*. **C5.1** (update-availability banner) — *done*. **C5.2** (triggered self-update) — *done*. **C3** (health/logs/observability) — *done*. **D3, D4, F1–F4** all *done*. **C5.3** (scheduled auto-update) *parked* — banner + one-click apply + `trigger_update` MCP tool already cover the current operator population; revisit when real third-party operators are on-air and drifting.
 10. **Phase M** (MCP server endpoint exposing operator tools to LLMs) — *done* (#81–#85). 26 tools across reads / actions / config / composite diagnostics / supervised exploration.
 11. **Phase G** (second-language reference impl) once the spec has been exercised by enough first-party apps that the ambiguities are likely to surface.
 
