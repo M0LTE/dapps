@@ -6,33 +6,33 @@ How a DAPPS node finds other DAPPS nodes, and how it decides where to send a giv
 
 Three tables, each with a single job:
 
-1. **Discovery channels** — bearers / frequencies / multicast groups DAPPS will beacon on, listen on, and run scheduled solicits over. You configure these explicitly; nothing is on by default.
-2. **Discovered peers** — callsigns heard on a channel, with bearer hints and a "last seen" timestamp. Populated automatically by beacons + solicits.
-3. **Neighbours** — callsigns DAPPS will actually forward to. May be hand-added by the operator, or auto-promoted from the discovered-peers table.
+1. **Discovery channels** - bearers / frequencies / multicast groups DAPPS will beacon on, listen on, and run scheduled solicits over. You configure these explicitly; nothing is on by default.
+2. **Discovered peers** - callsigns heard on a channel, with bearer hints and a "last seen" timestamp. Populated automatically by beacons + solicits.
+3. **Neighbours** - callsigns DAPPS will actually forward to. May be hand-added by the operator, or auto-promoted from the discovered-peers table.
 
 Plus two derived stores:
 
-4. **Probed nodes** — per-callsign liveness state from connected-mode probes (Phase B6.1). Tracks success/failure history, source (`neighbour` for direct, `via:CALL` for transitive, `node-prompt:CALL` for node-prompt-discovered).
-5. **Learned routes** — for the `passive-flood` algorithm, observed forwards build up an internal "I know how to reach X via Y" map.
+4. **Probed nodes** - per-callsign liveness state from connected-mode probes (Phase B6.1). Tracks success/failure history, source (`neighbour` for direct, `via:CALL` for transitive, `node-prompt:CALL` for node-prompt-discovered).
+5. **Learned routes** - for the `passive-flood` algorithm, observed forwards build up an internal "I know how to reach X via Y" map.
 
 ## Discovery channels
 
 A discovery channel is the tuple `(bearer, channel-key)`. For AGW, the channel key is the BPQ port byte. For UDP datagram, it's the multicast endpoint. Each channel carries:
 
-- **Beacon cadence** — how often we transmit our own beacon on this channel.
-- **Advertised TTL** — how long peers should consider our beacon valid.
-- **Link-class hint** — used by the routing cost model.
-- **Optional per-channel airtime budget** — caps tx on this channel independently of the global budget.
-- **Optional scheduled-solicit interval** — for HF NVIS where push-only beaconing is too expensive.
+- **Beacon cadence** - how often we transmit our own beacon on this channel.
+- **Advertised TTL** - how long peers should consider our beacon valid.
+- **Link-class hint** - used by the routing cost model.
+- **Optional per-channel airtime budget** - caps tx on this channel independently of the global budget.
+- **Optional scheduled-solicit interval** - for HF NVIS where push-only beaconing is too expensive.
 - **Enabled flag** + free-form notes.
 
-There is **no default channel**. Operators add channels via the dashboard's **Discovery channels** section once they've thought about which BPQ port DAPPS should beacon on. Defaulting to "beacon on port 0" would silently put DAPPS chatter on whatever band that port happens to be — possibly a band the operator's licence class doesn't permit at the relevant power level. Explicit add is the right contract.
+There is **no default channel**. Operators add channels via the dashboard's **Discovery channels** section once they've thought about which BPQ port DAPPS should beacon on. Defaulting to "beacon on port 0" would silently put DAPPS chatter on whatever band that port happens to be - possibly a band the operator's licence class doesn't permit at the relevant power level. Explicit add is the right contract.
 
 ## Beacons
 
-When you enable a discovery channel, the beaconer sends a small frame on its cadence — your callsign + bearer hint + cost. Every other DAPPS node that hears it adds (or refreshes) a row in its discovered-peers table.
+When you enable a discovery channel, the beaconer sends a small frame on its cadence - your callsign + bearer hint + cost. Every other DAPPS node that hears it adds (or refreshes) a row in its discovered-peers table.
 
-A beacon is one packet, not a session — it's stateless. The advertised TTL is how long the receiver should remember the row before it ages out.
+A beacon is one packet, not a session - it's stateless. The advertised TTL is how long the receiver should remember the row before it ages out.
 
 ## Solicits (B6.2)
 
@@ -42,15 +42,15 @@ Useful on **HF NVIS** where the round-trip cost of a beacon (and the airtime bud
 
 ## Probes (B6.1)
 
-A probe is a connected-mode session — DAPPS opens a real DAPPS session to a peer's callsign and confirms the round-trip works. Probing is **off by default**; turn on with `DAPPS_PROBING_ENABLED=true`.
+A probe is a connected-mode session - DAPPS opens a real DAPPS session to a peer's callsign and confirms the round-trip works. Probing is **off by default**; turn on with `DAPPS_PROBING_ENABLED=true`.
 
 Three flavours:
 
 | Flavour                | What it does                                                                                                                          | Source flag             |
 |------------------------|---------------------------------------------------------------------------------------------------------------------------------------|-------------------------|
 | **Phase 1**            | Direct probe: open a DAPPSv1 session, confirm prompt, hang up. Records success/failure.                                              | `neighbour`             |
-| **Phase 2 — `peers`**  | After a successful Phase 1 probe, ask the peer "who do you know?" via the `peers` command. Seed each unknown callsign as a candidate. | `via:<asked-peer>`      |
-| **Phase 2b — node-prompt** | For peers that aren't (yet) DAPPS — connect to the BPQ node prompt, type the application command (`DAPPS` by default), and probe from there. | `node-prompt:<source>`  |
+| **Phase 2 - `peers`**  | After a successful Phase 1 probe, ask the peer "who do you know?" via the `peers` command. Seed each unknown callsign as a candidate. | `via:<asked-peer>`      |
+| **Phase 2b - node-prompt** | For peers that aren't (yet) DAPPS - connect to the BPQ node prompt, type the application command (`DAPPS` by default), and probe from there. | `node-prompt:<source>`  |
 
 Phase 2b auto-discovery is gated on `DAPPS_AUTO_DISCOVER_VIA_NODE_CALL=true`. When on, every AGW DAPPS beacon also seeds a node-prompt-probe candidate for the source's base callsign.
 
@@ -73,7 +73,7 @@ AODV-flavoured. Routes are learned from observed forwards: when a message is for
 
 Looks at the message destination, walks: explicit per-destination route hint → known-good neighbour → discovered peer → previously-learned route. First match wins.
 
-Works well on small meshes. The trade-off is no proactive route discovery — destinations not yet seen via traffic are unknown until a forward goes through us.
+Works well on small meshes. The trade-off is no proactive route discovery - destinations not yet seen via traffic are unknown until a forward goes through us.
 
 ### `meshcore`
 
@@ -92,4 +92,4 @@ For most operators, the simplest workable setup is:
 3. Once you've heard from a few peers via beacons and have an idea of the on-air ecosystem, **enable probing** with the `Overnight` strategy so the connectivity matrix is verified during quiet hours.
 4. Decide whether you want **scheduled polling** on (you probably don't if your peers are well-behaved; opportunistic polling already covers the common case).
 
-The dashboard's discovery panels show the live state of all of this — heard peers, probed nodes, learned routes — so you can confirm what's working without guessing.
+The dashboard's discovery panels show the live state of all of this - heard peers, probed nodes, learned routes - so you can confirm what's working without guessing.

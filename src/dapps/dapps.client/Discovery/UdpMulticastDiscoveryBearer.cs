@@ -11,7 +11,7 @@ namespace dapps.client.Discovery;
 /// each group on its own socket. Datagram bodies are bare beacon
 /// strings.
 ///
-/// Useful for LAN dev / testing — every DAPPS instance on the same
+/// Useful for LAN dev / testing - every DAPPS instance on the same
 /// subnet sees every other instance's beacons within seconds.
 /// Operators opt in by adding a <c>udp</c> channel to the discovery
 /// channels table.
@@ -52,7 +52,7 @@ public sealed class UdpMulticastDiscoveryBearer : IDiscoveryBearer
             catch (Exception ex)
             {
                 _logger.LogError(ex,
-                    "UDP multicast discovery: invalid channel-key '{0}' — skipping", ch.ChannelKey);
+                    "UDP multicast discovery: invalid channel-key '{0}' - skipping", ch.ChannelKey);
                 continue;
             }
 
@@ -64,7 +64,7 @@ public sealed class UdpMulticastDiscoveryBearer : IDiscoveryBearer
             // share a UDP port (channel-keys differing only in multicast
             // group address), binding each recv socket to 0.0.0.0:port
             // with SO_REUSEADDR causes Linux's kernel multicast filtering
-            // to leak packets across groups within the process — a node
+            // to leak packets across groups within the process - a node
             // subscribed to G1 ends up receiving G2's beacons too, with
             // sourceCallsign attributed to whichever GroupBinding's
             // ReadLoop happens to dequeue first.
@@ -141,7 +141,7 @@ public sealed class UdpMulticastDiscoveryBearer : IDiscoveryBearer
                     continue;
                 }
 
-                // Solicit codec first — its magic prefix is strictly
+                // Solicit codec first - its magic prefix is strictly
                 // longer than the beacon's, so a beacon never matches.
                 // Solicits without a callsign or with our own callsign
                 // are still surfaced (the service decides what to do
@@ -150,7 +150,7 @@ public sealed class UdpMulticastDiscoveryBearer : IDiscoveryBearer
                 if (SolicitCodec.TryParse(dgram.Buffer, out var solicit) && solicit is not null)
                 {
                     if (string.Equals(solicit.Callsign, _ourCallsign, StringComparison.OrdinalIgnoreCase))
-                        continue; // our own solicit looped back — ignore
+                        continue; // our own solicit looped back - ignore
                     await _incoming.Writer.WriteAsync(new ReceivedSolicit(solicit, binding.ChannelKey), ct);
                     continue;
                 }

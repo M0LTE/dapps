@@ -16,7 +16,7 @@ public sealed class RealUpdaterFileSystem : IUpdaterFileSystem
         // binary into place. Both renames are intra-directory so they
         // hit the rename(2) atomic-replace semantics on POSIX. If the
         // first rename fails, no swap has happened yet; if the second
-        // fails, we've lost the live binary — caller's responsibility
+        // fails, we've lost the live binary - caller's responsibility
         // to roll back from `.previous`.
         if (File.Exists(previous)) File.Delete(previous);
         if (File.Exists(dest)) File.Move(dest, previous);
@@ -72,6 +72,6 @@ public sealed class RealUpdaterFileSystem : IUpdaterFileSystem
     public void Delete(string path)
     {
         try { if (File.Exists(path)) File.Delete(path); }
-        catch { /* idempotent — caller doesn't care about absent files */ }
+        catch { /* idempotent - caller doesn't care about absent files */ }
     }
 }

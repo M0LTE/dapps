@@ -9,7 +9,7 @@ using Microsoft.Extensions.Options;
 namespace dapps.core.Controllers;
 
 /// <summary>
-/// Plan C3 — lightweight liveness endpoint distinct from
+/// Plan C3 - lightweight liveness endpoint distinct from
 /// <c>/Events/health</c> (the metrics dump). HTTP 200 when every
 /// critical dependency is up; 503 with details when degraded so
 /// systemd watchdog units / external uptime monitors / load balancers

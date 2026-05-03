@@ -1,6 +1,6 @@
 # Install on macOS
 
-macOS runs DAPPS the same way Linux does — drop a binary on disk, run it. There's no signed installer or `launchd` integration in the release; if you want it to start on boot you wire that up yourself with a `launchd` plist.
+macOS runs DAPPS the same way Linux does - drop a binary on disk, run it. There's no signed installer or `launchd` integration in the release; if you want it to start on boot you wire that up yourself with a `launchd` plist.
 
 The release binary targets **Apple Silicon (arm64)** only. If you're on an Intel mac, build from source.
 
@@ -14,7 +14,7 @@ sudo curl -L \
 sudo chmod +x /opt/dapps/dapps
 ```
 
-The binary is **not notarised** — Gatekeeper will refuse to run it on first launch with "cannot be opened because the developer cannot be verified." Either:
+The binary is **not notarised** - Gatekeeper will refuse to run it on first launch with "cannot be opened because the developer cannot be verified." Either:
 
 - Strip the quarantine attribute: `sudo xattr -d com.apple.quarantine /opt/dapps/dapps`, or
 - Right-click → Open in Finder once to add a one-time exception.
@@ -76,7 +76,7 @@ Stop / unload:
 sudo launchctl bootout system/uk.m0lte.dapps
 ```
 
-The supervised in-place update path (`/Update/apply` on the dashboard) is **Linux only** today — it relies on systemd. On macOS you replace the binary by stopping launchd, swapping the file, and starting again. The dashboard's update banner still surfaces "v0.X.Y available" so you know when to do that.
+The supervised in-place update path (`/Update/apply` on the dashboard) is **Linux only** today - it relies on systemd. On macOS you replace the binary by stopping launchd, swapping the file, and starting again. The dashboard's update banner still surfaces "v0.X.Y available" so you know when to do that.
 
 ## Logs
 

@@ -136,7 +136,7 @@ public sealed class UdpBackhaulEndToEndTests
         // mapping (so passive learning can identify the link source).
         // These tests use unique temp DB paths per test so they don't
         // collide; an empty neighbours table just means the listener
-        // falls back to the "UDP" sentinel — which is what these tests
+        // falls back to the "UDP" sentinel - which is what these tests
         // expect anyway.
         var dbPath = Path.Combine(Path.GetTempPath(), $"dapps-udpe2e-{Guid.NewGuid():N}.db");
         DbInfo.OverridePath = dbPath;
@@ -166,11 +166,11 @@ public sealed class UdpBackhaulEndToEndTests
             {
                 using var probe = new UdpClient(new IPEndPoint(IPAddress.Loopback, port));
                 // We *succeeded* binding, which means the listener didn't
-                // — try again.
+                // - try again.
             }
             catch (SocketException)
             {
-                // Couldn't bind because something else is on this port —
+                // Couldn't bind because something else is on this port -
                 // that's the listener; we're ready.
                 return;
             }

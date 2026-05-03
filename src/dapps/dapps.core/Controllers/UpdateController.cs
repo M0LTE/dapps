@@ -6,16 +6,16 @@ using Microsoft.AspNetCore.Mvc;
 namespace dapps.core.Controllers;
 
 /// <summary>
-/// Plan C5.2 — operator surface for the triggered-update flow. Two
+/// Plan C5.2 - operator surface for the triggered-update flow. Two
 /// endpoints:
 ///
 /// <list type="bullet">
-/// <item><c>GET /Update/status</c> — current binary version, latest
+/// <item><c>GET /Update/status</c> - current binary version, latest
 /// known release, and the most recent <c>--apply-update</c> phase
 /// from <see cref="UpdaterPaths.StatusPath"/> (so the dashboard can
 /// follow a live update without polling the privileged updater
 /// directly).</item>
-/// <item><c>POST /Update/apply</c> — write the request marker to
+/// <item><c>POST /Update/apply</c> - write the request marker to
 /// <see cref="UpdaterPaths.RequestPath"/>. The privileged
 /// <c>dapps-updater.service</c> picks it up on its next 60 s tick
 /// and invokes <c>dapps --apply-update</c>. dapps itself stays
@@ -62,7 +62,7 @@ public class UpdateController(
     }
 
     /// <summary>
-    /// Plan C5.2 — manual GitHub re-poll. The background
+    /// Plan C5.2 - manual GitHub re-poll. The background
     /// <see cref="UpdateChecker"/> polls every hour; operators who
     /// just shipped a release and want to see it appear on a node's
     /// dashboard immediately hit this. Cheap (one HTTPS round-trip);

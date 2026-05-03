@@ -5,7 +5,7 @@ namespace dapps.core.uitests;
 /// <summary>
 /// Owns a single shared Chromium instance for the UI test session.
 /// First call drives a one-off browser install via
-/// <see cref="Microsoft.Playwright.Program.Main"/> — idempotent, no
+/// <see cref="Microsoft.Playwright.Program.Main"/> - idempotent, no
 /// out-of-band setup, and works the same locally and in CI.
 /// </summary>
 public sealed class PlaywrightFixture : IAsyncLifetime
@@ -15,7 +15,7 @@ public sealed class PlaywrightFixture : IAsyncLifetime
 
     public async ValueTask InitializeAsync()
     {
-        // Idempotent — silently no-ops if Chromium is already on disk.
+        // Idempotent - silently no-ops if Chromium is already on disk.
         // Exit code != 0 means the install failed; throw early so the
         // first test gets a useful error rather than a vague navigate
         // timeout 30 s later.

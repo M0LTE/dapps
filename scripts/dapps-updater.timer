@@ -13,7 +13,7 @@ OnBootSec=60s
 OnUnitActiveSec=60s
 
 # Persistent=true makes systemd remember the last successful run
-# across reboots — if the host was off when the timer "should" have
+# across reboots - if the host was off when the timer "should" have
 # fired, we run it once on boot rather than skipping. Match the
 # original C5.1 once-on-boot behaviour for the visibility check.
 Persistent=true

@@ -70,9 +70,9 @@ public class PacketiserTests
     {
         var fragments = Packetiser.Split("dupdup0", new byte[100], mtu: 32).ToList();
         var reassembler = new Reassembler();
-        // First copy of the first fragment — should not complete yet.
+        // First copy of the first fragment - should not complete yet.
         reassembler.Accept(fragments[0], DateTime.UtcNow).Should().BeNull();
-        // Same fragment again — also should not complete.
+        // Same fragment again - also should not complete.
         reassembler.Accept(fragments[0], DateTime.UtcNow).Should().BeNull();
         // Now feed the rest in order.
         byte[]? assembled = null;

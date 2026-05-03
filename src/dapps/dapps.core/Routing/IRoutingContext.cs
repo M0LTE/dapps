@@ -14,7 +14,7 @@ namespace dapps.core.Routing;
 /// routes (<see cref="dapps.core.Routing.PassiveLearningAlgorithm"/>
 /// in PR-B), reading flood-dedup state, injecting messages via the
 /// backhauls (active discovery / B6 probing). Methods get added as
-/// concrete algorithms need them — kept narrow on purpose so each
+/// concrete algorithms need them - kept narrow on purpose so each
 /// addition is justified by a working implementation.
 /// </summary>
 public interface IRoutingContext
@@ -37,7 +37,7 @@ public interface IRoutingContext
     /// null if no hint applies.</summary>
     Task<DbNeighbour?> ResolveRouteHintAsync(string destinationBaseCallsign, CancellationToken ct);
 
-    /// <summary>Look up the neighbour row for a callsign — used by
+    /// <summary>Look up the neighbour row for a callsign - used by
     /// passive-learning to resolve a learned-route's next-hop into a
     /// concrete bearer hint.</summary>
     Task<DbNeighbour?> GetNeighbourByCallsignAsync(string callsign, CancellationToken ct);

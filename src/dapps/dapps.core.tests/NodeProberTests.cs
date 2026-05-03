@@ -74,7 +74,7 @@ public sealed class NodeProberTests
     {
         // Caller-driven cancellation is a shutdown signal; the scheduler
         // needs the exception to bubble so it can exit ExecuteAsync. Use
-        // a transport that blocks indefinitely — the only way out is the
+        // a transport that blocks indefinitely - the only way out is the
         // cancellation token.
         var prober = MakeProber(new BlockingTransport());
         using var cts = new CancellationTokenSource();
@@ -91,7 +91,7 @@ public sealed class NodeProberTests
     private sealed class FakeOutboundTransport(byte[] cannedReceiverBytes) : IDappsOutboundTransport
     {
         public Task<IDappsConnection> ConnectAsync(string localCallsign, string remoteCallsign, int bpqPortNumber, CancellationToken stoppingToken)
-            // FakeDuplexStream rather than a bare MemoryStream — the
+            // FakeDuplexStream rather than a bare MemoryStream - the
             // prober may write back ("peers\n" on Phase 2 fetch-peers
             // probes), which would otherwise overwrite the canned read
             // buffer if read and write shared one stream.

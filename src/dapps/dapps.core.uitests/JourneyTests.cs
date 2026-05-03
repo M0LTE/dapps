@@ -52,7 +52,7 @@ public sealed class JourneyTests(PlaywrightFixture pw) : IAsyncLifetime
             "Setup should drop us on the dashboard root");
         await CaptureAsync(page, "dashboard");
 
-        // 2. /Inbound — SSE-driven live tail. The cookie carries
+        // 2. /Inbound - SSE-driven live tail. The cookie carries
         // through, so we should land directly on the page (no
         // bounce to /Login). DOMContentLoaded rather than
         // NetworkIdle: the EventSource opens a long-lived
@@ -63,19 +63,19 @@ public sealed class JourneyTests(PlaywrightFixture pw) : IAsyncLifetime
             .Should().Be(1, "the D2-followup filter inputs should be present");
         await CaptureAsync(page, "inbound");
 
-        // 3. /IHave — manual compose form.
+        // 3. /IHave - manual compose form.
         await page.GotoAsync($"{_app.BaseUrl}/IHave");
         page.Url.Should().Contain("/IHave");
         (await page.Locator("form").CountAsync()).Should().BeGreaterThan(0);
         await CaptureAsync(page, "ihave");
 
-        // 4. Drive the /Inbound filter inputs — proves the journey
+        // 4. Drive the /Inbound filter inputs - proves the journey
         // harness can do interactive flows (typing, observing
         // filter-summary text update). Empty page so no rows to
         // hide, but the summary text should swap to a "showing X of
         // Y rows" form once any filter has content. Right now there
         // are zero rows so the summary's count math will read
-        // "showing 0 of 0 rows" — the *transition* off "showing all
+        // "showing 0 of 0 rows" - the *transition* off "showing all
         // rows" is what we're proving the JS does.
         await page.GotoAsync($"{_app.BaseUrl}/Inbound", new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
         await page.FillAsync("#filter-app", "mail");

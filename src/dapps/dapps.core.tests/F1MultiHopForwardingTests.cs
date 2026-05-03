@@ -16,7 +16,7 @@ namespace dapps.core.tests;
 /// message MUST carry the same originator. The unit tests cover each
 /// link in the chain (parser, emitter, codec, MQTT property); this is
 /// the only test that proves they *compose*. If this passes, an A→B→C
-/// path will surface A as <c>OriginatorCallsign</c> at C — which is
+/// path will surface A as <c>OriginatorCallsign</c> at C - which is
 /// the entire point of F1.
 ///
 /// Wire-format breakage between forward and re-forward (the failure
@@ -58,7 +58,7 @@ public sealed class F1MultiHopForwardingTests : IAsyncLifetime
 
             // Pre-wire the relay's neighbour table so the route resolver
             // picks the downstream link without going through discovery.
-            // UdpEndpoint is a sentinel — the capturing backhaul handles
+            // UdpEndpoint is a sentinel - the capturing backhaul handles
             // any route with a UdpEndpoint set; it never actually opens a
             // socket.
             c.Insert(new DbNeighbour
@@ -76,7 +76,7 @@ public sealed class F1MultiHopForwardingTests : IAsyncLifetime
         database = new Database(NullLogger<Database>.Instance, optionsMonitor);
         capture = new CapturingBackhaul();
 
-        // MqttBrokerService is wired even though no broker is started — the
+        // MqttBrokerService is wired even though no broker is started - the
         // inbox calls InjectInboundMessage only for local destinations, and
         // every test here uses a remote destination (the relay re-forwards).
         var tokens = new AppTokenStore(NullLogger<AppTokenStore>.Instance);
@@ -124,7 +124,7 @@ public sealed class F1MultiHopForwardingTests : IAsyncLifetime
         await inbox.DeliverAsync(inbound, LinkSourceCallsign, TestContext.Current.CancellationToken);
 
         // 2. The persisted DbMessage row carries the originator verbatim
-        //    AND distinguishes link source from originator — these two
+        //    AND distinguishes link source from originator - these two
         //    columns must not collapse into one.
         using (var c = DbInfo.GetConnection())
         {
@@ -146,7 +146,7 @@ public sealed class F1MultiHopForwardingTests : IAsyncLifetime
         var outboundMessage = capture.Sent[0].Message;
         outboundMessage.Id.Should().Be("f1mhop1");
         outboundMessage.Originator.Should().Be(OriginatorCallsign,
-            "F1 acceptance: src=A inbound MUST become src=A outbound across a relay — " +
+            "F1 acceptance: src=A inbound MUST become src=A outbound across a relay - " +
             "if this asserts to G0SIB-1 (relay's own callsign) the seam is broken and " +
             "all downstream apps will see the link source as the originator.");
         outboundMessage.Destination.Should().Be($"chat@{DestinationCallsign}");
@@ -157,7 +157,7 @@ public sealed class F1MultiHopForwardingTests : IAsyncLifetime
     public async Task RelayWithoutInboundOriginator_OmitsOriginatorOnReforward()
     {
         // Pre-F1 sender (no src=) hands us a message. The relay does NOT
-        // get to invent an originator — claiming the link source as the
+        // get to invent an originator - claiming the link source as the
         // originator would lie when the path is multi-hop. Outbound MUST
         // omit src= so the receiver knows the chain is unauthoritative.
         var inbound = new BackhaulMessage(
@@ -173,7 +173,7 @@ public sealed class F1MultiHopForwardingTests : IAsyncLifetime
 
         capture.Sent.Should().HaveCount(1);
         capture.Sent[0].Message.Originator.Should().BeNull(
-            "an unknown originator must propagate as 'unknown,' not as the link source — " +
+            "an unknown originator must propagate as 'unknown,' not as the link source - " +
             "lying here would corrupt the dapps-origin user property at the receiver");
     }
 

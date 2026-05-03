@@ -371,7 +371,7 @@ dapps/dapps.sqlite
 # Claude Code harness state
 .claude/
 
-# UI test screenshots — regenerated on every uitests run; CI uploads
+# UI test screenshots - regenerated on every uitests run; CI uploads
 # them as a build artifact (workflow `ui-test` → `ui-screenshots`).
 tests/screenshots/
 

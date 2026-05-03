@@ -4,7 +4,7 @@ namespace dapps.core.Models;
 
 /// <summary>
 /// One row per app that has a credential issued. The token is never
-/// stored — only its PBKDF2-HMAC-SHA256 hash plus the per-row salt that
+/// stored - only its PBKDF2-HMAC-SHA256 hash plus the per-row salt that
 /// derived it. Operators see the plaintext exactly once at creation
 /// time and store it elsewhere.
 /// </summary>

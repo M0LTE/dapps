@@ -6,12 +6,12 @@ namespace dapps.core.Services;
 /// <summary>
 /// Mints, verifies, and revokes per-app credentials. Tokens are hashed
 /// at rest via PBKDF2-HMAC-SHA256 with a 16-byte per-row salt and 100k
-/// iterations — more than enough for the threat model (a hostile
+/// iterations - more than enough for the threat model (a hostile
 /// neighbour on the LAN), well under the cost budget for verifying a
 /// credential on every MQTT CONNECT or REST call.
 ///
 /// Plaintext tokens are returned only at creation time. There is no
-/// "look up the token" path — only "does this plaintext match what we
+/// "look up the token" path - only "does this plaintext match what we
 /// have on file."
 /// </summary>
 public sealed class AppTokenStore(ILogger<AppTokenStore> logger)
@@ -55,7 +55,7 @@ public sealed class AppTokenStore(ILogger<AppTokenStore> logger)
     /// <summary>
     /// Returns the app name the token belongs to, or null if no row's
     /// hash matches. Iterates the table because tokens aren't indexed
-    /// (and shouldn't be — knowing a hash maps to an app would be a
+    /// (and shouldn't be - knowing a hash maps to an app would be a
     /// downgrade). For the expected scale (a few apps per node) this is
     /// fine; if it ever isn't, store the plaintext-prefix as a
     /// non-secret index column.

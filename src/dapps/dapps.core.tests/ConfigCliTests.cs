@@ -6,13 +6,13 @@ using SQLite;
 namespace dapps.core.tests;
 
 /// <summary>
-/// Plan B7 follow-up — `dapps --show-config`. Reads the persisted
+/// Plan B7 follow-up - `dapps --show-config`. Reads the persisted
 /// systemoptions table and prints DAPPS_SCREAMING_SNAKE=value pairs,
 /// without booting the host. These tests drive the writer against a
 /// fresh SQLite file and assert exit code + stdout shape.
 ///
 /// The CLI is in <c>dapps.core/Updater/ConfigCli.cs</c>, marked
-/// internal — exposed to the test assembly via
+/// internal - exposed to the test assembly via
 /// <c>[assembly: InternalsVisibleTo]</c> in the project's csproj.
 /// </summary>
 [Collection(SqliteOverridePathCollection.Name)]

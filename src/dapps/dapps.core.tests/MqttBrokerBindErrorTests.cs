@@ -12,7 +12,7 @@ namespace dapps.core.tests;
 /// <summary>
 /// Regression test for the operator UX of the MQTT-port-conflict crash
 /// path. Earlier (v0.15.0 deploy on gb7rdg-node) DAPPS hit this in the
-/// wild — a co-located mosquitto container held :1883, the embedded
+/// wild - a co-located mosquitto container held :1883, the embedded
 /// broker raised SocketException, and the host crash-looped via
 /// systemd's Restart=on-failure printing a noisy stack trace each
 /// time. Fixed by catching SocketException(AddressAlreadyInUse) at
@@ -49,7 +49,7 @@ public sealed class MqttBrokerBindErrorTests : IAsyncLifetime
     [Fact]
     public async Task StartAsync_PortAlreadyHeldBySomeoneElse_ThrowsActionableMessage()
     {
-        // Hold a TCP port with a vanilla listener — same shape as a
+        // Hold a TCP port with a vanilla listener - same shape as a
         // co-located docker mosquitto on the host's :1883.
         var listener = new TcpListener(IPAddress.Loopback, 0);
         listener.Start();

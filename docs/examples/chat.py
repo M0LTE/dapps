@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
 """
-chat.py — small group-chat app over DAPPS.
+chat.py - small group-chat app over DAPPS.
 
 Subscribes to dapps/in/chat for incoming lines; broadcasts whatever you
 type at the prompt to a fixed list of recipient callsigns. Each
 recipient runs the same script, with its own copy of the recipient list
-(no central registry — DAPPS doesn't have one).
+(no central registry - DAPPS doesn't have one).
 
 Usage:
 
     python chat.py G7XYZ M0LTE-1 GB7AAA-4
 
 The CLI args are the *other* people you want to talk to. This script's
-own callsign is whichever Callsign the local DAPPS is configured with —
+own callsign is whichever Callsign the local DAPPS is configured with -
 it's stamped onto outbound messages by DAPPS, so you don't need to pass
 it here.
 
 What this demonstrates:
-  - One-to-many fan-out (one publish per recipient — DAPPS doesn't have
+  - One-to-many fan-out (one publish per recipient - DAPPS doesn't have
     multicast at the app layer; you address each peer explicitly).
   - Reading dapps-source to display "who said what."
   - Idempotent redelivery: two arrivals of the same id print only once.
@@ -59,10 +59,10 @@ def on_message(client, userdata, msg):
     msg_id = user_property(msg.properties, "dapps-id")
     sender = user_property(msg.properties, "dapps-source")
     if msg_id is None or sender is None:
-        return  # noise on the broker — ignore
+        return  # noise on the broker - ignore
 
     if msg_id in seen:
-        # Redelivery — just re-ack and skip.
+        # Redelivery - just re-ack and skip.
         client.publish(ACK, msg_id.encode("utf-8"), qos=1)
         return
     seen.add(msg_id)
@@ -85,7 +85,7 @@ def reader_loop(client, recipients):
                 print("> ", end="", flush=True)
                 continue
             payload = line.encode("utf-8")
-            # 1-hour TTL — chat is more useful than a 5-minute reply
+            # 1-hour TTL - chat is more useful than a 5-minute reply
             # window, less useful than a day-old message.
             props = Properties(PacketType.PUBLISH)
             props.UserProperty = [("dapps-ttl", "3600")]

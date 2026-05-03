@@ -4,12 +4,12 @@ using Microsoft.Extensions.Options;
 namespace dapps.core.Services;
 
 /// <summary>
-/// Plan F3b — connected-mode scheduled poll. When
+/// Plan F3b - connected-mode scheduled poll. When
 /// <see cref="SystemOptions.ScheduledPollEnabled"/> is true, runs a
 /// slow sweep of every AGW-reachable manual <see cref="DbNeighbour"/>
 /// row, opens a session, sends <c>rev</c>, drains the remote's
 /// queued mail via the regular inbox path, and disconnects. Off by
-/// default — opportunistic poll on every push (F3a) covers the
+/// default - opportunistic poll on every push (F3a) covers the
 /// majority of cases for free; this service is for nodes that don't
 /// push often (read-only consumers, scheduled HF stations) and
 /// would otherwise let mail rot at their forwarding partners.
@@ -132,7 +132,7 @@ public sealed class PollSchedulerService(
     /// <summary>
     /// Eligible polling targets: AGW-reachable manual neighbours,
     /// minus any flagged opt-out in <see cref="DbPolledNode"/>. UDP-
-    /// only neighbours are excluded — the rev session protocol is
+    /// only neighbours are excluded - the rev session protocol is
     /// AGW-only by design (decision in plan F3).
     /// </summary>
     public async Task<IReadOnlyList<PollTarget>> EnumerateTargetsAsync()

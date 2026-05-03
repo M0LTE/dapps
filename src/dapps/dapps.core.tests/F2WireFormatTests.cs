@@ -4,7 +4,7 @@ using dapps.core.Services;
 namespace dapps.core.tests;
 
 /// <summary>
-/// Plan F2 — parse + reject paths for the new <c>mid=</c> and
+/// Plan F2 - parse + reject paths for the new <c>mid=</c> and
 /// <c>frag=N/M</c> headers on <c>ihave</c>. Pre-F2 senders that omit
 /// both must still parse successfully (backward compat); a sender
 /// that supplies one without the other is malformed and must reject.

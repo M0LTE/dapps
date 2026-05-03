@@ -101,7 +101,7 @@ public class DappsProtocolClientTests
     [Fact]
     public async Task OfferMessageAsync_F2Fragment_EmitsMidAndFragHeaders()
     {
-        // Plan F2 — when the caller passes masterId + fragmentIndex +
+        // Plan F2 - when the caller passes masterId + fragmentIndex +
         // fragmentTotal, the wire form gets `mid=…` and `frag=N/M`
         // appended after src= (or after ttl= when src is absent).
         var canned = Encoding.UTF8.GetBytes("send abc\n");

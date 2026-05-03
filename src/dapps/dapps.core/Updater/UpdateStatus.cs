@@ -8,14 +8,14 @@ namespace dapps.core.Updater;
 /// for live progress; the file is the only handle a sysop has into
 /// what the privileged updater is doing. Plan C5.2.
 ///
-/// Serialised as the enum name (e.g. <c>"Success"</c>) — the
+/// Serialised as the enum name (e.g. <c>"Success"</c>) - the
 /// <see cref="JsonStringEnumConverter"/> attribute below pins this
 /// because the dashboard JS pattern-matches on the name to render
 /// the phase pill / colour. Default System.Text.Json behaviour is
 /// integer encoding, which silently broke the dashboard when the
 /// status file ended up holding <c>"phase": 6</c> instead of
-/// <c>"phase": "Success"</c> — no comparison matched and the pill
-/// stayed at <c>—</c> through a successful update run on
+/// <c>"phase": "Success"</c> - no comparison matched and the pill
+/// stayed at <c>-</c> through a successful update run on
 /// gb7rdg-node (caught during the v0.18.0 deploy test).
 /// </summary>
 [JsonConverter(typeof(JsonStringEnumConverter))]
@@ -36,7 +36,7 @@ public enum UpdatePhase
     /// <summary>Watching the new dapps for the health-check window
     /// (60 s) before declaring the update complete.</summary>
     Verifying,
-    /// <summary>The new binary booted and stayed up — committed.</summary>
+    /// <summary>The new binary booted and stayed up - committed.</summary>
     Success,
     /// <summary>The new binary failed health-check; <c>dapps.previous</c>
     /// has been restored and the unit restarted on the old binary.</summary>

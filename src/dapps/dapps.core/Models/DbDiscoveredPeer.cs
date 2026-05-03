@@ -4,7 +4,7 @@ using SQLite;
 namespace dapps.core.Models;
 
 /// <summary>
-/// One row per (callsign, bearer, channelKey) — the same peer can be
+/// One row per (callsign, bearer, channelKey) - the same peer can be
 /// heard on multiple channels (different BPQ ports, MeshCore radios,
 /// LAN multicast, …) and we record each independently so the resolver
 /// can pick the cheapest one on a per-message basis.
@@ -28,7 +28,7 @@ public sealed class DbDiscoveredPeer
     [Indexed]
     public string Callsign { get; set; } = "";
 
-    /// <summary>Bearer name — matches <c>IDiscoveryBearer.Name</c>
+    /// <summary>Bearer name - matches <c>IDiscoveryBearer.Name</c>
     /// and <see cref="DbDiscoveryChannel.Bearer"/>.</summary>
     public string Bearer { get; set; } = "";
 

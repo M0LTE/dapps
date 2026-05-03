@@ -1,6 +1,6 @@
 # For app developers
 
-This section is for someone *writing software* against a DAPPS node — not running one. (If you're running one, [start with Getting started](../getting-started.md).)
+This section is for someone *writing software* against a DAPPS node - not running one. (If you're running one, [start with Getting started](../getting-started.md).)
 
 ## What you can build with DAPPS
 
@@ -30,9 +30,9 @@ A single app picks one. Different apps on the same node can pick different ones 
 
 ## How to read this section
 
-- [**Concepts**](concepts.md) — the mental model. Read first.
-- [**Tutorial**](tutorial.md) — a hello-world app in Python, end-to-end.
-- [**Reference**](reference.md) — every MQTT topic, every REST endpoint, every user property, with semantics.
-- [**Sample gallery**](gallery.md) — a small set of runnable examples covering the major DAPPS-shaped patterns.
+- [**Concepts**](concepts.md) - the mental model. Read first.
+- [**Tutorial**](tutorial.md) - a hello-world app in Python, end-to-end.
+- [**Reference**](reference.md) - every MQTT topic, every REST endpoint, every user property, with semantics.
+- [**Sample gallery**](gallery.md) - a small set of runnable examples covering the major DAPPS-shaped patterns.
 
 If you've never used DAPPS as a developer before, walk these in order. If you have, the reference is the page you'll come back to.

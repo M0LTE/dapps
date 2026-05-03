@@ -33,7 +33,7 @@ public sealed class AdminPasswordStoreTests : IAsyncLifetime
         var store = new AdminPasswordStore(NullLogger<AdminPasswordStore>.Instance);
         (await store.IsConfiguredAsync()).Should().BeFalse();
         (await store.VerifyAsync("anything")).Should().BeFalse(
-            "verify against an unset store always returns false — never throws");
+            "verify against an unset store always returns false - never throws");
     }
 
     [Fact]

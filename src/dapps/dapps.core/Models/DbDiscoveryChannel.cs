@@ -5,7 +5,7 @@ namespace dapps.core.Models;
 
 /// <summary>
 /// One row per channel a DAPPS node beacons on / listens on. A
-/// "channel" is a (bearer × physical or logical sub-port) pair —
+/// "channel" is a (bearer × physical or logical sub-port) pair -
 /// e.g. AGW BPQ port 1 (VHF), AGW BPQ port 3 (AXIP-UDP),
 /// MeshCore radio 0 channel "default", UDP multicast group
 /// 239.42.42.42:1881.
@@ -45,7 +45,7 @@ public sealed class DbDiscoveryChannel
     /// can override here.</summary>
     public int BeaconIntervalSeconds { get; set; }
 
-    /// <summary>The TTL we advertise in our outgoing beacons —
+    /// <summary>The TTL we advertise in our outgoing beacons -
     /// receivers age us out after this many seconds without hearing.
     /// Defaults from <see cref="LinkClassDefaults.AdvertisedTtlSeconds"/>.</summary>
     public int AdvertisedTtlSeconds { get; set; }
@@ -65,22 +65,22 @@ public sealed class DbDiscoveryChannel
     public string Notes { get; set; } = "";
 
     /// <summary>
-    /// Plan B7 follow-up — per-channel airtime ceiling that overrides
+    /// Plan B7 follow-up - per-channel airtime ceiling that overrides
     /// <see cref="SystemOptions.DiscoveryAirtimeBudgetSecondsPerHour"/>
     /// for transmissions tagged with this channel's key. 0 (default)
     /// means "use the global budget"; a positive value means this
     /// channel has a tighter (or looser) per-channel cap. The accountant
-    /// enforces both ceilings — a transmission must fit under BOTH the
+    /// enforces both ceilings - a transmission must fit under BOTH the
     /// per-channel and the global cap when both are set.
     /// </summary>
     public int AirtimeBudgetSecondsPerHour { get; set; } = 0;
 
     /// <summary>
-    /// Plan B6.2 follow-up — seconds between scheduled solicits on this
+    /// Plan B6.2 follow-up - seconds between scheduled solicits on this
     /// channel. 0 (default) disables scheduled solicits; the channel
     /// still answers operator-triggered solicits and replies to incoming
     /// solicits from other peers. A positive value has DAPPS proactively
-    /// re-discover peers on cadence — useful on HF where scheduled
+    /// re-discover peers on cadence - useful on HF where scheduled
     /// beacons may have missed a propagation window. Reservations are
     /// gated through the airtime accountant; setting a tight per-channel
     /// <see cref="AirtimeBudgetSecondsPerHour"/> is the natural way to

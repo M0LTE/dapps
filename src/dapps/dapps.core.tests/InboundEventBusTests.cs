@@ -35,7 +35,7 @@ public class InboundEventBusTests
         var first = await reader.ReadAsync(TestContext.Current.CancellationToken);
         first.Id.Should().Be("before");
 
-        // After dispose the channel is completed — next read throws.
+        // After dispose the channel is completed - next read throws.
         var act = async () => await reader.ReadAsync(TestContext.Current.CancellationToken);
         await act.Should().ThrowAsync<ChannelClosedException>();
     }
@@ -61,7 +61,7 @@ public class InboundEventBusTests
         var bus = new InboundEventBus();
         using var sub = bus.Subscribe(out var reader);
 
-        // Bound is 64 — push 100 events without reading. Older ones get
+        // Bound is 64 - push 100 events without reading. Older ones get
         // dropped under DropOldest policy; publish itself never blocks.
         for (var i = 0; i < 100; i++) bus.Publish(Make($"m{i}"));
 

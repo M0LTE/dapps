@@ -11,7 +11,7 @@ namespace dapps.core.tests;
 /// <summary>
 /// Drives <see cref="AgwUiDiscoveryBearer"/> against a fake AGW server
 /// running on a TCP loopback socket. Validates the AX.25-side discovery
-/// path end-to-end at the AGW frame layer — without a real BPQ.
+/// path end-to-end at the AGW frame layer - without a real BPQ.
 /// </summary>
 public sealed class AgwUiDiscoveryTests
 {
@@ -34,7 +34,7 @@ public sealed class AgwUiDiscoveryTests
             new BeaconFrame("M0SEND", 0, 600, new AgwBearerHint(0)),
             "0", cts.Token);
 
-        // X (register), m (monitor enable), M (announce) — exactly three.
+        // X (register), m (monitor enable), M (announce) - exactly three.
         var frames = await server.WaitForFramesAsync(3, TimeSpan.FromSeconds(3));
         frames.Should().HaveCount(3);
         frames[0].Kind.Should().Be('X');
@@ -84,7 +84,7 @@ public sealed class AgwUiDiscoveryTests
     [Fact]
     public async Task SolicitAsync_WritesUiFrameWithSolicitMagic()
     {
-        // Plan B6.2 — emit side. Solicit goes out as a UI ('M') frame
+        // Plan B6.2 - emit side. Solicit goes out as a UI ('M') frame
         // with the solicit codec's longer magic prefix, distinguishable
         // from a beacon's payload at the codec layer.
         using var server = new FakeAgwServer();
@@ -97,7 +97,7 @@ public sealed class AgwUiDiscoveryTests
         await bearer.StartAsync([Channel(1, 0)], cts.Token);
         await bearer.SolicitAsync(new SolicitFrame("M0SEND"), "0", cts.Token);
 
-        // X (register), m (monitor enable), M (solicit) — three frames,
+        // X (register), m (monitor enable), M (solicit) - three frames,
         // last one a UI emit with the solicit prefix.
         var frames = await server.WaitForFramesAsync(3, TimeSpan.FromSeconds(3));
         frames.Should().HaveCount(3);
@@ -108,7 +108,7 @@ public sealed class AgwUiDiscoveryTests
     [Fact]
     public async Task ListenAsync_YieldsReceivedSolicitWhenPeerSolicits()
     {
-        // Plan B6.2 — receive side. An inbound UI frame whose payload
+        // Plan B6.2 - receive side. An inbound UI frame whose payload
         // matches the solicit codec must surface as a ReceivedSolicit,
         // not a ReceivedBeacon, so DiscoveryService can dispatch the
         // delayed-reply path instead of upserting a peer row.

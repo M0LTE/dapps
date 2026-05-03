@@ -7,14 +7,14 @@ Documentation=https://github.com/M0LTE/dapps
 ConditionPathExists=/opt/dapps/dapps
 
 [Service]
-# Type=oneshot — the .timer fires this on a 60s cadence; each
+# Type=oneshot - the .timer fires this on a 60s cadence; each
 # invocation either no-ops (no marker file) or does one full update
 # attempt (download, swap, restart, verify, possibly rollback).
 Type=oneshot
 User=root
 Group=root
 # The same dapps binary runs the update logic in a side-door mode
-# that exits without booting the host. Plan C5.2 — keeps the update
+# that exits without booting the host. Plan C5.2 - keeps the update
 # code in ONE place rather than duplicated in a shell script.
 ExecStart=/opt/dapps/dapps --apply-update
 WorkingDirectory=/var/lib/dapps
@@ -23,9 +23,9 @@ WorkingDirectory=/var/lib/dapps
 # sysop wanting to force-poke the updater. Keep failure visibility on:
 # a non-zero exit lands in the journal with the orchestrator's logs.
 
-# Hardening — the updater needs write access to /opt/dapps and
+# Hardening - the updater needs write access to /opt/dapps and
 # /var/lib/dapps and outbound HTTPS. Nothing else.
-# NoNewPrivileges stays false — we ARE privileged on purpose.
+# NoNewPrivileges stays false - we ARE privileged on purpose.
 NoNewPrivileges=false
 PrivateTmp=true
 ProtectSystem=strict

@@ -90,7 +90,7 @@ public sealed class DiscoveryStorageTests : IAsyncLifetime
     public async Task UpsertDiscoveredPeer_SameCallsignDifferentChannelKey_BothPersisted()
     {
         // Same peer reachable on two different multicast groups, e.g.
-        // wired LAN segment and wireless segment — must occupy two rows.
+        // wired LAN segment and wireless segment - must occupy two rows.
         await database.UpsertDiscoveredPeer(new DbDiscoveredPeer
         {
             Callsign = "G7XYZ-9", Bearer = "udp", ChannelKey = "g:1",

@@ -37,7 +37,7 @@ public class OutboundMessageManager(
     /// (background ticker + manual <c>POST /Message/dorun</c>, or two
     /// manual POSTs in flight) don't race through the same pending
     /// list and double-send. Calls that arrive while a run is
-    /// in-flight return immediately — whatever's pending will be
+    /// in-flight return immediately - whatever's pending will be
     /// picked up on the next tick anyway.
     /// </summary>
     private readonly SemaphoreSlim runLock = new(1, 1);
@@ -91,7 +91,7 @@ public class OutboundMessageManager(
             var decision = await routingAlgorithm.ResolveAsync(message, routingContext, stoppingToken);
 
             // F1: preserve the originating callsign verbatim across re-forwards.
-            // Empty means we don't know — outbound omits src= rather than lying
+            // Empty means we don't know - outbound omits src= rather than lying
             // (e.g. claiming the link source is the originator).
             var originator = string.IsNullOrEmpty(message.OriginatorCallsign)
                 ? null
@@ -173,7 +173,7 @@ public class OutboundMessageManager(
         string? originator, SystemOptions optionsValue, CancellationToken stoppingToken)
     {
         // Each flooded copy is its own send + outcome observation. Even
-        // partial success counts as "we did our part" — mark forwarded
+        // partial success counts as "we did our part" - mark forwarded
         // after iterating regardless. The receivers' dedup ledger
         // (DbFloodSeen) handles duplicates that arrive at any node from
         // multiple flood paths.
@@ -214,7 +214,7 @@ public class OutboundMessageManager(
 
         // Mark the message forwarded so it doesn't keep flooding on
         // every tick. If the destination was unreachable the flood is
-        // effectively lost — that's correct semantics; floods are
+        // effectively lost - that's correct semantics; floods are
         // best-effort.
         await database.MarkMessageAsForwarded(message.Id);
     }

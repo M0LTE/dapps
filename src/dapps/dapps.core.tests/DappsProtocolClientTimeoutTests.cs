@@ -11,7 +11,7 @@ namespace dapps.core.tests;
 /// off the wire; if no data arrives in that window the read surfaces
 /// as <see cref="TimeoutException"/>. Tests drive the client against
 /// a stream that yields zero bytes per read but never returns 0
-/// (i.e. doesn't EOF) — exactly the shape of a TCP socket whose
+/// (i.e. doesn't EOF) - exactly the shape of a TCP socket whose
 /// peer has gone silent. With the timeout dialed down the test
 /// completes in milliseconds.
 /// </summary>
@@ -73,7 +73,7 @@ public sealed class DappsProtocolClientTimeoutTests : IDisposable
     {
         // If the caller cancels before the inactivity timer fires, we
         // surface the cancellation rather than swapping it for
-        // TimeoutException — callers (forwarder loop) need to see
+        // TimeoutException - callers (forwarder loop) need to see
         // shutdown vs. timeout differently.
         var stream = new HangingStream();
         var client = new DappsProtocolClient(stream, NullLoggerFactory.Instance);
@@ -88,7 +88,7 @@ public sealed class DappsProtocolClientTimeoutTests : IDisposable
     /// <summary>
     /// Stream that accepts writes but blocks indefinitely on reads
     /// until cancellation. Models a TCP socket whose peer has stopped
-    /// sending — the kind of hang A3 protects against.
+    /// sending - the kind of hang A3 protects against.
     /// </summary>
     private sealed class HangingStream : Stream
     {

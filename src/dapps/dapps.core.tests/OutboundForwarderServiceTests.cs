@@ -14,7 +14,7 @@ namespace dapps.core.tests;
 /// Tests for the auto-forwarder loop:
 ///
 /// 1. <see cref="OutboundMessageManager"/> serialises concurrent
-///    <c>DoRun</c> calls — second-and-later concurrent invocations
+///    <c>DoRun</c> calls - second-and-later concurrent invocations
 ///    return immediately rather than racing through the same pending
 ///    list. This is the failure mode that produced wasteful duplicate
 ///    sends when both the manual <c>/Message/dorun</c> trigger and
@@ -77,7 +77,7 @@ public sealed class OutboundForwarderServiceTests : IAsyncLifetime
     {
         // Queue a message + neighbour so DoRun has work. The slow
         // backhaul blocks deterministically on a TCS until we tell it
-        // to release — so the first DoRun is guaranteed to be holding
+        // to release - so the first DoRun is guaranteed to be holding
         // the mutex when the second concurrent call arrives, no
         // sleep-and-pray timing.
         using (var c = DbInfo.GetConnection())
@@ -91,7 +91,7 @@ public sealed class OutboundForwarderServiceTests : IAsyncLifetime
         var first = outbound.DoRun(TestContext.Current.CancellationToken);
 
         // Wait until the backhaul confirms it's in the middle of a
-        // Send — at that point the first DoRun definitely holds the
+        // Send - at that point the first DoRun definitely holds the
         // mutex.
         await slowBackhaul.SendStarted.Task.WaitAsync(TimeSpan.FromSeconds(5),
             TestContext.Current.CancellationToken);
@@ -109,13 +109,13 @@ public sealed class OutboundForwarderServiceTests : IAsyncLifetime
         outbound.RunCount.Should().Be(1,
             "the second concurrent DoRun must skip rather than racing through the queue");
         slowBackhaul.SendCount.Should().Be(1,
-            "if the second DoRun ran, the message would have been sent twice — that's exactly what the mutex prevents");
+            "if the second DoRun ran, the message would have been sent twice - that's exactly what the mutex prevents");
     }
 
     [Fact]
     public async Task ForwarderService_TicksDoRun_OnItsLoop()
     {
-        // Use the test-only constructor with sub-second timings — the
+        // Use the test-only constructor with sub-second timings - the
         // production cadence (3s startup grace + 5s tick) makes this
         // test brittle on CI under load. With 50ms intervals and a 5s
         // deadline there's headroom for ~100 ticks before we declare
@@ -144,7 +144,7 @@ public sealed class OutboundForwarderServiceTests : IAsyncLifetime
         await service.StopAsync(cts.Token);
 
         outbound.RunCount.Should().BeGreaterThan(0,
-            "the hosted service must invoke DoRun on its tick — that's its only job");
+            "the hosted service must invoke DoRun on its tick - that's its only job");
     }
 
     /// <summary>Backhaul that signals when each Send begins and waits

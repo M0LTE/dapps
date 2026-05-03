@@ -1,7 +1,7 @@
 @page
 @model IndexModel
 @{
-    ViewData["Title"] = $"DAPPS — {Model.Options.Callsign}";
+    ViewData["Title"] = $"DAPPS - {Model.Options.Callsign}";
 }
 
 <header class="app-header">
@@ -90,7 +90,7 @@
             <span class="dot @(Model.BpqAgwReachable ? "ok" : "warn")" title="@(Model.BpqAgwReachable ? "reachable" : "unreachable")"></span>
         </div>
         <div class="caption">
-            @(Model.BpqAgwReachable ? "TCP probe ok — BPQ accepting connections" : "TCP probe failed — start linbpq or check AGWPORT")
+            @(Model.BpqAgwReachable ? "TCP probe ok - BPQ accepting connections" : "TCP probe failed - start linbpq or check AGWPORT")
         </div>
     </div>
     <div class="card">
@@ -136,7 +136,7 @@
             }
             else
             {
-                <span>any MQTT/REST client on this host can act as any app — fine for loopback, set tokens for shared nodes</span>
+                <span>any MQTT/REST client on this host can act as any app - fine for loopback, set tokens for shared nodes</span>
             }
         </div>
     </div>
@@ -168,8 +168,8 @@
         <label>Overnight start hour (local) <input name="ProbeOvernightStartHour" type="number" min="0" max="23" value="@Model.Options.ProbeOvernightStartHour" required /></label>
         <label>Overnight end hour (local) <input name="ProbeOvernightEndHour" type="number" min="0" max="23" value="@Model.Options.ProbeOvernightEndHour" required /></label>
         <label>Quiet window (seconds) <input name="ProbeQuietWindowSeconds" type="number" min="1" max="86400" value="@Model.Options.ProbeQuietWindowSeconds" required /></label>
-        <label class="checkbox-label"><input name="OpportunisticPollEnabled" type="checkbox" @(Model.Options.OpportunisticPollEnabled ? "checked" : "") /> Opportunistic poll on every push (F3a) — drain peers' mail at the end of every push session</label>
-        <label class="checkbox-label"><input name="ScheduledPollEnabled" type="checkbox" @(Model.Options.ScheduledPollEnabled ? "checked" : "") /> Schedule periodic mail polls (F3b) — for nodes that don't push often</label>
+        <label class="checkbox-label"><input name="OpportunisticPollEnabled" type="checkbox" @(Model.Options.OpportunisticPollEnabled ? "checked" : "") /> Opportunistic poll on every push (F3a) - drain peers' mail at the end of every push session</label>
+        <label class="checkbox-label"><input name="ScheduledPollEnabled" type="checkbox" @(Model.Options.ScheduledPollEnabled ? "checked" : "") /> Schedule periodic mail polls (F3b) - for nodes that don't push often</label>
         <label>Poll interval (hours) <input name="PollIntervalHours" type="number" min="1" max="168" value="@Model.Options.PollIntervalHours" required /></label>
         <label>Discovery airtime budget (seconds/hour, 0 = unlimited) (B7) <input name="DiscoveryAirtimeBudgetSecondsPerHour" type="number" min="0" max="3600" value="@Model.Options.DiscoveryAirtimeBudgetSecondsPerHour" required /></label>
         <label class="checkbox-label"><input name="HeartbeatEnabled" type="checkbox" @(Model.Options.HeartbeatEnabled ? "checked" : "") /> Publish operational heartbeat to MQTT (C3)</label>
@@ -185,20 +185,20 @@
         <label>New password <input name="password" type="password" required minlength="8" /></label>
         <button type="submit">Set</button>
     </form>
-    <p class="muted">Existing session stays valid until logout or 90-day expiry — only future logins use the new password.</p>
+    <p class="muted">Existing session stays valid until logout or 90-day expiry - only future logins use the new password.</p>
 </details>
 
-<h2>Update <span id="upd-phase" class="pill">—</span></h2>
-<p class="muted-inline">Plan C5.2 — triggered self-update via the privileged <code>dapps-updater.service</code>. Click <em>Apply update</em>; the unprivileged dapps writes a request marker to <code>/var/lib/dapps/update-requested</code> which the updater picks up on its next 60 s tick. The updater downloads the latest release for this RID, swaps it in, restarts dapps, watches for 60 s, and rolls back to <code>dapps.previous</code> if the new binary fails to stay up. <span class="muted">Status auto-refreshes every 5 s during a run.</span></p>
+<h2>Update <span id="upd-phase" class="pill">-</span></h2>
+<p class="muted-inline">Plan C5.2 - triggered self-update via the privileged <code>dapps-updater.service</code>. Click <em>Apply update</em>; the unprivileged dapps writes a request marker to <code>/var/lib/dapps/update-requested</code> which the updater picks up on its next 60 s tick. The updater downloads the latest release for this RID, swaps it in, restarts dapps, watches for 60 s, and rolls back to <code>dapps.previous</code> if the new binary fails to stay up. <span class="muted">Status auto-refreshes every 5 s during a run.</span></p>
 <div class="grid">
     <div class="card">
         <div class="label">Running</div>
-        <div class="value mono"><span id="upd-current">—</span></div>
+        <div class="value mono"><span id="upd-current">-</span></div>
         <div class="caption" id="upd-rid-line">RID detected at build time</div>
     </div>
     <div class="card">
         <div class="label">Latest on GitHub</div>
-        <div class="value mono"><span id="upd-latest">—</span></div>
+        <div class="value mono"><span id="upd-latest">-</span></div>
         <div class="caption" id="upd-fetched">Update check has not run yet</div>
     </div>
     <div class="card">
@@ -227,7 +227,7 @@
         const btn = document.getElementById('upd-apply-btn');
         const cap = document.getElementById('upd-apply-caption');
         const fmtAgo = (iso) => {
-            if (!iso) return '—';
+            if (!iso) return '-';
             const s = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
             if (s < 90) return `${s}s ago`;
             const m = Math.floor(s / 60);
@@ -245,7 +245,7 @@
                 if (!res.ok) return;
                 const s = await res.json();
                 cur.textContent = s.isDevBuild ? `${s.current} (dev)` : `v${s.current}`;
-                lat.textContent = s.latest ? `v${s.latest}` : '—';
+                lat.textContent = s.latest ? `v${s.latest}` : '-';
                 fetched.textContent = s.fetchedAt ? `last checked ${fmtAgo(s.fetchedAt)}` : 'Update check has not run yet';
 
                 const lr = s.lastRun;
@@ -253,12 +253,12 @@
                     last.textContent = 'never';
                     lastErr.textContent = '';
                     phase.className = 'pill';
-                    phase.textContent = '—';
+                    phase.textContent = '-';
                 } else {
                     // Phase is the enum name as a string (System.Text.Json
                     // would default to integers; UpdatePhase has a
                     // [JsonStringEnumConverter] attribute pinning the
-                    // string shape — see UpdateStatus.cs).
+                    // string shape - see UpdateStatus.cs).
                     const prettyPhase =
                         lr.phase === 'RolledBack' ? 'rolled back'
                         : (typeof lr.phase === 'string' ? lr.phase.toLowerCase() : '?');
@@ -277,7 +277,7 @@
                 const canApply = s.isAvailable && !running && !s.requestPending;
                 btn.disabled = !canApply;
                 if (running) cap.textContent = 'Update in progress…';
-                else if (s.requestPending) cap.textContent = 'Request queued — updater fires on next 60 s tick';
+                else if (s.requestPending) cap.textContent = 'Request queued - updater fires on next 60 s tick';
                 else if (s.isDevBuild) cap.textContent = 'Dev builds do not auto-update';
                 else if (!s.isAvailable && s.latest) cap.textContent = 'Already on the latest release';
                 else if (!s.latest) cap.textContent = 'Need an available release to apply';
@@ -295,7 +295,7 @@
             poll();
         }
         async function dappsCheckNowFn() {
-            // Force-refresh the cache. Cheap one-shot HTTPS to GitHub —
+            // Force-refresh the cache. Cheap one-shot HTTPS to GitHub -
             // operators who just shipped a release hit this to see the
             // node notice within seconds rather than up to an hour.
             const btn = document.getElementById('upd-check-btn');
@@ -326,32 +326,32 @@
 <div class="grid">
     <div class="card">
         <div class="label">Forward attempts</div>
-        <div class="value"><span id="m-forward-attempts">—</span></div>
-        <div class="caption"><span id="m-forward-success">—</span> ok / <span id="m-forward-failure">—</span> failed</div>
+        <div class="value"><span id="m-forward-attempts">-</span></div>
+        <div class="caption"><span id="m-forward-success">-</span> ok / <span id="m-forward-failure">-</span> failed</div>
     </div>
     <div class="card">
         <div class="label">TTL drops</div>
-        <div class="value"><span id="m-ttl">—</span></div>
+        <div class="value"><span id="m-ttl">-</span></div>
         <div class="caption">messages whose residual TTL hit zero in our queue</div>
     </div>
     <div class="card">
         <div class="label">No-route skips</div>
-        <div class="value"><span id="m-noroute">—</span></div>
+        <div class="value"><span id="m-noroute">-</span></div>
         <div class="caption">no neighbour / discovered peer / route-hint matched</div>
     </div>
     <div class="card">
         <div class="label">AGW reconnects</div>
-        <div class="value"><span id="m-agw-reconnects">—</span></div>
+        <div class="value"><span id="m-agw-reconnects">-</span></div>
         <div class="caption" id="m-agw-last">never</div>
     </div>
     <div class="card">
         <div class="label">Inbound L2 connects</div>
-        <div class="value"><span id="m-inbound">—</span></div>
+        <div class="value"><span id="m-inbound">-</span></div>
         <div class="caption">'C' frames dispatched to us by BPQ</div>
     </div>
     <div class="card">
         <div class="label">Hash mismatches</div>
-        <div class="value"><span id="m-hash">—</span></div>
+        <div class="value"><span id="m-hash">-</span></div>
         <div class="caption">received payload whose sha1 didn't match the offered id</div>
     </div>
 </div>
@@ -390,11 +390,11 @@
 <script>
     // Poll /Events/health every 5s; re-render counters, neighbour
     // table, and recent-events ring. Same DOM-swap pattern as the
-    // queue tables — no full-page reload.
+    // queue tables - no full-page reload.
     (function () {
-        const fmtAt = (iso) => iso ? new Date(iso).toISOString().replace('T', ' ').substring(0, 19) : '—';
+        const fmtAt = (iso) => iso ? new Date(iso).toISOString().replace('T', ' ').substring(0, 19) : '-';
         const fmtAgo = (iso) => {
-            if (!iso) return '—';
+            if (!iso) return '-';
             const s = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
             if (s < 90) return `${s}s ago`;
             const m = Math.floor(s / 60);
@@ -433,7 +433,7 @@
                         `<td class="numeric">${n.failureCount}</td>` +
                         `<td class="muted">${fmtAgo(n.lastSuccessAt)}</td>` +
                         `<td class="muted">${fmtAgo(n.lastFailureAt)}</td>` +
-                        `<td class="muted">${escape(n.lastError ?? '—')}</td>` +
+                        `<td class="muted">${escape(n.lastError ?? '-')}</td>` +
                         `</tr>`
                     ).join('');
                 }
@@ -514,7 +514,7 @@
                 <td><code>@m.Destination</code></td>
                 <td><code>@m.SourceCallsign</code></td>
                 <td class="numeric">@m.Payload.Length</td>
-                <td class="numeric">@(m.Ttl?.ToString() ?? "—")</td>
+                <td class="numeric">@(m.Ttl?.ToString() ?? "-")</td>
                 <td class="muted">@IndexModel.Age(m.CreatedAt)</td>
             </tr>
         }
@@ -551,7 +551,7 @@
                 <td><code>@app</code></td>
                 <td><code>@m.SourceCallsign</code></td>
                 <td class="numeric">@m.Payload.Length</td>
-                <td class="numeric">@(m.Ttl?.ToString() ?? "—")</td>
+                <td class="numeric">@(m.Ttl?.ToString() ?? "-")</td>
                 <td class="muted">@IndexModel.Age(m.CreatedAt)</td>
             </tr>
         }
@@ -561,7 +561,7 @@
 
 <script>
     // Poll /Events/queue every 5s and rerender just the two
-    // <tbody>s + the count pills. No full-page reload — keeps
+    // <tbody>s + the count pills. No full-page reload - keeps
     // scroll position, open <details>, focus, etc.
     (function () {
         const fmtAge = (s) => {
@@ -585,7 +585,7 @@
             r => `<td><code>${escape(r.destination)}</code></td>`,
             r => `<td><code>${escape(r.sourceCallsign)}</code></td>`,
             r => `<td class="numeric">${r.bytes}</td>`,
-            r => `<td class="numeric">${r.ttl ?? '—'}</td>`,
+            r => `<td class="numeric">${r.ttl ?? '-'}</td>`,
             r => `<td class="muted">${fmtAge(r.ageSeconds)}</td>`,
         ];
         const inboxCols = [
@@ -593,7 +593,7 @@
             r => `<td><code>${escape(r.app)}</code></td>`,
             r => `<td><code>${escape(r.sourceCallsign)}</code></td>`,
             r => `<td class="numeric">${r.bytes}</td>`,
-            r => `<td class="numeric">${r.ttl ?? '—'}</td>`,
+            r => `<td class="numeric">${r.ttl ?? '-'}</td>`,
             r => `<td class="muted">${fmtAge(r.ageSeconds)}</td>`,
         ];
         async function poll() {
@@ -636,8 +636,8 @@ else
         {
             <tr>
                 <td>@n.Callsign</td>
-                <td class="numeric">@(n.BpqPort?.ToString() ?? "—")</td>
-                <td>@(n.UdpEndpoint ?? "—")</td>
+                <td class="numeric">@(n.BpqPort?.ToString() ?? "-")</td>
+                <td>@(n.UdpEndpoint ?? "-")</td>
                 <td><button class="link-btn" onclick="dappsDeleteNeighbour('@n.Callsign')">remove</button></td>
             </tr>
         }
@@ -663,7 +663,7 @@ else
             : $"{atc:0.0}s/h (unlimited)";
         var atClass = atb > 0 && atc / atb >= 0.9 ? "warn" : "";
     }
-    <span class="pill @atClass" title="Plan B7 — total discovery airtime in the trailing hour. Set DiscoveryAirtimeBudgetSecondsPerHour in /Config to enforce a cap, and per-channel caps below.">@atPctText</span>
+    <span class="pill @atClass" title="Plan B7 - total discovery airtime in the trailing hour. Set DiscoveryAirtimeBudgetSecondsPerHour in /Config to enforce a cap, and per-channel caps below.">@atPctText</span>
 </h2>
 @if (Model.DiscoveryChannels.Count == 0)
 {
@@ -696,8 +696,8 @@ else
                 <td class="numeric">@c.CostHint</td>
                 <td class="numeric">@c.BeaconIntervalSeconds s</td>
                 <td class="numeric">@c.AdvertisedTtlSeconds s</td>
-                <td class="numeric">@(c.AirtimeBudgetSecondsPerHour > 0 ? $"{c.AirtimeBudgetSecondsPerHour}s/h" : "—")</td>
-                <td class="numeric">@(c.SolicitIntervalSeconds > 0 ? $"{c.SolicitIntervalSeconds} s" : "—")</td>
+                <td class="numeric">@(c.AirtimeBudgetSecondsPerHour > 0 ? $"{c.AirtimeBudgetSecondsPerHour}s/h" : "-")</td>
+                <td class="numeric">@(c.SolicitIntervalSeconds > 0 ? $"{c.SolicitIntervalSeconds} s" : "-")</td>
                 <td>@(c.Enabled ? "yes" : "no")</td>
                 <td>
                     <button class="link-btn" onclick="dappsSolicitChannel(@c.Id)" title="Send a 'who's there?' solicit on this channel; reachable peers reply with their normal beacon (B6.2)">solicit</button>
@@ -764,7 +764,7 @@ else
                 <td>@p.LinkClass</td>
                 <td class="numeric">@p.CostHint</td>
                 <td class="numeric">@p.Hops</td>
-                <td>@(p.UdpEndpoint ?? (p.BpqPort is { } bp ? $"BPQ port {bp}" : "—"))</td>
+                <td>@(p.UdpEndpoint ?? (p.BpqPort is { } bp ? $"BPQ port {bp}" : "-"))</td>
                 <td>@IndexModel.Age(p.LastSeen) ago</td>
                 <td class="numeric">@p.TtlSeconds s</td>
             </tr>
@@ -774,7 +774,7 @@ else
 }
 
 <h2>Probed nodes <span id="probes-state" class="pill @(Model.Options.ProbingEnabled ? "ok" : "")">@(Model.Options.ProbingEnabled ? $"every {Model.Options.ProbeIntervalHours}h" : "off")</span></h2>
-<p class="muted-inline">Plan B6.1 — connected-mode probe-and-map. Walks known peers (manual neighbours + AGW-bearer discovered peers) and confirms <code>DAPPSv1&gt;</code> is reachable. <span class="muted">Off by default; enable in <em>Edit configuration</em>. Auto-refreshes every 30s.</span></p>
+<p class="muted-inline">Plan B6.1 - connected-mode probe-and-map. Walks known peers (manual neighbours + AGW-bearer discovered peers) and confirms <code>DAPPSv1&gt;</code> is reachable. <span class="muted">Off by default; enable in <em>Edit configuration</em>. Auto-refreshes every 30s.</span></p>
 <div class="probes-toolbar">
     <button type="button" onclick="dappsRunSweep()">Probe all now</button>
 </div>
@@ -800,9 +800,9 @@ else
 
 <script>
     (function () {
-        const fmtAt = (iso) => iso ? new Date(iso).toISOString().replace('T', ' ').substring(0, 19) : '—';
+        const fmtAt = (iso) => iso ? new Date(iso).toISOString().replace('T', ' ').substring(0, 19) : '-';
         const fmtAgo = (iso) => {
-            if (!iso) return '—';
+            if (!iso) return '-';
             const s = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
             if (s < 90) return `${s}s ago`;
             const m = Math.floor(s / 60);
@@ -841,12 +841,12 @@ else
                     return `<tr>` +
                         `<td>${callPill}</td>` +
                         `<td>${srcPill}</td>` +
-                        `<td class="numeric">${r.lastBpqPort ?? '—'}</td>` +
+                        `<td class="numeric">${r.lastBpqPort ?? '-'}</td>` +
                         `<td class="muted">${fmtAgo(r.lastProbedAt)}</td>` +
                         `<td class="muted">${fmtAgo(r.lastSuccessAt)}</td>` +
                         `<td class="numeric">${r.consecutiveFailures}</td>` +
                         `<td class="numeric">${r.successCount}</td>` +
-                        `<td class="muted">${escape(r.lastError || '—')}</td>` +
+                        `<td class="muted">${escape(r.lastError || '-')}</td>` +
                         `<td><input type="checkbox" ${r.optOut ? 'checked' : ''} onchange="dappsSetOptOut('${callQs}', this.checked)" /></td>` +
                         `<td>` +
                         `<button type="button" onclick="dappsProbeOne('${callQs}')">Probe</button> ` +
@@ -864,7 +864,7 @@ else
 </script>
 
 <h2>Polled nodes <span id="polls-state" class="pill @(Model.Options.ScheduledPollEnabled ? "ok" : "")">@(Model.Options.ScheduledPollEnabled ? $"every {Model.Options.PollIntervalHours}h" : "off")</span></h2>
-<p class="muted-inline">Plan F3b — scheduled poll. Walks AGW-reachable manual neighbours, sends <code>rev</code>, drains queued mail. Off by default; opportunistic poll on every push (<code>OpportunisticPollEnabled</code>) covers most cases for free. Enable in <em>Edit configuration</em> for nodes that don't push often. <span class="muted">Auto-refreshes every 30s.</span></p>
+<p class="muted-inline">Plan F3b - scheduled poll. Walks AGW-reachable manual neighbours, sends <code>rev</code>, drains queued mail. Off by default; opportunistic poll on every push (<code>OpportunisticPollEnabled</code>) covers most cases for free. Enable in <em>Edit configuration</em> for nodes that don't push often. <span class="muted">Auto-refreshes every 30s.</span></p>
 <div class="probes-toolbar">
     <button type="button" onclick="dappsRunPollSweep()">Poll all now</button>
 </div>
@@ -889,7 +889,7 @@ else
 <script>
     (function () {
         const fmtAgo = (iso) => {
-            if (!iso) return '—';
+            if (!iso) return '-';
             const s = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
             if (s < 90) return `${s}s ago`;
             const m = Math.floor(s / 60);
@@ -924,7 +924,7 @@ else
                         `<td class="muted">${fmtAgo(r.lastSuccessAt)}</td>` +
                         `<td class="numeric">${r.consecutiveFailures}</td>` +
                         `<td class="numeric">${r.messagesDrained}</td>` +
-                        `<td class="muted">${escape(r.lastError || '—')}</td>` +
+                        `<td class="muted">${escape(r.lastError || '-')}</td>` +
                         `<td><input type="checkbox" ${r.optOut ? 'checked' : ''} onchange="dappsSetPollOptOut('${callQs}', this.checked)" /></td>` +
                         `<td>` +
                         `<button type="button" onclick="dappsPollOne('${callQs}')">Poll</button> ` +
@@ -940,7 +940,7 @@ else
     })();
 </script>
 
-<h2>Recently dropped <span id="dropped-count" class="pill">—</span></h2>
+<h2>Recently dropped <span id="dropped-count" class="pill">-</span></h2>
 <p class="muted-inline">Messages DAPPS threw away (TTL expired in queue, etc.) instead of forwarding or delivering. Soft-deleted from the active queues so you can see what happened during RF testing. <span class="muted">Auto-refreshes every 5s.</span></p>
 <table id="dropped-table">
     <thead>
@@ -999,7 +999,7 @@ else
                         `<td><code>${escape(r.destination)}</code></td>` +
                         `<td><code>${escape(r.sourceCallsign)}</code></td>` +
                         `<td class="numeric">${r.bytes}</td>` +
-                        `<td class="numeric">${r.ttl ?? '—'}</td>` +
+                        `<td class="numeric">${r.ttl ?? '-'}</td>` +
                         `<td class="muted">${fmtAgo(lived)}</td>` +
                         `</tr>`;
                 }).join('');
@@ -1013,7 +1013,7 @@ else
 <h2>Live inbound <span id="sse-status" class="pill">connecting</span></h2>
 <p class="muted">
     Server-Sent Events feed of messages arriving at this node. Clears
-    on page reload — the queue tables above carry the persistent state.
+    on page reload - the queue tables above carry the persistent state.
 </p>
 <table id="sse-table">
     <thead>
@@ -1057,7 +1057,7 @@ else
                 `<td>${ev.sourceCallsign}</td>` +
                 `<td>${ev.destination}</td>` +
                 `<td class="numeric">${ev.payloadLength}</td>` +
-                `<td class="numeric">${ev.ttl ?? '—'}</td>`;
+                `<td class="numeric">${ev.ttl ?? '-'}</td>`;
             body.insertBefore(row, body.firstChild);
             // Keep at most 50 rows so the page doesn't grow unbounded.
             while (body.children.length > 50) body.removeChild(body.lastChild);
@@ -1068,15 +1068,15 @@ else
 <h2>Send a test message</h2>
 <p class="muted-inline">
     Drops an outbound message into the queue exactly as an app would via MQTT or REST.
-    Useful for verifying a link to another node — give it the destination's <em>callsign</em>
+    Useful for verifying a link to another node - give it the destination's <em>callsign</em>
     and the destination must have a DAPPS instance running an app with the same name (or
-    just be willing to receive — apps don't need to exist for the message to land in the
+    just be willing to receive - apps don't need to exist for the message to land in the
     inbox).
 </p>
 <form class="inline" method="post" asp-page-handler="Send">
     <label for="send-app">App name</label>
     <input type="text" id="send-app" name="Send.App" value="@Model.Send.App" placeholder="chat" required />
-    <small class="muted">A short identifier — e.g. <code>chat</code>, <code>weather</code>, <code>ping</code>. Apps subscribe to <code>dapps/in/&lt;name&gt;</code> on their local broker.</small>
+    <small class="muted">A short identifier - e.g. <code>chat</code>, <code>weather</code>, <code>ping</code>. Apps subscribe to <code>dapps/in/&lt;name&gt;</code> on their local broker.</small>
 
     <label for="send-dest">Destination callsign</label>
     <input type="text" id="send-dest" name="Send.Destination" value="@Model.Send.Destination" placeholder="GB7RDG-4" required />
@@ -1084,7 +1084,7 @@ else
 
     <label for="send-payload">Payload</label>
     <input type="text" id="send-payload" name="Send.Payload" value="@Model.Send.Payload" placeholder="hello world" required />
-    <small class="muted">Any UTF-8 text. DAPPS treats it as opaque bytes — apps decide what to do with it.</small>
+    <small class="muted">Any UTF-8 text. DAPPS treats it as opaque bytes - apps decide what to do with it.</small>
 
     <button type="submit">Queue message</button>
 </form>
@@ -1092,7 +1092,7 @@ else
 <script>
     // Inline edit handlers for the configuration / neighbour / channel
     // forms. Each posts JSON to the existing controllers and reloads on
-    // success — auth piggy-backs on the dapps.admin cookie the dashboard
+    // success - auth piggy-backs on the dapps.admin cookie the dashboard
     // is already loaded under.
     async function dappsPostJson(url, body, method) {
         const res = await fetch(url, {
@@ -1186,12 +1186,12 @@ else
     }
 
     async function dappsSolicitChannel(id) {
-        // B6.2 — fire-and-forget. Replies arrive on the regular beacon
+        // B6.2 - fire-and-forget. Replies arrive on the regular beacon
         // path and populate "Discovered peers" automatically; no UI
         // refresh needed beyond the existing 30s poll.
         if (await dappsPostJson('/DiscoveryChannels/' + id + '/solicit', null)) {
             // Tiny user feedback so the operator knows the click landed.
-            // No alert/reload — we don't want to disrupt their viewing.
+            // No alert/reload - we don't want to disrupt their viewing.
         }
     }
 
@@ -1204,7 +1204,7 @@ else
 
     async function dappsProbeOne(callsign) {
         // /Probes/run/{callsign} returns the row JSON, but a simple
-        // POST + refresh is fine for the dashboard — we don't need to
+        // POST + refresh is fine for the dashboard - we don't need to
         // surface a per-probe banner.
         const url = '/Probes/run/' + callsign;
         const res = await fetch(url, { method: 'POST' });
@@ -1218,7 +1218,7 @@ else
 
     async function dappsSetOptOut(callsign, optOut) {
         await dappsPostJson('/Probes/' + callsign + '/optout', { OptOut: optOut });
-        // No reload — the checkbox already shows the new state.
+        // No reload - the checkbox already shows the new state.
     }
 
     async function dappsForgetProbe(callsign) {

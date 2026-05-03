@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-hello.py — minimal DAPPS app.
+hello.py - minimal DAPPS app.
 
 Listens on dapps/in/hello for inbound messages.  For each message, replies
 "hello, <name>!" back to the sender, where <name> is the message payload.
-Acks every message it processes (idempotently — a redelivery is recognised
+Acks every message it processes (idempotently - a redelivery is recognised
 by id and acked without sending a duplicate reply).
 
 Designed as the smallest useful demonstration of the DAPPS app interface,
@@ -22,7 +22,7 @@ In another terminal, send "world" to yourself with mosquitto_pub:
         -t 'dapps/out/hello/<your-callsign>' -m 'world'
 
 Replace <your-callsign> with whatever Callsign your DAPPS is configured
-with — the reply will loop back to you.
+with - the reply will loop back to you.
 """
 
 import paho.mqtt.client as mqtt
@@ -67,7 +67,7 @@ def on_message(client, userdata, msg):
         return
 
     if msg_id in seen:
-        # Redelivery — ack again to be safe (acks are idempotent on
+        # Redelivery - ack again to be safe (acks are idempotent on
         # the DAPPS side too) but don't send a second reply.
         print(f"<- redelivery {msg_id} from {sender}, re-acking")
         client.publish(ACK, msg_id.encode("utf-8"), qos=1)
@@ -77,7 +77,7 @@ def on_message(client, userdata, msg):
     reply = f"hello, {payload}!".encode("utf-8")
 
     # Send the reply.  Optional dapps-ttl user property gives the
-    # message a 5-minute residual lifetime — anything older than that
+    # message a 5-minute residual lifetime - anything older than that
     # at delivery time means the receiver was offline long enough that
     # the greeting is no longer interesting.
     out_props = Properties(PacketType.PUBLISH)

@@ -11,7 +11,7 @@ using SQLite;
 namespace dapps.core.tests;
 
 /// <summary>
-/// Tests for <see cref="ProbeSchedulerService"/>'s pure helpers — target
+/// Tests for <see cref="ProbeSchedulerService"/>'s pure helpers - target
 /// enumeration, port resolution, result recording. The
 /// <c>ExecuteAsync</c> loop itself isn't exercised here; that's
 /// covered indirectly via the on-demand SweepAsync entry point and
@@ -74,7 +74,7 @@ public sealed class ProbeSchedulerServiceTests : IAsyncLifetime
     public async Task EnumerateTargets_NeighbourWithUdpEndpoint_Skipped()
     {
         // UDP-routed neighbours can't be probed via AGW. Skipping them
-        // here is the only signal the prober has — there's no AGW
+        // here is the only signal the prober has - there's no AGW
         // alternative path to fall back to for a UDP-only neighbour.
         await database.UpsertNeighbour("N0UDP-9", bpqPort: null, udpEndpoint: "127.0.0.1:1880");
 
@@ -121,7 +121,7 @@ public sealed class ProbeSchedulerServiceTests : IAsyncLifetime
     public async Task EnumerateTargets_UdpDiscoveredPeer_Skipped()
     {
         // UDP-bearer beacons populate DbDiscoveredPeer too, but the
-        // probe surface is AGW-only — those rows must not contribute.
+        // probe surface is AGW-only - those rows must not contribute.
         await database.UpsertDiscoveredPeer(new DbDiscoveredPeer
         {
             Callsign = "N0UDP-9",
@@ -259,7 +259,7 @@ public sealed class ProbeSchedulerServiceTests : IAsyncLifetime
     {
         // A B6.1 Phase 2 transitive candidate sits in DbProbedNode with
         // Source="via:..." and no neighbour / discovered-peer row. The
-        // sweep must pick it up — otherwise transitively-learned
+        // sweep must pick it up - otherwise transitively-learned
         // callsigns sit in the table forever waiting for an operator.
         await database.UpsertProbedNode(new DbProbedNode
         {
@@ -326,7 +326,7 @@ public sealed class ProbeSchedulerServiceTests : IAsyncLifetime
     {
         // The remote will list us in its peers (we just sent traffic to
         // them). Recording ourselves as a probe target is meaningless
-        // and would generate a self-probe — explicitly filtered.
+        // and would generate a self-probe - explicitly filtered.
         await database.UpsertNeighbour("N0SRC-9", bpqPort: 1);
         var sched = MakeScheduler(new RecordingTransport(("N0SRC-9",
             "DAPPSv1>\n" +
@@ -371,7 +371,7 @@ public sealed class ProbeSchedulerServiceTests : IAsyncLifetime
     {
         // Test seam used by other unit tests that don't model a peers
         // response. Verifies that suppressing fetchPeers really avoids
-        // the second exchange — otherwise the prober would hang on a
+        // the second exchange - otherwise the prober would hang on a
         // missing "end" line in the canned bytes.
         await database.UpsertNeighbour("N0SRC-9", bpqPort: 1);
         var transport = new RecordingTransport(("N0SRC-9", "DAPPSv1>\n"));
@@ -437,7 +437,7 @@ public sealed class ProbeSchedulerServiceTests : IAsyncLifetime
     /// <summary>Test transport that hands back a different canned byte
     /// stream per <paramref name="cannedByCallsign"/> entry, in order.
     /// Records each connect attempt for assertions. Uses a duplex stream
-    /// with separate read and write buffers — a single MemoryStream
+    /// with separate read and write buffers - a single MemoryStream
     /// would let the prober's writes ("peers\n") overwrite the canned
     /// bytes it's about to read.</summary>
     private sealed class RecordingTransport(params (string Remote, string Reply)[] cannedByCallsign) : IDappsOutboundTransport

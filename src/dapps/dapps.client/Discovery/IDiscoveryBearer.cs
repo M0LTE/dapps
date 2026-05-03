@@ -24,7 +24,7 @@ public sealed record DiscoveryChannelInfo(
 /// announce themselves"; <see cref="ReceivedSolicit"/> is "someone is
 /// asking who's around" (Plan B6.2). Bearers stamp the
 /// <see cref="ChannelKey"/> based on which channel the frame arrived
-/// on — they're the authority since they know AGW port bytes / UDP
+/// on - they're the authority since they know AGW port bytes / UDP
 /// groups / MeshCore radios.
 /// </summary>
 public abstract record ReceivedDiscoveryFrame(string ChannelKey);
@@ -56,7 +56,7 @@ public interface IDiscoveryBearer : IAsyncDisposable
     /// <summary>
     /// Bring the bearer online with the given channel set. The bearer
     /// is responsible for opening whatever sockets / radios it needs
-    /// and starting any internal read loops. Idempotent — can be
+    /// and starting any internal read loops. Idempotent - can be
     /// called once at startup.
     /// </summary>
     Task StartAsync(IReadOnlyList<DiscoveryChannelInfo> channels, CancellationToken ct);
@@ -67,7 +67,7 @@ public interface IDiscoveryBearer : IAsyncDisposable
     Task AnnounceAsync(BeaconFrame beacon, string channelKey, CancellationToken ct);
 
     /// <summary>
-    /// Plan B6.2 — emit a solicit on the named channel. Receivers
+    /// Plan B6.2 - emit a solicit on the named channel. Receivers
     /// reply with their normal beacon after a small random delay.
     /// Operators trigger this on-demand today (e.g. dashboard "ping
     /// channel" button); a future cadence can have the discovery

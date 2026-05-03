@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging;
 namespace dapps.client;
 
 /// <summary>
-/// Speaks the DAPPSv1 protocol over a duplex byte stream — agnostic of how
+/// Speaks the DAPPSv1 protocol over a duplex byte stream - agnostic of how
 /// that stream is plumbed. Pair with any <see cref="Transport.IDappsOutboundTransport"/>.
 ///
 /// Today this is the sender side only: read the initial prompt, offer a
@@ -30,7 +30,7 @@ public class DappsProtocolClient(Stream stream, ILoggerFactory loggerFactory)
     /// connect-banner from a misbehaving node without becoming a DoS sink).
     ///
     /// We match on <c>"DAPPSv1>"</c> followed by *any* line terminator
-    /// (<c>\n</c>, <c>\r</c>, or <c>\r\n</c>) — BPQ's Telnet driver, when
+    /// (<c>\n</c>, <c>\r</c>, or <c>\r\n</c>) - BPQ's Telnet driver, when
     /// bridging an inbound L2 session via Apps Interface, rewrites LF → CR
     /// in the app-to-user direction (apps-interface.md "App → user"
     /// section). Strict <c>\n</c>-only matching would hang every time
@@ -95,8 +95,8 @@ public class DappsProtocolClient(Stream stream, ILoggerFactory loggerFactory)
         }
 
         // F2 multi-part: mid= and frag=N/M either both present or both
-        // absent. Belt-and-braces — the receiver's parser also enforces
-        // this — but catching it sender-side prevents a malformed line
+        // absent. Belt-and-braces - the receiver's parser also enforces
+        // this - but catching it sender-side prevents a malformed line
         // from reaching the wire in the first place.
         var hasFragHeaders = !string.IsNullOrEmpty(masterId)
             && fragmentIndex.HasValue && fragmentTotal.HasValue;
@@ -116,7 +116,7 @@ public class DappsProtocolClient(Stream stream, ILoggerFactory loggerFactory)
         {
             sb.Append($" ttl={ttl.Value}");
         }
-        // F1 end-to-end source tracking. Emitted only when set — pre-F1
+        // F1 end-to-end source tracking. Emitted only when set - pre-F1
         // local submissions (or relayed messages with no upstream src=)
         // omit it so the receiver knows the originator is unknown.
         if (!string.IsNullOrEmpty(originator))
@@ -125,7 +125,7 @@ public class DappsProtocolClient(Stream stream, ILoggerFactory loggerFactory)
         }
         // F2 multi-part headers. Receiver groups fragments by mid=.
         // A pre-F2 receiver sees these as unknown KVs and (per spec)
-        // ignores them — but with no reassembly it'll just deliver each
+        // ignores them - but with no reassembly it'll just deliver each
         // fragment to the app individually. F2 receivers route to the
         // reassembly buffer.
         if (hasFragHeaders)
@@ -149,7 +149,7 @@ public class DappsProtocolClient(Stream stream, ILoggerFactory loggerFactory)
 
     /// <summary>
     /// Sends `data &lt;id&gt;` followed by the raw payload bytes, then waits
-    /// for `ack &lt;id&gt;` (success) or `bad &lt;id&gt;` (corrupt — far
+    /// for `ack &lt;id&gt;` (success) or `bad &lt;id&gt;` (corrupt - far
     /// end's hash didn't match).
     /// </summary>
     public async Task<bool> SendMessageAsync(string id, byte[] payload, CancellationToken ct)
@@ -165,7 +165,7 @@ public class DappsProtocolClient(Stream stream, ILoggerFactory loggerFactory)
         }
         if (line == $"bad {id}")
         {
-            logger.LogError("Remote NAKed message {0} — payload hash mismatch", id);
+            logger.LogError("Remote NAKed message {0} - payload hash mismatch", id);
             return false;
         }
 
@@ -174,7 +174,7 @@ public class DappsProtocolClient(Stream stream, ILoggerFactory loggerFactory)
     }
 
     /// <summary>
-    /// Plan B6.1 Phase 2 — ask the remote DAPPS for its peers. Sends
+    /// Plan B6.1 Phase 2 - ask the remote DAPPS for its peers. Sends
     /// <c>peers\n</c> and reads <c>peer …</c> lines until <c>end</c>;
     /// silently tolerates other command-shaped lines arriving in between
     /// so a noisy peer doesn't break the parse. Inactivity timeout
@@ -247,7 +247,7 @@ public class DappsProtocolClient(Stream stream, ILoggerFactory loggerFactory)
         int? FragmentTotal);
 
     /// <summary>
-    /// Plan F3 — reverse forwarding from the client side. Send
+    /// Plan F3 - reverse forwarding from the client side. Send
     /// <c>rev</c> (or <c>rev id1 id2 …</c> for selective drain) and
     /// then yield each message the server pushes back via the
     /// <c>ihave</c>/<c>data</c>/<c>ack</c> exchange. Returns when the
@@ -292,7 +292,7 @@ public class DappsProtocolClient(Stream stream, ILoggerFactory loggerFactory)
             var (offerOk, parsed) = TryParseOffer(line);
             if (!offerOk || parsed is null)
             {
-                // Malformed offer — NAK with the id we could pluck out
+                // Malformed offer - NAK with the id we could pluck out
                 // (or ?? as a placeholder) and move on.
                 var fallbackId = parsed?.Id ?? "??";
                 await stream.WriteAsync(Encoding.UTF8.GetBytes($"no {fallbackId}\n"), ct);
@@ -300,7 +300,7 @@ public class DappsProtocolClient(Stream stream, ILoggerFactory loggerFactory)
                 continue;
             }
 
-            // Always accept — the client asked for this; "no" is
+            // Always accept - the client asked for this; "no" is
             // reserved for when the receiver has a strong reason to
             // decline (none today).
             await stream.WriteAsync(Encoding.UTF8.GetBytes($"send {parsed.Id}\n"), ct);
@@ -310,13 +310,13 @@ public class DappsProtocolClient(Stream stream, ILoggerFactory loggerFactory)
             var dataHeader = await ReadLineAsync(ct);
             if (dataHeader != $"data {parsed.Id}")
             {
-                logger.LogWarning("rev poll: expected 'data {0}', got '{1}' — bailing", parsed.Id, dataHeader);
+                logger.LogWarning("rev poll: expected 'data {0}', got '{1}' - bailing", parsed.Id, dataHeader);
                 yield break;
             }
             var payload = new byte[parsed.Length];
             await ReadExactlyAsync(payload, ct);
 
-            // Hash check before yielding — same contract as the
+            // Hash check before yielding - same contract as the
             // regular receiver. Bad payloads get NAK'd; the server
             // can choose to retry or move on.
             var computed = DappsMessage.ComputeHash(payload, parsed.Salt)[..7];
@@ -454,7 +454,7 @@ public class DappsProtocolClient(Stream stream, ILoggerFactory loggerFactory)
     /// <summary>
     /// Reads with a per-call inactivity timeout layered on top of the
     /// caller's cancellation token. Surfaces an explicit
-    /// <see cref="TimeoutException"/> when the peer goes silent —
+    /// <see cref="TimeoutException"/> when the peer goes silent -
     /// callers (e.g. <c>OutboundMessageManager</c>) catch and log,
     /// then move on to the next message rather than hanging the run.
     /// </summary>

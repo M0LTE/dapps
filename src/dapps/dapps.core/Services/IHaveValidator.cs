@@ -19,9 +19,9 @@ public sealed record IHaveOffer(
     string Destination,
     int? Ttl,                               // residual lifetime in seconds, null = unset
     Dictionary<string, string> AdditionalHeaders,
-    string? Originator = null,              // src= — originating callsign (F1), null when sender pre-dates F1
-    string? MasterId = null,                // mid= — F2 multi-part: opaque grouping id, null = not fragmented
-    FragmentInfo? Fragment = null);         // frag=N/M — F2 multi-part fragment index/total, null = not fragmented
+    string? Originator = null,              // src= - originating callsign (F1), null when sender pre-dates F1
+    string? MasterId = null,                // mid= - F2 multi-part: opaque grouping id, null = not fragmented
+    FragmentInfo? Fragment = null);         // frag=N/M - F2 multi-part fragment index/total, null = not fragmented
 
 /// <summary>F2 multi-part fragment metadata. Index is 1-based; total is
 /// the number of fragments in the original payload. Both must satisfy
@@ -86,7 +86,7 @@ public static class IHaveValidator
         }
 
         // chk: when present, validates the rest of the line. Run this first
-        // — if the line is corrupt, downstream field parsing is meaningless.
+        // - if the line is corrupt, downstream field parsing is meaningless.
         if (kvps.TryGetValue("chk", out var chk))
         {
             var chkError = ValidateChecksum(ihaveCommand, chk);
@@ -138,7 +138,7 @@ public static class IHaveValidator
             .Where(kv => !ReservedKeys.Contains(kv.Key))
             .ToDictionary(kv => kv.Key, kv => kv.Value);
 
-        // src=<callsign> — F1 end-to-end source tracking. Optional;
+        // src=<callsign> - F1 end-to-end source tracking. Optional;
         // when absent the originator is unknown (could be the link
         // source on a single-hop send, or any upstream hop on a
         // pre-F1 relay path). Empty string is treated as absent.
@@ -148,7 +148,7 @@ public static class IHaveValidator
             originator = srcVal;
         }
 
-        // mid= and frag=N/M — F2 multi-part. Both present together or
+        // mid= and frag=N/M - F2 multi-part. Both present together or
         // both absent; mid= alone means "fragmented but how-many-of-
         // how-many is missing" (rejected); frag= alone means "fragment
         // metadata without an id to group on" (also rejected). Total

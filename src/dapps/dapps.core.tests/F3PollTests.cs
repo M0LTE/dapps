@@ -14,7 +14,7 @@ using SQLite;
 namespace dapps.core.tests;
 
 /// <summary>
-/// Plan F3 — server-side <c>rev</c> handler and client-side
+/// Plan F3 - server-side <c>rev</c> handler and client-side
 /// <c>PollAsync</c>. Tests exercise the new wire shape directly
 /// (canned bytes, capturing fakes) and the full flow against the
 /// real Database. Opportunistic-poll-on-push is exercised by
@@ -25,7 +25,7 @@ public sealed class F3PollClientTests
     [Fact]
     public async Task PollAsync_ServerEmitsPromptImmediately_NoMessagesYielded()
     {
-        // Empty drain — server has nothing for caller; emits the
+        // Empty drain - server has nothing for caller; emits the
         // "drained" prompt straight away. Caller sees no messages.
         var stream = new FakeDuplexStream("DAPPSv1>\n"u8.ToArray());
         var client = new DappsProtocolClient(stream, NullLoggerFactory.Instance);
@@ -223,11 +223,11 @@ public sealed class F3PollServerTests : IAsyncLifetime
     public async Task RevHandler_NoQueuedMail_EmitsOnlyPromptBack()
     {
         // Caller types `rev`; we have nothing. Server should emit just
-        // `DAPPSv1>` after the initial banner — no ihave lines, then
+        // `DAPPSv1>` after the initial banner - no ihave lines, then
         // `bye` after `q`.
         var output = await DriveSession("rev\nq\n");
         output.Should().StartWith("DAPPSv1>\n");
-        // No `ihave ` lines — nothing to drain.
+        // No `ihave ` lines - nothing to drain.
         output.Should().NotContain("ihave ");
         // Drained prompt + the `q` terminating bye.
         output.Should().Contain("DAPPSv1>\n");
@@ -370,7 +370,7 @@ public sealed class Dappsv1SessionBackhaulOpportunisticPollTests
     [Fact]
     public async Task SendAsync_NoOpportunisticInbox_NoRevSent()
     {
-        // Default constructor (no inbox supplied) — opportunistic
+        // Default constructor (no inbox supplied) - opportunistic
         // poll is silently a no-op. This is the shape we use in
         // existing tests / harnesses that don't care about pull.
         var pushedId = "push003";

@@ -9,7 +9,7 @@ namespace dapps.core.tests;
 /// State-machine tests for <see cref="UpdaterOrchestrator"/>. Every
 /// path the privileged <c>dapps --apply-update</c> can take, exercised
 /// against mocks for the filesystem / GitHub Releases / systemctl
-/// surfaces. No real binary swap, no real network, no real systemd —
+/// surfaces. No real binary swap, no real network, no real systemd -
 /// just the orchestration logic and the status-file shape the
 /// dashboard depends on.
 /// </summary>
@@ -28,7 +28,7 @@ public sealed class UpdaterOrchestratorTests
         // The dashboard JS pattern-matches on phase NAMES ("Success",
         // "RolledBack", …). System.Text.Json's default is integer
         // encoding which silently breaks every comparison and leaves
-        // the pill at —. Pin the serialised shape so a regression
+        // the pill at -. Pin the serialised shape so a regression
         // can't re-introduce that bug. Caught in the v0.18.0 deploy on
         // gb7rdg-node where every successful apply showed "6 · 32s ago"
         // instead of "Success · 32s ago".
@@ -64,7 +64,7 @@ public sealed class UpdaterOrchestratorTests
     [Fact]
     public async Task ApplyUpdate_NoRequestMarker_NoOpsImmediately()
     {
-        // Common case — systemd timer fired, no operator clicked
+        // Common case - systemd timer fired, no operator clicked
         // "Apply update" since the last run. Exits before touching the
         // network so the timer is cheap.
         var fs = new FakeFileSystem();
@@ -145,7 +145,7 @@ public sealed class UpdaterOrchestratorTests
         var status = ReadStatus(fs);
         status.Phase.Should().Be(UpdatePhase.Failed);
         status.Error.Should().Contain("check:");
-        // Marker cleared even on failure — otherwise the next timer
+        // Marker cleared even on failure - otherwise the next timer
         // tick would just retry and fail again indefinitely.
         fs.Files.ContainsKey("/test/update-requested").Should().BeFalse();
     }
@@ -172,7 +172,7 @@ public sealed class UpdaterOrchestratorTests
         // Defends against the linux-arm Process-bundle bug class:
         // we probe IsServiceActiveAsync (which uses System.Diagnostics.
         // Process under the hood) BEFORE the swap. A missing-assembly
-        // exception there should fail-fast with no swap attempted —
+        // exception there should fail-fast with no swap attempted -
         // not a swap-then-crash that leaves dapps running on the OLD
         // binary while the NEW one sits on disk unstarted.
         var fs = new FakeFileSystem();
@@ -194,7 +194,7 @@ public sealed class UpdaterOrchestratorTests
         rc.Should().Be(2);
         fs.Files["/test/dapps"].Should().Be("old", "swap MUST NOT happen if probe fails");
         fs.Files.ContainsKey("/test/dapps.new").Should().BeFalse(
-            "no download triggered either — probe gates everything");
+            "no download triggered either - probe gates everything");
         proc.Calls.Where(c => c.StartsWith("restart:")).Should().BeEmpty();
         var status = ReadStatus(fs);
         status.Phase.Should().Be(UpdatePhase.Failed);
@@ -212,7 +212,7 @@ public sealed class UpdaterOrchestratorTests
             Latest = new LatestReleaseInfo("v0.18.0", "url", null),
             DownloadException = new IOException("link reset"),
         };
-        // Probe succeeds (default IsActive=false is fine — we only
+        // Probe succeeds (default IsActive=false is fine - we only
         // check that the call doesn't throw); download fails.
         var proc = new FakeProcess();
 
@@ -222,7 +222,7 @@ public sealed class UpdaterOrchestratorTests
         fs.Files["/test/dapps"].Should().Be("old");
         // Half-downloaded artifact must not litter /opt/dapps.
         fs.Files.ContainsKey("/test/dapps.new").Should().BeFalse();
-        // The systemctl probe runs before the download (Plan C5.2 — fail
+        // The systemctl probe runs before the download (Plan C5.2 - fail
         // fast if we can't talk to systemd). No restart should fire.
         proc.Calls.Where(c => c.StartsWith("restart:")).Should().BeEmpty();
         var status = ReadStatus(fs);
@@ -253,7 +253,7 @@ public sealed class UpdaterOrchestratorTests
         rc.Should().Be(1, "rolled-back exit code");
         fs.Files["/test/dapps"].Should().Be("old", "previous should be restored over dapps");
         fs.Files.ContainsKey("/test/dapps.previous").Should().BeFalse(
-            "previous moved back into place — not duplicated");
+            "previous moved back into place - not duplicated");
         proc.Calls.Where(c => c.StartsWith("restart:")).Should().HaveCount(2,
             "one failed restart, one rollback restart");
         ReadStatus(fs).Phase.Should().Be(UpdatePhase.RolledBack);
@@ -271,7 +271,7 @@ public sealed class UpdaterOrchestratorTests
             DownloadContent = "new",
         };
         // Restart succeeds. is-active starts true, then flips false on
-        // the second poll — the new binary crashed.
+        // the second poll - the new binary crashed.
         var proc = new FakeProcess
         {
             RestartExitCodes = new Queue<int>(new[] { 0, 0 }),

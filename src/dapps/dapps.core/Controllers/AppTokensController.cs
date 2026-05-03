@@ -5,7 +5,7 @@ namespace dapps.core.Controllers;
 
 /// <summary>
 /// Admin surface for issuing per-app credentials. POSTing returns the
-/// plaintext token exactly once — capture it on creation and hand it
+/// plaintext token exactly once - capture it on creation and hand it
 /// to the app owner, because we only store the hash.
 ///
 /// This endpoint is unauthenticated by design: pairing it with bearer

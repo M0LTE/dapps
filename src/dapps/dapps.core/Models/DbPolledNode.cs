@@ -3,12 +3,12 @@ using SQLite;
 namespace dapps.core.Models;
 
 /// <summary>
-/// Plan F3b — per-neighbour state for the scheduled poll service.
+/// Plan F3b - per-neighbour state for the scheduled poll service.
 /// One row per callsign that the poll scheduler has touched (or that
 /// an operator has flagged opt-out). Distinct from
-/// <see cref="DbProbedNode"/> because the action is different —
+/// <see cref="DbProbedNode"/> because the action is different -
 /// probes are "is DAPPS reachable here?", polls are "drain queued
-/// mail" — and the per-neighbour metadata operators want to see is
+/// mail" - and the per-neighbour metadata operators want to see is
 /// different too.
 /// </summary>
 [Table("polledNodes")]
@@ -38,12 +38,12 @@ public sealed class DbPolledNode
     public int ConsecutiveFailures { get; set; }
 
     /// <summary>Cumulative count of messages drained across all
-    /// successful polls. Operator-facing tally only — message-level
+    /// successful polls. Operator-facing tally only - message-level
     /// state lives in <see cref="DbMessage"/> after delivery.</summary>
     public long MessagesDrained { get; set; }
 
     /// <summary>Operator opt-out: skip this peer in the scheduled
     /// sweep. On-demand polls via the REST endpoint still go through
-    /// — operators sometimes want to test an opted-out peer manually.</summary>
+    /// - operators sometimes want to test an opted-out peer manually.</summary>
     public bool OptOut { get; set; }
 }

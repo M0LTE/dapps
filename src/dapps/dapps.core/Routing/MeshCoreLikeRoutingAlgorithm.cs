@@ -12,7 +12,7 @@ namespace dapps.core.Routing;
 ///   path to the destination, the path is embedded in the outbound
 ///   <see cref="BackhaulMessage.SourceRoute"/>. Each downstream hop
 ///   pulls its next neighbour from the head of the list and strips
-///   it before re-encoding — no per-hop routing decision needed
+///   it before re-encoding - no per-hop routing decision needed
 ///   along the path. When a source-routed message arrives at a
 ///   forwarder, it just relays along the prescribed route.</item>
 /// <item>Flood discovery: when this node has no path for a
@@ -21,13 +21,13 @@ namespace dapps.core.Routing;
 ///   node appends its own callsign before re-flooding to neighbours
 ///   it hasn't already traversed. When a flood arrives at any node,
 ///   the inbound TraversedHops reversed is the path back to the
-///   originator — stored in <see cref="DbDiscoveredPath"/> for
+///   originator - stored in <see cref="DbDiscoveredPath"/> for
 ///   future source-routed sends.</item>
 /// </list>
 ///
 /// Layered as a decorator: the inner algorithm (typically
 /// <see cref="StaticRoutingAlgorithm"/>) ALWAYS wins for resolution
-/// — operator overrides and direct neighbours take precedence over
+/// - operator overrides and direct neighbours take precedence over
 /// discovered paths. Discovered paths are consulted only when inner
 /// returns <see cref="RouteDecision.Unreachable"/>; flood-discovery
 /// is the final fallback.
@@ -49,12 +49,12 @@ public sealed class MeshCoreLikeRoutingAlgorithm(
     ILogger<MeshCoreLikeRoutingAlgorithm> logger) : IRoutingAlgorithm
 {
     /// <summary>Forward failures before a discovered path is
-    /// invalidated. 3 matches PassiveLearningAlgorithm — enough to
+    /// invalidated. 3 matches PassiveLearningAlgorithm - enough to
     /// ride out a transient without prematurely throwing away a
     /// working path.</summary>
     public const int InvalidationThreshold = 3;
 
-    /// <summary>Default hop budget for a fresh flood-discovery —
+    /// <summary>Default hop budget for a fresh flood-discovery -
     /// matches FloodFallbackAlgorithm so cold-start behaviour is
     /// comparable across algorithms. The 6-node sim's longest path
     /// is 4 hops; production meshes likely want 6-8.</summary>
@@ -82,7 +82,7 @@ public sealed class MeshCoreLikeRoutingAlgorithm(
         }
 
         // 3. Fresh originate (or relay-without-flood-state). Try
-        //    inner first — operator overrides / direct neighbours
+        //    inner first - operator overrides / direct neighbours
         //    win.
         var innerDecision = await inner.ResolveAsync(message, ctx, ct);
         if (innerDecision is not RouteDecision.Unreachable)
@@ -120,13 +120,13 @@ public sealed class MeshCoreLikeRoutingAlgorithm(
 
     public async Task ObserveInboundAsync(BackhaulMessage message, string linkSourceCallsign, IRoutingContext ctx, CancellationToken ct)
     {
-        // Always give the inner algorithm a look — passive-learning
+        // Always give the inner algorithm a look - passive-learning
         // (when wrapped) still wants to learn next-hop routes from
         // the same observations.
         await inner.ObserveInboundAsync(message, linkSourceCallsign, ctx, ct);
 
         // Discovery-path learning only fires for messages that
-        // arrived with TraversedHops set — i.e. flood-discovery
+        // arrived with TraversedHops set - i.e. flood-discovery
         // messages. Regular routed traffic doesn't carry a
         // traversal record.
         if (message.TraversedHops is null) return;
@@ -140,7 +140,7 @@ public sealed class MeshCoreLikeRoutingAlgorithm(
 
         // Reverse the traversed list to get the path FROM us back
         // to the originator. Filter out our own callsign defensively
-        // — shouldn't appear, but a misbehaving peer could include
+        // - shouldn't appear, but a misbehaving peer could include
         // it and we'd loop.
         var reverse = message.TraversedHops
             .Reverse()
@@ -155,7 +155,7 @@ public sealed class MeshCoreLikeRoutingAlgorithm(
 
     public async Task ObserveForwardOutcomeAsync(DbMessage message, BackhaulRoute attemptedRoute, BackhaulSendResult result, IRoutingContext ctx, CancellationToken ct)
     {
-        // Inner gets the outcome too — passive learning needs it for
+        // Inner gets the outcome too - passive learning needs it for
         // its learned-route invalidation logic.
         await inner.ObserveForwardOutcomeAsync(message, attemptedRoute, result, ctx, ct);
 
@@ -229,7 +229,7 @@ public sealed class MeshCoreLikeRoutingAlgorithm(
         if (nextHop is null)
         {
             // Try base-callsign match against the manual neighbour
-            // list — source routes use full callsigns, but neighbour
+            // list - source routes use full callsigns, but neighbour
             // entries may differ in SSID. Fall back to a base-match
             // scan before declaring the source route broken.
             var neighbours = await ctx.GetNeighboursAsync(ct);
@@ -310,7 +310,7 @@ public sealed class MeshCoreLikeRoutingAlgorithm(
         if (nextHop is null)
         {
             // The first hop along our discovered path isn't reachable
-            // — drop the path and let the next tick re-flood.
+            // - drop the path and let the next tick re-flood.
             logger.LogInformation(
                 "Discovered path for {0} unusable: first hop {1} not in neighbours; discarding path",
                 destBaseCall, nextHopCallsign);
@@ -332,7 +332,7 @@ public sealed class MeshCoreLikeRoutingAlgorithm(
     /// excluding any whose base callsign appears in
     /// <paramref name="traversed"/> (so the message doesn't loop
     /// back to a node it's already visited). Local callsign is
-    /// also implicitly excluded — the local node never appears in
+    /// also implicitly excluded - the local node never appears in
     /// neighbours.</summary>
     private static async Task<IReadOnlyList<BackhaulRoute>> BuildFloodRoutesAsync(
         IRoutingContext ctx, IReadOnlyList<string> traversed, CancellationToken ct)

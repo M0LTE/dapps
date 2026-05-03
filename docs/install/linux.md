@@ -18,7 +18,7 @@ Substitute `dapps-linux-arm64` (Pi 4/5, Apple Silicon Linux) or `dapps-linux-arm
 
 ## 2. Set up the runtime user
 
-DAPPS runs as a non-privileged user. The updater service runs as root because it needs to swap a binary that's currently executing — but the daemon itself does not.
+DAPPS runs as a non-privileged user. The updater service runs as root because it needs to swap a binary that's currently executing - but the daemon itself does not.
 
 ```bash
 sudo useradd --system --home /var/lib/dapps --shell /usr/sbin/nologin dapps
@@ -47,7 +47,7 @@ Environment=ASPNETCORE_URLS=http://0.0.0.0:5000
 Environment=DAPPS_CALLSIGN=N0CALL
 Restart=on-failure
 RestartSec=5s
-# Exit code 78 = fatal config error — don't restart in a tight
+# Exit code 78 = fatal config error - don't restart in a tight
 # loop, leave it down so the journal message is actionable.
 RestartPreventExitStatus=78
 
@@ -113,11 +113,11 @@ sudo journalctl -u dapps.service -f
 
 Open the dashboard in a browser at `http://<node>:5000/`. The first request lands on `/Setup` to set an admin password (cookie-based; one password for the whole node). After that, the dashboard.
 
-The `/Health` and `/Operational` endpoints are intentionally not behind that cookie — they're designed to be scraped by watchdogs and your own monitoring. The MCP endpoint at `/mcp` is also open for the same reason.
+The `/Health` and `/Operational` endpoints are intentionally not behind that cookie - they're designed to be scraped by watchdogs and your own monitoring. The MCP endpoint at `/mcp` is also open for the same reason.
 
 ## Operator customisations
 
-If you tweak the unit file (e.g. binding the dashboard to localhost only, increasing log verbosity, adding env vars), use a **systemd drop-in** rather than editing the unit file in place — the dashboard's update flow won't overwrite drop-ins, but a future install recipe might overwrite the unit:
+If you tweak the unit file (e.g. binding the dashboard to localhost only, increasing log verbosity, adding env vars), use a **systemd drop-in** rather than editing the unit file in place - the dashboard's update flow won't overwrite drop-ins, but a future install recipe might overwrite the unit:
 
 ```bash
 sudo systemctl edit dapps.service
@@ -148,11 +148,11 @@ sudo journalctl -u dapps.service --since '24h ago'
 sudo journalctl -u dapps.service | grep abc1234
 ```
 
-The journal also captures the structured decision-events that the `/Operational` endpoint surfaces — so an "what happened to message X two weeks ago" investigation is a `journalctl --grep` away.
+The journal also captures the structured decision-events that the `/Operational` endpoint surfaces - so an "what happened to message X two weeks ago" investigation is a `journalctl --grep` away.
 
 ## Backups
 
-The state worth backing up is `/var/lib/dapps/dapps.db` — the SQLite database. The binary is recoverable from GitHub Releases; everything else is derived from defaults. Stop DAPPS before copying for a consistent snapshot, or use SQLite's online backup API.
+The state worth backing up is `/var/lib/dapps/dapps.db` - the SQLite database. The binary is recoverable from GitHub Releases; everything else is derived from defaults. Stop DAPPS before copying for a consistent snapshot, or use SQLite's online backup API.
 
 ```bash
 sudo systemctl stop dapps.service

@@ -13,7 +13,7 @@ namespace dapps.core.Pages;
 /// once the operator submits the form, the password lands in the
 /// systemoptions table and the cookie scheme takes over via /Login.
 ///
-/// If a password is already configured, GET /Setup bounces to /Login —
+/// If a password is already configured, GET /Setup bounces to /Login -
 /// rotation lives on /Config and shouldn't accidentally be reachable
 /// here. POST /Setup also no-ops with a redirect so an attacker can't
 /// silently overwrite an existing password by replaying a stale form.

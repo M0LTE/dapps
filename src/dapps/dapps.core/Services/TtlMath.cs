@@ -14,7 +14,7 @@ public static class TtlMath
     /// <summary>
     /// Compute the residual ttl after time spent in our queue. Returns null
     /// if the row has no ttl (which means "no expiry"). Returns the
-    /// remaining seconds otherwise — possibly zero or negative, in which
+    /// remaining seconds otherwise - possibly zero or negative, in which
     /// case the caller MUST drop the row per the spec.
     /// </summary>
     public static int? Residual(int? ttl, DateTime createdAt, DateTime now)

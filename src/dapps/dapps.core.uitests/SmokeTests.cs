@@ -45,7 +45,7 @@ public sealed class SmokeTests(WebAppFixture app, PlaywrightFixture pw)
     {
         // /Login itself does the bounce when the admin password isn't
         // configured yet (LoginModel.OnGet returns LocalRedirect to
-        // /Setup) — gives the operator a single landing page on
+        // /Setup) - gives the operator a single landing page on
         // first install rather than two confusingly-similar forms.
         await using var ctx = await pw.Browser.NewContextAsync();
         var page = await ctx.NewPageAsync();
@@ -60,11 +60,11 @@ public sealed class SmokeTests(WebAppFixture app, PlaywrightFixture pw)
     {
         // /Health is allowlisted past AdminAuthMiddleware (designed
         // for watchdog units that don't carry a cookie). Use the
-        // request API rather than a page navigation — we want the
+        // request API rather than a page navigation - we want the
         // raw JSON, not a rendered HTML view.
         //
         // 200 = all components healthy; 503 = at least one degraded
-        // (we expect the latter — AGW points at port 0 since no real
+        // (we expect the latter - AGW points at port 0 since no real
         // BPQ is running for the UI test). Either is a successful
         // /Health response; the failure mode we're guarding against
         // is the route being missing or 500'ing.

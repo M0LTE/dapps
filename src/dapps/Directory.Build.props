@@ -15,7 +15,7 @@
       alpine-arm, alpine-arm64, alpine-x64 RIDs. Since .NET 8 those
       version-/distro-specific RIDs aren't auto-resolved by NuGet, which
       surfaces as NETSDK1206. The RIDs we actually deploy on (linux-x64,
-      linux-arm64) work fine — the warning is just package metadata
+      linux-arm64) work fine - the warning is just package metadata
       noise. Suppress it solution-wide.
     -->
     <NoWarn>$(NoWarn);NETSDK1206</NoWarn>

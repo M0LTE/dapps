@@ -20,12 +20,12 @@ namespace dapps.core.tests.Integration;
 ///
 /// Networking: both containers share container A's network namespace
 /// (<c>--network=container:&lt;a&gt;</c>) so they reach each other on the
-/// same loopback — equivalent to the two-process-on-127.0.0.1 setup
+/// same loopback - equivalent to the two-process-on-127.0.0.1 setup
 /// the upstream linbpq test runs on natively. Bridge networking with
 /// distinct container IPs has not been verified to work for AGW
 /// dispatch and is avoided.
 ///
-/// Closes #5 — same Testcontainers migration as
+/// Closes #5 - same Testcontainers migration as
 /// <see cref="LinbpqIntegrationFixture"/>. Container B uses
 /// <c>WithNetworkMode("container:&lt;A's id&gt;")</c> so its loopback is
 /// A's, and its AGW port is published via A's port mappings.
@@ -49,7 +49,7 @@ public sealed class TwoInstanceLinbpqFixture : IAsyncLifetime
     public string ApplCallB => "N0BBB-9";
 
     /// <summary>AGW port byte (0-indexed) that points at the AXIP carrier
-    /// port on either BPQ — port 1 is Telnet, port 2 is AXIP, hence index 1.
+    /// port on either BPQ - port 1 is Telnet, port 2 is AXIP, hence index 1.
     /// Use this when the SUT issues a connect that needs to reach the
     /// peer instance.</summary>
     public int AxipPortIndex => 1;
@@ -89,7 +89,7 @@ public sealed class TwoInstanceLinbpqFixture : IAsyncLifetime
         AgwPortA = _containerA.GetMappedPublicPort(InsideAgwPortA);
         AgwPortB = _containerA.GetMappedPublicPort(InsideAgwPortB);
 
-        // B shares A's netns. No port bindings here — A's already
+        // B shares A's netns. No port bindings here - A's already
         // publish them. Testcontainers.NET doesn't expose
         // `--network=container:X` directly, so we drop into the
         // create-parameter modifier and set HostConfig.NetworkMode.
@@ -110,7 +110,7 @@ public sealed class TwoInstanceLinbpqFixture : IAsyncLifetime
         // the AXIP UDP socket binds a moment later.
         await Task.Delay(2000);
 
-        // Sanity check from the host side — both AGW ports should be
+        // Sanity check from the host side - both AGW ports should be
         // reachable. The wait strategies above polled from inside the
         // container; this confirms the host-side mapping landed.
         await WaitForTcp(Host, AgwPortA, TimeSpan.FromSeconds(5));
@@ -119,7 +119,7 @@ public sealed class TwoInstanceLinbpqFixture : IAsyncLifetime
 
     public async ValueTask DisposeAsync()
     {
-        // Dispose B first — sharing A's netns means killing A pulls B's
+        // Dispose B first - sharing A's netns means killing A pulls B's
         // network out from under it. Reverse-order shutdown is the
         // graceful path.
         if (_containerB is not null) await _containerB.DisposeAsync();

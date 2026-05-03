@@ -3,7 +3,7 @@ using SQLite;
 namespace dapps.core.Models;
 
 /// <summary>
-/// Plan B6.1 — connected-mode probe-and-map. One row per known
+/// Plan B6.1 - connected-mode probe-and-map. One row per known
 /// callsign that the prober has either tried, or that an operator
 /// has flagged opt-out. The schedule runs L2 connects to each
 /// row's <see cref="Callsign"/> on the chosen <see cref="LastBpqPort"/>
@@ -17,7 +17,7 @@ namespace dapps.core.Models;
 [Table("probednodes")]
 public sealed class DbProbedNode
 {
-    /// <summary>Full callsign with SSID (e.g. <c>M0LTE-9</c>) — same
+    /// <summary>Full callsign with SSID (e.g. <c>M0LTE-9</c>) - same
     /// shape as <see cref="DbNeighbour.Callsign"/>. Case-normalised
     /// to upper at write time.</summary>
     [PrimaryKey]
@@ -45,13 +45,13 @@ public sealed class DbProbedNode
     /// can spot peers going dark.</summary>
     public int ConsecutiveFailures { get; set; }
 
-    /// <summary>Cumulative count of successful probes — purely for
+    /// <summary>Cumulative count of successful probes - purely for
     /// the dashboard's "this peer's been reachable N times" stat.</summary>
     public int SuccessCount { get; set; }
 
     /// <summary>Operator opt-out: skip this peer in the scheduled
     /// sweep. On-demand probes via the REST endpoint still go through
-    /// — operators sometimes want to test an opted-out peer manually.</summary>
+    /// - operators sometimes want to test an opted-out peer manually.</summary>
     public bool OptOut { get; set; }
 
     /// <summary>How this row first ended up on our radar. Set on the
@@ -62,12 +62,12 @@ public sealed class DbProbedNode
     /// dashboard surfaces the source so a sysop can tell a manual
     /// neighbour apart from a hearsay candidate.
     /// <list type="bullet">
-    /// <item><c>neighbour</c> — manual <see cref="DbNeighbour"/> row.</item>
-    /// <item><c>discovered</c> — heard via beacon
+    /// <item><c>neighbour</c> - manual <see cref="DbNeighbour"/> row.</item>
+    /// <item><c>discovered</c> - heard via beacon
     /// (<see cref="DbDiscoveredPeer"/>).</item>
-    /// <item><c>via:&lt;callsign&gt;</c> — learned from a peers query
+    /// <item><c>via:&lt;callsign&gt;</c> - learned from a peers query
     /// addressed to that callsign.</item>
-    /// <item>Empty — pre-Phase-2 row written before the column existed.
+    /// <item>Empty - pre-Phase-2 row written before the column existed.
     /// Treated as <c>neighbour</c> for display purposes.</item>
     /// </list></summary>
     public string Source { get; set; } = "";

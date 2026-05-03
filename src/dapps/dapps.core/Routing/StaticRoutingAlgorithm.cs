@@ -10,10 +10,10 @@ namespace dapps.core.Routing;
 ///
 /// <list type="number">
 /// <item>Manual <see cref="DbNeighbour"/> with matching base callsign
-///   — explicit operator override.</item>
+///   - explicit operator override.</item>
 /// <item>Fresh <see cref="DbDiscoveredPeer"/> rows for that base
 ///   callsign, sorted by <c>CostHint</c> ascending then <c>Hops</c>
-///   ascending — pick the cheapest fresh channel the peer's been
+///   ascending - pick the cheapest fresh channel the peer's been
 ///   heard on.</item>
 /// <item>Hand-maintained <see cref="DbRouteHint"/> next-hop fallback.</item>
 /// <item>None of the above → <see cref="RouteDecision.Unreachable"/>.</item>
@@ -31,7 +31,7 @@ public sealed class StaticRoutingAlgorithm(ILogger<StaticRoutingAlgorithm> logge
         var peers = await ctx.GetDiscoveredPeersAsync(ct);
 
         // Destinations are `app@call[-ssid]`. Compare on the base
-        // callsign — SSID mismatches between configured route and
+        // callsign - SSID mismatches between configured route and
         // destination are tolerated.
         var destBaseCall = message.Destination.Split('@').Last().Split('-')[0];
 

@@ -130,7 +130,7 @@ public class BackhaulMessageCodecTests
     [Fact]
     public void RoundTrip_BothListsEmpty_DoesNotEncodeListBytes()
     {
-        // Empty lists must not flip the flag bits — empty-vs-null
+        // Empty lists must not flip the flag bits - empty-vs-null
         // distinction matters for source-routed semantics ("source
         // routed with no remaining hops" vs "no source route at all"),
         // and the codec round-trip needs to preserve which one it is.
@@ -146,7 +146,7 @@ public class BackhaulMessageCodecTests
         var encoded = BackhaulMessageCodec.Encode(input);
         var decoded = BackhaulMessageCodec.Decode(encoded);
 
-        // Empty lists round-trip as null — the flag bit is the only
+        // Empty lists round-trip as null - the flag bit is the only
         // signal of presence, and an empty list collapses to "absent"
         // on the wire to save bytes. Senders that need to distinguish
         // empty from null at the algorithm layer can recover by
@@ -162,7 +162,7 @@ public class BackhaulMessageCodecTests
         // F2 multi-part: when forwarded over a datagram bearer, the
         // fragment headers (master id + 1-based index + total) must
         // traverse the codec or the receiver can't tell N independent
-        // datagrams apart from N parts of one larger message — and
+        // datagrams apart from N parts of one larger message - and
         // delivers each as a standalone inbox row instead of holding
         // them in the reassembly buffer.
         var input = new BackhaulMessage(

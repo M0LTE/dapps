@@ -83,7 +83,7 @@ jobs:
       - name: Decide release
         id: decide
         # Only on master pushes. PRs and workflow_dispatch never publish
-        # — they're just verifying the build/test path works.
+        # - they're just verifying the build/test path works.
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -91,13 +91,13 @@ jobs:
           tag="v${{ steps.version.outputs.value }}"
           if gh release view "$tag" >/dev/null 2>&1; then
             echo "should_release=false" >> "$GITHUB_OUTPUT"
-            echo "Release $tag already exists — skipping release."
+            echo "Release $tag already exists - skipping release."
           else
             echo "should_release=true" >> "$GITHUB_OUTPUT"
             echo "Will publish $tag."
           fi
 
-  # UI tests live in dapps.core.uitests — they boot dapps.core as a
+  # UI tests live in dapps.core.uitests - they boot dapps.core as a
   # subprocess and drive Razor pages with headless Chromium via
   # Playwright. Separate job rather than rolled into `test` because:
   # (1) Chromium install + browser deps are a noticeable slowdown the
@@ -139,7 +139,7 @@ jobs:
         run: dotnet test src/dapps/dapps.core.uitests/dapps.core.uitests.csproj --no-build --configuration Release -- --output detailed
 
       - name: Upload screenshots
-        # Always upload — screenshots are useful both for failure
+        # Always upload - screenshots are useful both for failure
         # triage AND as a reference for "what does the UI look like
         # right now after this PR".
         if: always()
@@ -150,7 +150,7 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
-  # .NET 8 LTS targets glibc 2.23 — older than any modern distro — so
+  # .NET 8 LTS targets glibc 2.23 - older than any modern distro - so
   # building on ubuntu-latest produces binaries that load on Raspberry
   # Pi OS 11 (Bullseye) and newer without further plumbing.
   build:
@@ -191,14 +191,14 @@ jobs:
         # operator drops one file on a server. Trimming is left off:
         # ASP.NET Core + DI + JSON have enough reflection that trimming
         # tends to break startup in subtle ways. Binary size is ~100MB
-        # — acceptable cost for "no runtime install needed".
+        # - acceptable cost for "no runtime install needed".
         #
         # IncludeAllContentForSelfExtract=true forces every bundled
         # assembly (managed AND native) to be extracted to a per-run
         # cache dir on startup, instead of the default in-memory bundle
         # resolver. We hit a real reproducible bug on linux-arm where
         # the in-memory resolver couldn't load System.Diagnostics.Process
-        # — the assembly bytes were in the bundle (verified via
+        # - the assembly bytes were in the bundle (verified via
         # `strings`) but the runtime threw FileNotFoundException when
         # JIT'ing code that referenced it. The behaviour was 100%
         # reproducible across consecutive apply-update runs and not

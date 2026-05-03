@@ -12,7 +12,7 @@ namespace dapps.client.Transport;
 ///   - identifying the local callsign as the source
 ///   - asking the node to connect to the remote callsign on a given BPQ port
 ///   - returning a Stream over which raw bytes flow once connected
-/// It is not responsible for any DAPPS-protocol semantics — that lives in
+/// It is not responsible for any DAPPS-protocol semantics - that lives in
 /// <see cref="DappsProtocolClient"/>.
 /// </summary>
 public interface IDappsOutboundTransport

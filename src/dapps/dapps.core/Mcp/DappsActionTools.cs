@@ -8,10 +8,10 @@ using ModelContextProtocol.Server;
 namespace dapps.core.Mcp;
 
 /// <summary>
-/// Plan M PR-B — operator-supervised action tools. Each method
+/// Plan M PR-B - operator-supervised action tools. Each method
 /// performs the same work the dashboard's "run now" buttons do:
 /// fire a probe / poll / solicit, submit a test message. Deliberately
-/// no autonomy — the LLM proposes, the operator (via the user prompt)
+/// no autonomy - the LLM proposes, the operator (via the user prompt)
 /// triggers. Risky shapes (changing callsign, restarting services,
 /// rolling back updates) are out of scope.
 /// </summary>
@@ -26,11 +26,11 @@ public sealed class DappsActionTools(
 {
     [McpServerTool(Name = "run_probe")]
     [Description(
-        "Probe a single callsign now (B6.1). Bypasses the normal cadence + airtime budget — operator-triggered " +
+        "Probe a single callsign now (B6.1). Bypasses the normal cadence + airtime budget - operator-triggered " +
         "actions are explicit human decisions. The probe is over AGW; the BPQ port is resolved in this " +
         "precedence order: (1) the configured neighbour's BpqPort, (2) the AGW-bearer discovered peer's " +
         "observed port, (3) SystemOptions.DefaultBpqPort. Returns an error if the callsign is unknown on " +
-        "every surface — add a /Neighbours row first, or wait for a beacon.")]
+        "every surface - add a /Neighbours row first, or wait for a beacon.")]
     public async Task<DbProbedNode> RunProbeAsync(
         [Description("Target DAPPS callsign, case-insensitive (e.g. 'M0LTE-9').")] string callsign,
         CancellationToken ct)
@@ -42,7 +42,7 @@ public sealed class DappsActionTools(
         if (!hasRoute)
         {
             throw new InvalidOperationException(
-                $"No AGW route to {normalized} — add a /Neighbours row or wait for a beacon.");
+                $"No AGW route to {normalized} - add a /Neighbours row or wait for a beacon.");
         }
         return await probeScheduler.ProbeAndRecordAsync(
             options.CurrentValue.Callsign, normalized, port, ct);
@@ -52,7 +52,7 @@ public sealed class DappsActionTools(
     [Description(
         "Run a full B6.1 probe sweep across every eligible target (manual neighbours + AGW-bearer discovered " +
         "peers + transitive 'via:CALLSIGN' candidates, less opt-outs). Same code path the scheduler runs on " +
-        "its cadence. Per-probe airtime-budget gating still applies — if the budget is exhausted mid-sweep " +
+        "its cadence. Per-probe airtime-budget gating still applies - if the budget is exhausted mid-sweep " +
         "the remaining probes are skipped. Returns once the sweep completes.")]
     public async Task<string> RunProbeSweepAsync(CancellationToken ct)
     {
@@ -62,7 +62,7 @@ public sealed class DappsActionTools(
 
     [McpServerTool(Name = "run_poll")]
     [Description(
-        "Poll a single callsign now (F3b — the rev-poll path that drains a peer's queued mail for us). " +
+        "Poll a single callsign now (F3b - the rev-poll path that drains a peer's queued mail for us). " +
         "AGW-only by design; UDP peers can't be polled. Looks up the peer's BPQ port the same way as " +
         "run_probe. Mostly useful when an operator suspects a peer has mail queued for us that hasn't been " +
         "drained by F3a opportunistic poll-on-push.")]
@@ -77,7 +77,7 @@ public sealed class DappsActionTools(
         if (!hasRoute)
         {
             throw new InvalidOperationException(
-                $"No AGW route to {normalized} — add a /Neighbours row first.");
+                $"No AGW route to {normalized} - add a /Neighbours row first.");
         }
         return await pollScheduler.PollAndRecordAsync(
             options.CurrentValue.Callsign, normalized, port, ct);
@@ -95,10 +95,10 @@ public sealed class DappsActionTools(
 
     [McpServerTool(Name = "probe_via_nodecall")]
     [Description(
-        "Plan B6.1 Phase 2b — probe a BPQ NODECALL (not a DAPPS application callsign) by connecting " +
+        "Plan B6.1 Phase 2b - probe a BPQ NODECALL (not a DAPPS application callsign) by connecting " +
         "to the node prompt, typing an application command (default 'DAPPS') + CR, and waiting for the " +
         "DAPPSv1> handshake. Banner detection is heuristic: read until the wire goes idle for 500 ms, " +
-        "treat that as 'prompt waiting for input', then send the command. Banner-text-agnostic — works " +
+        "treat that as 'prompt waiting for input', then send the command. Banner-text-agnostic - works " +
         "for any BPQ-style prompt. Use this when the operator knows a remote BPQ has DAPPS configured " +
         "as an APPLICATION but you only know the NODECALL, not the DAPPS callsign. The peers query then " +
         "returns the DAPPS peers the remote knows about, which the agent can run_probe directly.")]
@@ -108,7 +108,7 @@ public sealed class DappsActionTools(
         [Description("BPQ port byte (0-indexed) to use for the connect.")]
         int bpqPort,
         CancellationToken ct,
-        [Description("Application command to type at the node prompt. Default 'DAPPS' — operators with a different APPLICATIONS= name need to override.")]
+        [Description("Application command to type at the node prompt. Default 'DAPPS' - operators with a different APPLICATIONS= name need to override.")]
         string applicationCommand = "DAPPS")
     {
         if (string.IsNullOrWhiteSpace(nodeCall))
@@ -126,11 +126,11 @@ public sealed class DappsActionTools(
     [Description(
         "Fire a one-shot 'who's there?' solicit on a discovery channel (B6.2). Reachable peers reply with " +
         "their normal beacon after a small random delay; replies populate DbDiscoveredPeer via the standard " +
-        "beacon path. The bearer must be currently running — the channel had to be enabled at boot. Useful " +
+        "beacon path. The bearer must be currently running - the channel had to be enabled at boot. Useful " +
         "during HF testing when scheduled beacons may have missed a propagation window.")]
     public async Task<string> RunSolicitAsync(
         [Description("Bearer name: 'agw' or 'udp'.")] string bearer,
-        [Description("Channel key — BPQ port byte stringified for AGW (e.g. '0'), or multicast endpoint for UDP (e.g. '239.0.0.1:54321').")] string channelKey,
+        [Description("Channel key - BPQ port byte stringified for AGW (e.g. '0'), or multicast endpoint for UDP (e.g. '239.0.0.1:54321').")] string channelKey,
         CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(bearer)) throw new ArgumentException("bearer is required", nameof(bearer));
@@ -167,7 +167,7 @@ public sealed class DappsActionTools(
     /// use: explicit neighbour > AGW-bearer discovered peer > the
     /// configured DefaultBpqPort. (port, true) when at least one
     /// surface knew about the callsign; (default, false) when the
-    /// callsign is a stranger to us — caller must surface that as an
+    /// callsign is a stranger to us - caller must surface that as an
     /// error rather than blindly probing the default port.</summary>
     private async Task<(int Port, bool HasRoute)> ResolveAgwPortAsync(string callsign)
     {

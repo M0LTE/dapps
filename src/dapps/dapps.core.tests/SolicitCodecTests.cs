@@ -5,7 +5,7 @@ using dapps.client.Discovery;
 namespace dapps.core.tests;
 
 /// <summary>
-/// Plan B6.2 — wire-shape tests for the solicit codec. Mirror of the
+/// Plan B6.2 - wire-shape tests for the solicit codec. Mirror of the
 /// beacon-codec tests; covers the round-trip plus the rejection cases
 /// the parser has to get right (so a stray beacon or a near-miss
 /// payload doesn't decode to a SolicitFrame).

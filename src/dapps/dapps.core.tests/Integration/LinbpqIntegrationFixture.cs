@@ -9,7 +9,7 @@ namespace dapps.core.tests.Integration;
 /// over a random port. Sufficient for tests that exercise AgwOutboundTransport's
 /// frame layout against a real BPQ AGW listener and its connect-failure path.
 ///
-/// Closes #5 — the prior implementation shelled out to <c>docker run</c>
+/// Closes #5 - the prior implementation shelled out to <c>docker run</c>
 /// directly because Testcontainers' default port-readiness check timed
 /// out before BPQ finished binding AGW. Solved here by an explicit
 /// generous timeout on the wait strategy and skipping the bind-mount
@@ -19,7 +19,7 @@ namespace dapps.core.tests.Integration;
 /// A two-instance topology (AXIP-UDP between containers, A→B AGW connect via
 /// APPL1CALL) was attempted but ran into a BPQ-side issue where inbound 'C'
 /// frames don't reach a registered AGW client through the application-pre-
-/// allocated listener path under Docker bridge networking — needs separate
+/// allocated listener path under Docker bridge networking - needs separate
 /// investigation. The single-instance fixture covers what we actually need
 /// at this layer (frame format + connect handshake + 'd' failure handling).
 /// </summary>
@@ -51,7 +51,7 @@ public sealed class LinbpqIntegrationFixture : IAsyncLifetime
             .WithPortBinding(InsideAgwPort, assignRandomHostPort: true)
             // BPQ's entrypoint takes a few seconds to bind AGW; 60 s is
             // the Testcontainers default and is plenty here. Listening
-            // on the AGW port is the right ready signal — once it's up,
+            // on the AGW port is the right ready signal - once it's up,
             // tests can issue connects.
             .WithWaitStrategy(Wait.ForUnixContainer().UntilPortIsAvailable(InsideAgwPort))
             .Build();

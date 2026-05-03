@@ -6,17 +6,17 @@ using Microsoft.Extensions.Options;
 namespace dapps.core.Controllers;
 
 /// <summary>
-/// Plan B6.1 — connected-mode probe-and-map REST surface.
+/// Plan B6.1 - connected-mode probe-and-map REST surface.
 ///
 /// <list type="bullet">
-/// <item><c>GET /Probes</c> — current state of every probed-node row.</item>
-/// <item><c>POST /Probes/run</c> — kick a full sweep now (off-cadence).</item>
-/// <item><c>POST /Probes/run/{callsign}</c> — probe one callsign now.
+/// <item><c>GET /Probes</c> - current state of every probed-node row.</item>
+/// <item><c>POST /Probes/run</c> - kick a full sweep now (off-cadence).</item>
+/// <item><c>POST /Probes/run/{callsign}</c> - probe one callsign now.
 ///   Unlike the scheduled sweep, on-demand probes go through even when
-///   the row is opt-out — a sysop wants the option to test a specific
+///   the row is opt-out - a sysop wants the option to test a specific
 ///   peer without un-flipping the opt-out toggle.</item>
-/// <item><c>POST /Probes/{callsign}/optout</c> — set/clear opt-out.</item>
-/// <item><c>DELETE /Probes/{callsign}</c> — forget a row entirely
+/// <item><c>POST /Probes/{callsign}/optout</c> - set/clear opt-out.</item>
+/// <item><c>DELETE /Probes/{callsign}</c> - forget a row entirely
 ///   (next sweep will recreate it for non-opted-out targets).</item>
 /// </list>
 /// </summary>
@@ -51,7 +51,7 @@ public class ProbesController(
         if (!hasRoute)
         {
             return BadRequest(
-                $"No AGW route to {normalized} — add a /Neighbours row or wait for a beacon.");
+                $"No AGW route to {normalized} - add a /Neighbours row or wait for a beacon.");
         }
 
         var row = await scheduler.ProbeAndRecordAsync(
@@ -83,7 +83,7 @@ public class ProbesController(
     /// the scheduler uses: explicit neighbour > AGW-bearer discovered
     /// peer > <see cref="SystemOptions.DefaultBpqPort"/>. Returns
     /// (port, true) when at least one source matched, or
-    /// (default, false) when the callsign isn't known anywhere — the
+    /// (default, false) when the callsign isn't known anywhere - the
     /// caller surfaces that as a 400 rather than blindly trying the
     /// default port and emitting a probe to a stranger.</summary>
     private async Task<(int Port, bool HasRoute)> ResolvePort(string callsign)
@@ -119,7 +119,7 @@ public class ProbesController(
 }
 
 /// <summary>Wire shape returned by the /Probes endpoints. Mirrors
-/// <see cref="DbProbedNode"/> 1:1 — keeping a separate model lets the
+/// <see cref="DbProbedNode"/> 1:1 - keeping a separate model lets the
 /// row evolve without breaking the wire shape.</summary>
 public sealed record ProbedNodeModel(
     string Callsign,

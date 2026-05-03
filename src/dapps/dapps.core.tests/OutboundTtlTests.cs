@@ -19,7 +19,7 @@ namespace dapps.core.tests;
 /// App-interface TTL plumbing on submit (REST + MQTT) and on inbound
 /// delivery (MQTT user property). The forwarder-side TTL machinery
 /// from A1 already drops expired rows; these tests cover the missing
-/// piece — letting the *app* request a residual lifetime when
+/// piece - letting the *app* request a residual lifetime when
 /// submitting, and surfacing it on delivery so apps can discriminate
 /// near-expiry messages from fresh ones.
 /// </summary>
@@ -165,7 +165,7 @@ public sealed class OutboundTtlTests : IAsyncLifetime
         await client.PublishAsync(new MqttApplicationMessageBuilder()
             .WithTopic("dapps/out/myapp/N0DEST")
             .WithPayload("hi"u8.ToArray())
-            .WithUserProperty("dapps-ttl", "forever-please")  // bad input — fall through to null
+            .WithUserProperty("dapps-ttl", "forever-please")  // bad input - fall through to null
             .WithQualityOfServiceLevel(MQTTnet.Protocol.MqttQualityOfServiceLevel.AtLeastOnce)
             .Build(), ct);
 
@@ -199,7 +199,7 @@ public sealed class OutboundTtlTests : IAsyncLifetime
         await client.SubscribeAsync("dapps/in/myapp",
             MQTTnet.Protocol.MqttQualityOfServiceLevel.AtLeastOnce, ct);
 
-        // Pre-load a message with TTL=600 created 30s ago — residual
+        // Pre-load a message with TTL=600 created 30s ago - residual
         // ought to be 570 give or take.
         await database.SaveMessage("ttl0001", "hello"u8.ToArray(), salt: 1L,
             destination: "myapp@N0CALL", sourceCallsign: "G7XYZ",
@@ -213,7 +213,7 @@ public sealed class OutboundTtlTests : IAsyncLifetime
         }
 
         // Replay-on-subscribe path doesn't fire for messages saved
-        // before we subscribed — push it explicitly via the broker.
+        // before we subscribed - push it explicitly via the broker.
         var fresh = (await database.GetUnacknowledgedLocalMessagesForApp("myapp")).Single();
         await broker.InjectInboundMessage(fresh);
 

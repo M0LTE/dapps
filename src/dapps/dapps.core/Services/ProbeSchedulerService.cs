@@ -5,7 +5,7 @@ using Microsoft.Extensions.Options;
 namespace dapps.core.Services;
 
 /// <summary>
-/// Plan B6.1 — connected-mode probe-and-map scheduler. When
+/// Plan B6.1 - connected-mode probe-and-map scheduler. When
 /// <see cref="SystemOptions.ProbingEnabled"/> is true, runs a slow
 /// sweep of every known peer (manual <see cref="DbNeighbour"/> +
 /// AGW-bearer <see cref="DbDiscoveredPeer"/>, less opt-outs) and
@@ -15,7 +15,7 @@ namespace dapps.core.Services;
 /// <see cref="SystemOptions.ProbeIntervalHours"/> hours. Within a
 /// sweep, individual probes are spaced by a small random jitter so
 /// we don't burst every BPQ on the network simultaneously. Off-by-
-/// default — sysops opt in.
+/// default - sysops opt in.
 ///
 /// This class is the schedule + state-update half of B6.1; the actual
 /// probe transaction lives in <see cref="NodeProber"/>. Operator-
@@ -33,11 +33,11 @@ public sealed class ProbeSchedulerService(
     OperationalMetrics? metrics = null) : BackgroundService
 {
     /// <summary>
-    /// Plan B7 — clock the strategy dispatcher consults for "what time
+    /// Plan B7 - clock the strategy dispatcher consults for "what time
     /// is it locally?". Production uses the system local-time zone;
     /// tests inject a deterministic offset so they don't depend on the
     /// CI host's TZ. (TimeProvider.LocalTimeZone is a recent addition
-    /// — see <see cref="LocalTimeZone"/>.)
+    /// - see <see cref="LocalTimeZone"/>.)
     /// </summary>
     public TimeZoneInfo LocalTimeZone { get; init; } = TimeZoneInfo.Local;
 
@@ -48,7 +48,7 @@ public sealed class ProbeSchedulerService(
 
     /// <summary>Delay before the first sweep after startup. Long enough
     /// for AGW reconnect, MQTT broker init, and the first beacon round
-    /// to land — probing into a node that just booted produces noise
+    /// to land - probing into a node that just booted produces noise
     /// rather than signal.</summary>
     public TimeSpan StartupDelay { get; init; } = TimeSpan.FromMinutes(15);
 
@@ -85,7 +85,7 @@ public sealed class ProbeSchedulerService(
                 continue;
             }
 
-            // Plan B7 — strategy dispatcher decides whether THIS tick
+            // Plan B7 - strategy dispatcher decides whether THIS tick
             // is the right time to sweep. FixedInterval is the pre-B7
             // shape (sweep, then sleep PIH hours). Overnight runs once
             // per local-time day inside the configured window.
@@ -120,7 +120,7 @@ public sealed class ProbeSchedulerService(
     }
 
     /// <summary>
-    /// Plan B7 — strategy-aware "is it time to sweep?" decision. Pure
+    /// Plan B7 - strategy-aware "is it time to sweep?" decision. Pure
     /// function of (now, options, last-sweep-time, forwarder-activity);
     /// no side effects. Returned <c>SleepFor</c> is the interval to
     /// wait before the next decision (whether or not we sweep this
@@ -156,7 +156,7 @@ public sealed class ProbeSchedulerService(
                 {
                     return new Decision(true, fixedInterval, "forwarder quiet for {idle}");
                 }
-                // Recheck soon — quiet windows arrive on the order of
+                // Recheck soon - quiet windows arrive on the order of
                 // forwarder ticks (5s), no point sleeping a full hour.
                 return new Decision(false, TimeSpan.FromSeconds(Math.Max(15, opts.ProbeQuietWindowSeconds / 4)),
                     $"forwarder active ({idle} ago), waiting for quiet");
@@ -184,7 +184,7 @@ public sealed class ProbeSchedulerService(
     /// <summary>Walk every eligible probe target once, sequentially with
     /// jitter between probes. Public so a triggered "sweep now" path
     /// can call into the same machinery; the scheduler loop calls it
-    /// internally on its cadence. Plan B7: budget-aware — when the
+    /// internally on its cadence. Plan B7: budget-aware - when the
     /// airtime accountant says no, the remaining targets are skipped
     /// for this sweep and resume next time. Operator-triggered
     /// single-callsign probes from <see cref="ProbeAndRecordAsync"/>
@@ -233,7 +233,7 @@ public sealed class ProbeSchedulerService(
     /// <see cref="DbProbedNode"/>. Used by the scheduler and by the
     /// on-demand REST endpoint. Returns the row as written.
     /// <paramref name="fetchPeers"/> controls Plan B6.1 Phase 2
-    /// transitive discovery — when true, a successful probe asks the
+    /// transitive discovery - when true, a successful probe asks the
     /// remote for its peers and stores any new callsigns as candidate
     /// rows for future sweeps. The default is true; opt out by
     /// passing false (e.g. in unit tests that don't model the response).
@@ -248,10 +248,10 @@ public sealed class ProbeSchedulerService(
 
     /// <summary>Same as <see cref="ProbeAndRecordAsync"/> but also
     /// returns the underlying <see cref="NodeProber.ProbeResult"/> so
-    /// callers (Plan M PR-D — exploration tools) can reason about the
+    /// callers (Plan M PR-D - exploration tools) can reason about the
     /// raw peers exchange. Persistence happens identically.
     ///
-    /// Plan B6.1 Phase 2b — dispatches to the node-prompt path when the
+    /// Plan B6.1 Phase 2b - dispatches to the node-prompt path when the
     /// existing <see cref="DbProbedNode"/> row's <see cref="DbProbedNode.Source"/>
     /// starts with <c>node-prompt:</c>. That marker is set by
     /// <see cref="DiscoveryService"/>'s auto-discovery seeder (or by an
@@ -285,7 +285,7 @@ public sealed class ProbeSchedulerService(
     /// across updates and bumps <c>ConsecutiveFailures</c> /
     /// <c>SuccessCount</c>. Sets <see cref="DbProbedNode.Source"/> on
     /// first insert (defaulting to <c>neighbour</c>); never overwrites
-    /// it on update — the row's origin is a fact about how we first
+    /// it on update - the row's origin is a fact about how we first
     /// heard about the callsign and shouldn't drift over time.</summary>
     public async Task<DbProbedNode> RecordResultAsync(NodeProber.ProbeResult result)
     {
@@ -293,7 +293,7 @@ public sealed class ProbeSchedulerService(
         var row = existing ?? new DbProbedNode
         {
             Callsign = result.Callsign,
-            // First time we've ever recorded this callsign — assume
+            // First time we've ever recorded this callsign - assume
             // it's a neighbour-class probe target. Transitively-
             // discovered candidates set their own Source explicitly
             // before the first probe runs (see PersistTransitiveDiscoveriesAsync).
@@ -319,14 +319,14 @@ public sealed class ProbeSchedulerService(
     }
 
     /// <summary>
-    /// Plan B6.1 Phase 2 — record transitively-discovered callsigns as
+    /// Plan B6.1 Phase 2 - record transitively-discovered callsigns as
     /// candidate <see cref="DbProbedNode"/> rows. Skips callsigns we
     /// already track (we don't want hearsay overwriting fresher first-
     /// hand probe state) and skips ourselves (the remote always reports
-    /// us as a peer, since we just talked to them — recording that is
+    /// us as a peer, since we just talked to them - recording that is
     /// noise). Records the asking peer's callsign in <c>Source</c> so a
     /// sysop can tell where each candidate came from. Best guess for
-    /// the port is the same port we just probed the source peer on —
+    /// the port is the same port we just probed the source peer on -
     /// usually right when the network is one shared frequency, often
     /// wrong otherwise; the next sweep surfaces the mismatch as a
     /// regular probe failure.
@@ -340,14 +340,14 @@ public sealed class ProbeSchedulerService(
             if (string.Equals(p.Callsign, ourCallsign, StringComparison.OrdinalIgnoreCase)) continue;
 
             var existing = await database.GetProbedNode(p.Callsign);
-            if (existing is not null) continue;   // we already track this — don't clobber direct state
+            if (existing is not null) continue;   // we already track this - don't clobber direct state
 
             await database.UpsertProbedNode(new DbProbedNode
             {
                 Callsign = p.Callsign.ToUpperInvariant(),
                 LastBpqPort = p.BpqPort ?? result.BpqPort,
                 Source = $"via:{result.Callsign}",
-                // No probe attempt yet — leave LastProbedAt / LastSuccessAt
+                // No probe attempt yet - leave LastProbedAt / LastSuccessAt
                 // null; the scheduler picks it up on the next sweep.
             });
             logger.LogInformation(
@@ -360,7 +360,7 @@ public sealed class ProbeSchedulerService(
     /// Build the eligible target list for a sweep. Sources:
     /// <see cref="DbNeighbour"/> rows without a UDP endpoint (AGW-routable),
     /// AGW-bearer <see cref="DbDiscoveredPeer"/> rows, and Phase-2
-    /// transitive candidates — <see cref="DbProbedNode"/> rows whose
+    /// transitive candidates - <see cref="DbProbedNode"/> rows whose
     /// <c>Source</c> starts with <c>via:</c> (i.e. learned from another
     /// peer's <c>peers</c> response, not yet on either of the other
     /// two surfaces). Per-callsign opt-outs from
@@ -385,7 +385,7 @@ public sealed class ProbeSchedulerService(
         foreach (var n in neighbours)
         {
             if (string.IsNullOrWhiteSpace(n.Callsign)) continue;
-            if (n.UdpEndpoint is not null) continue;   // UDP path — no AGW probe possible
+            if (n.UdpEndpoint is not null) continue;   // UDP path - no AGW probe possible
             if (optOut.Contains(n.Callsign)) continue;
             targets[n.Callsign] = new ProbeTarget(n.Callsign, n.BpqPort ?? opts.DefaultBpqPort);
         }
@@ -400,7 +400,7 @@ public sealed class ProbeSchedulerService(
             targets[p.Callsign] = new ProbeTarget(p.Callsign, p.BpqPort ?? opts.DefaultBpqPort);
         }
 
-        // Phase 2 transitive candidates — DbProbedNode rows whose Source
+        // Phase 2 transitive candidates - DbProbedNode rows whose Source
         // says they were learned via someone else's peers list. Without
         // this, a transitively-discovered callsign would sit in the
         // table forever waiting for an operator to manually probe it.

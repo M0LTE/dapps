@@ -1,7 +1,7 @@
 namespace dapps.client.Backhaul;
 
 /// <summary>
-/// A unit of DAPPS traffic — bearer-neutral. Outbound:
+/// A unit of DAPPS traffic - bearer-neutral. Outbound:
 /// <see cref="IDappsBackhaul"/> implementations translate this shape into
 /// bearer-specific frames (DAPPSv1 stream exchange for AGW today;
 /// companion datagrams for MeshCore later). Inbound: bearer-specific
@@ -30,7 +30,7 @@ public sealed record BackhaulMessage(
 
 // LinkSourceCallsign: the *immediate sender's* callsign, distinct from
 // Originator (the F1 end-to-end source). Carried on bearers that don't
-// natively identify the sender — UDP being the prime example, since
+// natively identify the sender - UDP being the prime example, since
 // the source port is ephemeral and there's no session-level handshake
 // that establishes peer identity. Stamped by the bearer's send path
 // with the local callsign; consumed by the receive path so the inbox
@@ -60,7 +60,7 @@ public sealed record BackhaulMessage(
 // excluding the originator and the local node. Each forwarder
 // appends its own callsign before re-encoding. Carried on
 // flood-discovery messages so the destination (and every transiting
-// node) can derive the reverse path back to the originator —
+// node) can derive the reverse path back to the originator -
 // MeshCoreLikeRoutingAlgorithm uses this to populate its discovered-
 // paths table without explicit RREP frames.
 //

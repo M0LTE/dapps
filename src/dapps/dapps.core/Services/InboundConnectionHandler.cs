@@ -10,12 +10,12 @@ namespace dapps.core.Services;
 /// Receiver-side DAPPSv1 session reader. Bearer-neutral: takes a
 /// duplex byte <see cref="Stream"/> already-connected to a peer and
 /// the peer's callsign already-determined (each bearer figures the
-/// callsign out its own way — AGW reads it off the inbound 'C' frame's
+/// callsign out its own way - AGW reads it off the inbound 'C' frame's
 /// CallFrom field; the legacy Apps-Interface bearer read it from the
 /// first line of the bridged TCP socket). Owns the
 /// `prompt` / `ihave` / `data` correlation and the on-the-wire ack
 /// contract. Once a payload is received and hash-validated, the
-/// completed message is handed off to <see cref="IBackhaulInbox"/> —
+/// completed message is handed off to <see cref="IBackhaulInbox"/> -
 /// where DAPPS-level concerns (queue persistence, MQTT injection,
 /// future forwarding decisions) live, decoupled from the bearer.
 /// </summary>
@@ -30,7 +30,7 @@ public class InboundConnectionHandler(
     private readonly ILogger logger = loggerFactory.CreateLogger<InboundConnectionHandler>();
     private readonly OperationalMetrics metrics = metrics ?? new OperationalMetrics();
 
-    // Inactivity timeout per spec — AX.25 T3 default is 3 min; matching that
+    // Inactivity timeout per spec - AX.25 T3 default is 3 min; matching that
     // keeps DAPPS sessions tearing down on roughly the same cadence as the
     // underlying link layer would on its own.
     private static readonly TimeSpan InactivityTimeout = TimeSpan.FromMinutes(3);
@@ -136,15 +136,15 @@ public class InboundConnectionHandler(
         Data,
         Help,
         /// <summary>
-        /// Plan B6.1 Phase 2 — transitive peer discovery. Client asks
+        /// Plan B6.1 Phase 2 - transitive peer discovery. Client asks
         /// "who do you forward to?"; we emit one <c>peer &lt;call&gt;</c>
         /// line per known forward target, then <c>end</c>, then loop
-        /// back to the next prompt. No state, no persistence — purely
+        /// back to the next prompt. No state, no persistence - purely
         /// a read-only view of our neighbour / discovered-peer tables.
         /// </summary>
         Peers,
         /// <summary>
-        /// Plan F3 — reverse forwarding. Client asks "got mail for me?";
+        /// Plan F3 - reverse forwarding. Client asks "got mail for me?";
         /// we drain matching outbound queue entries via the same
         /// ihave/send/data/ack pattern we'd use to push, then re-emit
         /// the <c>DAPPSv1&gt;</c> prompt to signal we're done. Optional
@@ -206,7 +206,7 @@ public class InboundConnectionHandler(
     }
 
     /// <summary>
-    /// Plan B6.1 Phase 2 — emit the set of callsigns we forward to.
+    /// Plan B6.1 Phase 2 - emit the set of callsigns we forward to.
     /// One <c>peer &lt;callsign&gt; source=&lt;n|d&gt;[ port=&lt;byte&gt;]</c>
     /// line per known forward target, then <c>end</c>. Callers (today:
     /// dapps probers populating their own <c>DbProbedNode</c> table for
@@ -214,15 +214,15 @@ public class InboundConnectionHandler(
     ///
     /// Sources reported:
     /// <list type="bullet">
-    /// <item><c>n</c> — manual <see cref="Models.DbNeighbour"/> row,
+    /// <item><c>n</c> - manual <see cref="Models.DbNeighbour"/> row,
     /// AGW-routable (UDP-only neighbours are skipped; the asker can't
     /// reach them over the same bearer).</item>
-    /// <item><c>d</c> — AGW-bearer <see cref="Models.DbDiscoveredPeer"/>
+    /// <item><c>d</c> - AGW-bearer <see cref="Models.DbDiscoveredPeer"/>
     /// row. We've heard a beacon but never been asked to forward to
     /// them ourselves; useful as an exploration hint for the asker.</item>
     /// </list>
     ///
-    /// Read-only — emitting a peer is not an endorsement, doesn't bind
+    /// Read-only - emitting a peer is not an endorsement, doesn't bind
     /// us to forward, and doesn't leak anything more sensitive than
     /// what already shows up on the air via beacons or DAPPS forwarding.
     /// </summary>
@@ -235,7 +235,7 @@ public class InboundConnectionHandler(
         foreach (var n in neighbours)
         {
             if (string.IsNullOrWhiteSpace(n.Callsign)) continue;
-            if (n.UdpEndpoint is not null) continue;   // UDP-only — not AGW-reachable for the asker
+            if (n.UdpEndpoint is not null) continue;   // UDP-only - not AGW-reachable for the asker
             if (!emitted.Add(n.Callsign)) continue;
             sb.Append("peer ").Append(n.Callsign).Append(" source=n");
             if (n.BpqPort is { } port) sb.Append(" port=").Append(port);
@@ -260,7 +260,7 @@ public class InboundConnectionHandler(
     }
 
     /// <summary>
-    /// Plan F3 — reverse forwarding. The caller has asked us to drain
+    /// Plan F3 - reverse forwarding. The caller has asked us to drain
     /// queued mail destined for them; we walk the outbound queue,
     /// emitting <c>ihave</c> / <c>data</c> exchanges as the SENDER,
     /// then re-emit the <c>DAPPSv1&gt;</c> prompt so the caller's
@@ -269,7 +269,7 @@ public class InboundConnectionHandler(
     /// Final-destination only: we drain messages whose <c>destination</c>
     /// suffix matches the caller's base callsign. Transit messages
     /// (caller is just a known forwarder for somewhere else) are
-    /// deliberately not included — the caller's <c>rev</c> is for
+    /// deliberately not included - the caller's <c>rev</c> is for
     /// THEIR mail, not for them to act as a downstream relay.
     /// </summary>
     private async Task HandleRev(Stream stream, string command, CancellationToken ct)
@@ -281,7 +281,7 @@ public class InboundConnectionHandler(
         var queue = await database.GetMessagesForCaller(callerBase, requestedIds);
 
         // Sender state machine: reuse DappsProtocolClient but skip its
-        // ReadInitialPromptAsync — we're already mid-session, the
+        // ReadInitialPromptAsync - we're already mid-session, the
         // client doesn't owe us another prompt.
         var protocol = new DappsProtocolClient(stream, loggerFactory);
         var drained = 0;
@@ -320,7 +320,7 @@ public class InboundConnectionHandler(
             }
             catch (Exception ex)
             {
-                // One failed exchange shouldn't bail the whole drain —
+                // One failed exchange shouldn't bail the whole drain -
                 // the caller might still want subsequent queued
                 // messages. The link layer will tear us down if it's
                 // really gone.
@@ -367,7 +367,7 @@ public class InboundConnectionHandler(
         {
             if (offer.CompressedLength is null)
             {
-                // Shouldn't happen — we validate at offer time — but defend
+                // Shouldn't happen - we validate at offer time - but defend
                 // against a corrupted DB row.
                 logger.LogError("Offer {0} marked fmt=d but has no clen stored", id);
                 await stream.WriteUtf8AndFlush("bad " + id + "\n");
@@ -401,7 +401,7 @@ public class InboundConnectionHandler(
 
             buffer = outputMs.ToArray();
         }
-        else // fmt=p (or absent — default plain)
+        else // fmt=p (or absent - default plain)
         {
             logger.LogInformation("Waiting for {0} uncompressed bytes", buffer.Length);
             try

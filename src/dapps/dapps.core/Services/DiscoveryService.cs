@@ -20,7 +20,7 @@ namespace dapps.core.Services;
 ///      so the resolver can sort candidates by cost without joining.
 ///
 /// New bearers (MeshCore, KISS) get a one-line addition to the
-/// bearer-construction switch — the rest of the daemon is bearer-
+/// bearer-construction switch - the rest of the daemon is bearer-
 /// agnostic.
 /// </summary>
 public sealed class DiscoveryService(
@@ -35,7 +35,7 @@ public sealed class DiscoveryService(
     private static readonly TimeSpan SweepInterval = TimeSpan.FromMinutes(1);
 
     /// <summary>How often to re-check the channels table when no
-    /// channels are configured yet — operators add them via REST while
+    /// channels are configured yet - operators add them via REST while
     /// the service is running, so we can't just give up at start.</summary>
     private static readonly TimeSpan StartupPollInterval = TimeSpan.FromSeconds(10);
 
@@ -51,7 +51,7 @@ public sealed class DiscoveryService(
             rows = (await database.GetDiscoveryChannels()).Where(r => r.Enabled).ToList();
             if (rows.Count > 0) break;
             logger.LogInformation(
-                "DiscoveryService: no channels configured yet — polling every {0}s",
+                "DiscoveryService: no channels configured yet - polling every {0}s",
                 (int)StartupPollInterval.TotalSeconds);
             try { await Task.Delay(StartupPollInterval, timeProvider, stoppingToken); }
             catch (OperationCanceledException) { return; }
@@ -67,7 +67,7 @@ public sealed class DiscoveryService(
             var bearer = TryConstructBearer(bearerName);
             if (bearer is null)
             {
-                logger.LogWarning("DiscoveryService: unknown bearer '{0}' — skipping {1} channel(s)",
+                logger.LogWarning("DiscoveryService: unknown bearer '{0}' - skipping {1} channel(s)",
                     bearerName, group.Count());
                 continue;
             }
@@ -142,10 +142,10 @@ public sealed class DiscoveryService(
         CancellationToken stoppingToken)
     {
         var nextEmit = new Dictionary<(string Bearer, string ChannelKey), DateTime>();
-        // Plan B6.2 follow-up — per-channel scheduled solicit. Only
+        // Plan B6.2 follow-up - per-channel scheduled solicit. Only
         // populated for channels with a positive SolicitIntervalSeconds.
         // The first solicit fires one full interval after start (not
-        // immediately) — beacons cover the freshly-joined-node case
+        // immediately) - beacons cover the freshly-joined-node case
         // already, and an immediate solicit would step on our own
         // initial beacon.
         var nextSolicit = new Dictionary<(string Bearer, string ChannelKey), DateTime>();
@@ -175,7 +175,7 @@ public sealed class DiscoveryService(
                     var key = (kv.Key, ch.ChannelKey);
                     if (now < nextEmit[key]) continue;
 
-                    // Plan B7 — airtime budget. Defer this beacon if the
+                    // Plan B7 - airtime budget. Defer this beacon if the
                     // operator-set cap would be blown; reschedule a short
                     // way out so we keep checking each tick. Without the
                     // accountant (DI hasn't supplied one in tests, or
@@ -183,7 +183,7 @@ public sealed class DiscoveryService(
                     var beaconCost = LinkClassDefaults.AirtimeSecondsEstimate(ch.LinkClass, AirtimeKind.Beacon);
                     if (airtime is { } acct && !acct.TryReserve(beaconCost, $"beacon {kv.Key}/{ch.ChannelKey}", ch.ChannelKey, ch.AirtimeBudgetSecondsPerHour))
                     {
-                        // Try again in a quarter of the regular interval —
+                        // Try again in a quarter of the regular interval -
                         // budgets free up as old entries roll out of the
                         // 60-min window, so we don't want to block this
                         // channel for the full beacon interval.
@@ -196,7 +196,7 @@ public sealed class DiscoveryService(
                         Callsign: options.CurrentValue.Callsign,
                         Hops: 0,
                         Ttl: ch.AdvertisedTtlSeconds,
-                        // Bearer hint on outgoing beacons is bookkeeping only —
+                        // Bearer hint on outgoing beacons is bookkeeping only -
                         // the receiver overrides with its own observation.
                         Bearer: kv.Key == "udp"
                             ? new UdpBearerHint(ch.ChannelKey)
@@ -214,7 +214,7 @@ public sealed class DiscoveryService(
                     nextEmit[key] = now.AddSeconds(Math.Max(5, ch.BeaconIntervalSeconds));
                 }
 
-                // Plan B6.2 — scheduled solicit cadence. Independent of
+                // Plan B6.2 - scheduled solicit cadence. Independent of
                 // beacons: a channel may want to beacon every 30 min and
                 // solicit every 4 h, or beacon never (Enabled but
                 // BeaconIntervalSeconds large) and solicit on a tighter
@@ -228,7 +228,7 @@ public sealed class DiscoveryService(
                     var solicitCost = LinkClassDefaults.AirtimeSecondsEstimate(ch.LinkClass, AirtimeKind.Solicit);
                     if (airtime is { } sacct && !sacct.TryReserve(solicitCost, $"scheduled-solicit {kv.Key}/{ch.ChannelKey}", ch.ChannelKey, ch.AirtimeBudgetSecondsPerHour))
                     {
-                        // Same defer math as scheduled beacons — a
+                        // Same defer math as scheduled beacons - a
                         // quarter of the regular interval keeps us
                         // checking but doesn't burn cycles re-trying.
                         var deferSec = Math.Max(15, ch.SolicitIntervalSeconds / 4);
@@ -293,7 +293,7 @@ public sealed class DiscoveryService(
     }
 
     /// <summary>
-    /// Plan B6.2 — bound on the random delay before responding to an
+    /// Plan B6.2 - bound on the random delay before responding to an
     /// incoming solicit. Each receiver picks a uniform random duration
     /// in [0, this] before emitting its beacon, so ten nodes hearing
     /// the same solicit don't all reply at once and saturate the
@@ -324,7 +324,7 @@ public sealed class DiscoveryService(
 
                         case ReceivedSolicit rs:
                             logger.LogInformation(
-                                "DiscoveryService: solicit from {0} on {1}/{2} — scheduling reply",
+                                "DiscoveryService: solicit from {0} on {1}/{2} - scheduling reply",
                                 rs.Solicit.Callsign, bearer.Name, rs.ChannelKey);
                             // Fire-and-forget: respond on a delay so the
                             // listen loop keeps draining new frames.
@@ -345,7 +345,7 @@ public sealed class DiscoveryService(
     }
 
     /// <summary>
-    /// Plan B6.2 — schedule a beacon emission in response to a solicit.
+    /// Plan B6.2 - schedule a beacon emission in response to a solicit.
     /// Random 0..<see cref="SolicitResponseMaxDelay"/> jitter avoids the
     /// "ten nodes hear the same solicit, all reply at once" channel-
     /// saturation case. Skips silently if we don't have the channel
@@ -371,7 +371,7 @@ public sealed class DiscoveryService(
             {
                 await Task.Delay(TimeSpan.FromMilliseconds(delayMs), timeProvider, ct);
             }
-            // Plan B7 — solicit replies count against the same budget as
+            // Plan B7 - solicit replies count against the same budget as
             // scheduled beacons. Skip the reply if the budget says no;
             // we'll catch the soliciting peer on the next regular beacon.
             var solicitCost = LinkClassDefaults.AirtimeSecondsEstimate(ch.LinkClass, AirtimeKind.Solicit);
@@ -459,11 +459,11 @@ public sealed class DiscoveryService(
         };
         await database.UpsertDiscoveredPeer(row);
 
-        // Plan B6.1 Phase 2b — auto-seed node-prompt candidates from
+        // Plan B6.1 Phase 2b - auto-seed node-prompt candidates from
         // AGW beacons. Derive the BASE callsign of the beacon source
         // (the bit before the SSID hyphen) and register it as a probe
         // target whose Source flag tells the scheduler to use the
-        // node-prompt navigation path. UDP beacons are skipped — we
+        // node-prompt navigation path. UDP beacons are skipped - we
         // can't reach the NODECALL via UDP, only via AGW.
         if (options.CurrentValue.AutoDiscoverViaNodeCall
             && beacon.Bearer is AgwBearerHint agw)
@@ -478,13 +478,13 @@ public sealed class DiscoveryService(
         var ourBase = options.CurrentValue.Callsign.Split('-')[0];
         if (string.Equals(baseCallsign, ourBase, StringComparison.OrdinalIgnoreCase))
         {
-            // Don't seed candidates for ourselves — we'd be probing
+            // Don't seed candidates for ourselves - we'd be probing
             // our own NODECALL, which doesn't loop through L2.
             return;
         }
 
         // Skip if we already track ANY probe state for this base callsign
-        // — direct, transitive, or a previous node-prompt seed. The
+        // - direct, transitive, or a previous node-prompt seed. The
         // existing row's Source is more authoritative than an
         // auto-seeded one, so don't clobber.
         var existing = await database.GetProbedNode(baseCallsign);

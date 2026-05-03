@@ -100,7 +100,7 @@ public sealed class MeshCoreSourceRoutedForwardingTests : IAsyncLifetime
     public async Task RelayPreservesSourceRoute_StripsHeadAndForwards()
     {
         // Source route as it arrives at the relay: [G0SIC-1, G0SID-1]
-        // — meaning "next hop after me is G0SIC-1, then G0SID-1, then
+        // - meaning "next hop after me is G0SIC-1, then G0SID-1, then
         // the destination". Sender already stripped the relay itself
         // from the head before transmitting, so the relay sees the
         // remaining path.
@@ -158,7 +158,7 @@ public sealed class MeshCoreSourceRoutedForwardingTests : IAsyncLifetime
         await inbox.DeliverAsync(inbound, OriginatorCallsign, TestContext.Current.CancellationToken);
 
         // Check persistence captured the empty traversal record (not
-        // null — empty means "in-flight flood, no intermediates yet").
+        // null - empty means "in-flight flood, no intermediates yet").
         using (var c = DbInfo.GetConnection())
         {
             var row = c.Query<DbMessage>("select * from messages where Id=?", "mcacc02").Single();
@@ -187,7 +187,7 @@ public sealed class MeshCoreSourceRoutedForwardingTests : IAsyncLifetime
     {
         // Originator G0SIA-1 emits a flood that arrived at us via
         // intermediate G0HOP1-1. The destination is local, so we
-        // deliver — but we ALSO learn that to reach G0SIA-1 from us,
+        // deliver - but we ALSO learn that to reach G0SIA-1 from us,
         // we should source-route through [G0HOP1-1].
         var inbound = new BackhaulMessage(
             Id: "mcacc03",

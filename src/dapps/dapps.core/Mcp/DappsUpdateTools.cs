@@ -7,7 +7,7 @@ using ModelContextProtocol.Server;
 namespace dapps.core.Mcp;
 
 /// <summary>
-/// Plan M follow-up — operator-supervised self-update tools so an
+/// Plan M follow-up - operator-supervised self-update tools so an
 /// MCP client can do what the dashboard's "Apply update" button
 /// does, plus check status and re-poll GitHub. Closes the iteration
 /// loop where the agent ships a PR and then asks the human to

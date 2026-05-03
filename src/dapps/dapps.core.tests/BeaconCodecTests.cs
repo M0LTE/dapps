@@ -7,7 +7,7 @@ namespace dapps.core.tests;
 /// <summary>
 /// Wire-form tests for the discovery beacon. Anyone running a packet
 /// monitor on a frequency carrying DAPPS UI frames sees this exact
-/// text — keeping it parseable both ways is important.
+/// text - keeping it parseable both ways is important.
 /// </summary>
 public class BeaconCodecTests
 {

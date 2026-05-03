@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-sensor.py — periodic sensor publisher over DAPPS.
+sensor.py - periodic sensor publisher over DAPPS.
 
 Every N seconds, reads a "sensor" (a fake CPU-load number for the
 purposes of this example) and publishes a JSON reading to a list of
@@ -15,9 +15,9 @@ Or as a one-shot from cron / systemd-timer:
     python sensor.py --once --subscribers G7XYZ
 
 What this demonstrates:
-  - A "publisher" app that doesn't subscribe to anything itself — pure
+  - A "publisher" app that doesn't subscribe to anything itself - pure
     submit-and-go. No on_message callback, no ack handling.
-  - Long TTL (24h) — old sensor readings are still useful information
+  - Long TTL (24h) - old sensor readings are still useful information
     ("temp was 19C four hours ago"); much better than dropping them.
   - Structured payload (JSON). DAPPS treats it as opaque bytes; the
     receiver decodes.
@@ -54,7 +54,7 @@ def publish_one(client: mqtt.Client, subscribers: list[str]) -> None:
     reading = read_sensor()
     payload = json.dumps(reading).encode("utf-8")
 
-    # 24h TTL — sensor data is interesting for a long time, but a
+    # 24h TTL - sensor data is interesting for a long time, but a
     # week-old reading is just clutter.  Pick whatever matches the
     # cadence: roughly 1.5–2x the publish interval is a sensible floor.
     props = Properties(PacketType.PUBLISH)

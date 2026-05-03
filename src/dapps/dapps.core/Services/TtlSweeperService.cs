@@ -6,7 +6,7 @@ namespace dapps.core.Services;
 /// (no neighbours, AGW down, etc.) still ages out stale rows instead of
 /// holding them forever.
 ///
-/// Rows with no ttl set are exempt — those are local app submissions
+/// Rows with no ttl set are exempt - those are local app submissions
 /// without an expiry, or pre-A1 rows from before TTL was tracked.
 /// </summary>
 public class TtlSweeperService(
@@ -19,7 +19,7 @@ public class TtlSweeperService(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        // PeriodicTimer takes a TimeProvider in .NET 8 — FakeTimeProvider
+        // PeriodicTimer takes a TimeProvider in .NET 8 - FakeTimeProvider
         // can drive the WaitForNextTickAsync loop deterministically in
         // tests via Advance().
         using var timer = new PeriodicTimer(SweepInterval, timeProvider);
@@ -59,7 +59,7 @@ public class TtlSweeperService(
 
         // F2: drop incomplete fragment reassemblies whose first fragment
         // arrived more than FragmentReassemblyTimeoutSeconds ago. Long
-        // window by default (7 days) — HF / mesh propagation gaps
+        // window by default (7 days) - HF / mesh propagation gaps
         // legitimately last days, and we'd rather hold the partial
         // bytes than throw away most of a near-complete message.
         try

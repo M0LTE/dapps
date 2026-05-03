@@ -2,8 +2,8 @@
 Description=DAPPS - Distributed Asynchronous Packet Pub-Sub
 Documentation=https://github.com/M0LTE/dapps
 After=network.target linbpq.service
-# We can start without linbpq up — DAPPS will retry the AGW connection
-# on its own — but ordering after linbpq makes the happy path quick.
+# We can start without linbpq up - DAPPS will retry the AGW connection
+# on its own - but ordering after linbpq makes the happy path quick.
 Wants=linbpq.service
 
 [Service]
@@ -18,19 +18,19 @@ RestartSec=5
 
 # Operationally-fatal config errors that won't fix themselves on
 # restart. dapps exits with these specific codes:
-#   78 — fatal config (e.g. MQTT port held by another process). The
+#   78 - fatal config (e.g. MQTT port held by another process). The
 #        operator has to change a setting before retrying. Without
 #        this, dapps would crash-loop nine times before hitting
 #        systemd's default StartLimitBurst back-off.
 RestartPreventExitStatus=78
 
 # Bind the dashboard on every interface so it's reachable from the
-# LAN (real deployments never want loopback-only — the operator's
+# LAN (real deployments never want loopback-only - the operator's
 # laptop is on a different machine). Set the sysop password through
 # the browser on first visit before exposing more widely.
 #
-# To override locally — bind to a specific interface, change the
-# port, etc. — drop a file in /etc/systemd/system/dapps.service.d/
+# To override locally - bind to a specific interface, change the
+# port, etc. - drop a file in /etc/systemd/system/dapps.service.d/
 # rather than editing this unit. e.g.:
 #   [Service]
 #   Environment=ASPNETCORE_URLS=http://192.0.2.1:8080
@@ -38,7 +38,7 @@ RestartPreventExitStatus=78
 # from scripts/dapps.service); editing this file in place doesn't.
 Environment=ASPNETCORE_URLS=http://0.0.0.0:5000
 
-# Hardening — DAPPS only needs its binary, its DB, and TCP.
+# Hardening - DAPPS only needs its binary, its DB, and TCP.
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict

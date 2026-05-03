@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace dapps.core.Controllers;
 
 /// <summary>
-/// REST surface for the discovery-channel table — the per-bearer,
+/// REST surface for the discovery-channel table - the per-bearer,
 /// per-physical-port configuration that drives the discovery daemon.
 /// Parallel in shape to <c>/Neighbours</c>: list, upsert, delete.
 ///
@@ -71,7 +71,7 @@ public class DiscoveryChannelsController(Database database, DiscoveryService dis
     }
 
     /// <summary>
-    /// Plan B6.2 — fire a one-shot solicit on the named channel.
+    /// Plan B6.2 - fire a one-shot solicit on the named channel.
     /// Receivers reply with their normal beacon after a small random
     /// delay; replies arrive on the standard beacon path and populate
     /// <c>DbDiscoveredPeer</c>. Useful for ad-hoc "anyone there?"
@@ -96,7 +96,7 @@ public class DiscoveryChannelsController(Database database, DiscoveryService dis
         }
         catch (InvalidOperationException ex)
         {
-            // Bearer not currently running — DiscoveryService either
+            // Bearer not currently running - DiscoveryService either
             // didn't start (no enabled channels at boot) or the bearer
             // failed during init. Surface as 503 so a sysop knows the
             // problem is transient/state, not a bad request.

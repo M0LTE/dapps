@@ -157,7 +157,7 @@ public sealed class RemainingControllersTests : IAsyncLifetime
     [Fact]
     public async Task MessageController_PostMessage_Persists()
     {
-        // OutboundMessageManager isn't exercised here — just the
+        // OutboundMessageManager isn't exercised here - just the
         // direct-write path in MessageController.
         var transport = new ThrowingTransport();
         var routingContext = new DatabaseRoutingContext(database, optionsMonitor);

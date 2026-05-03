@@ -55,7 +55,7 @@ public sealed class BearerAuthMiddlewareTests : IAsyncLifetime
     [Fact]
     public async Task AuthEnabled_NonAppApiPath_PassesThrough()
     {
-        // Auth only enforces /AppApi/* — admin surfaces stay open by
+        // Auth only enforces /AppApi/* - admin surfaces stay open by
         // design (loopback recommendation), so /Config and /Neighbours
         // bypass the bearer check.
         var (mw, ctx, nextCalled) = Build(authRequired: true, "/Config");
@@ -109,7 +109,7 @@ public sealed class BearerAuthMiddlewareTests : IAsyncLifetime
     public void IsAuthorisedForApp_OpenMode_AlwaysTrue()
     {
         var ctx = new DefaultHttpContext();
-        // No AuthenticatedAppKey set — open mode.
+        // No AuthenticatedAppKey set - open mode.
         ctx.IsAuthorisedForApp("anything").Should().BeTrue();
     }
 

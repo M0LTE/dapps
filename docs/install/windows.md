@@ -1,10 +1,10 @@
 # Install on Windows
 
-Windows runs DAPPS the same way Linux does — drop a binary on disk, run it. There's no signed installer or service-controller integration today; if you want it as a service you wire that up yourself with `nssm` or the built-in `sc.exe`.
+Windows runs DAPPS the same way Linux does - drop a binary on disk, run it. There's no signed installer or service-controller integration today; if you want it as a service you wire that up yourself with `nssm` or the built-in `sc.exe`.
 
 ## 1. Drop the binary
 
-Download `dapps-win-x64.exe` from the [latest release](https://github.com/M0LTE/dapps/releases/latest) and put it somewhere sensible — `C:\Program Files\dapps\dapps.exe` is conventional.
+Download `dapps-win-x64.exe` from the [latest release](https://github.com/M0LTE/dapps/releases/latest) and put it somewhere sensible - `C:\Program Files\dapps\dapps.exe` is conventional.
 
 ## 2. Run interactively first
 
@@ -37,11 +37,11 @@ nssm start DAPPS
 
 NSSM handles restart-on-crash and stdout-to-event-log capture without you writing wrappers.
 
-The supervised in-place update path (the `/Update/apply` button on the dashboard) is **Linux only** today — it relies on systemd. On Windows you replace the binary by stopping the service, swapping the file, and starting again. The dashboard's update banner still surfaces "v0.X.Y available" so you know when to do that.
+The supervised in-place update path (the `/Update/apply` button on the dashboard) is **Linux only** today - it relies on systemd. On Windows you replace the binary by stopping the service, swapping the file, and starting again. The dashboard's update banner still surfaces "v0.X.Y available" so you know when to do that.
 
 ## State location
 
-By default DAPPS writes the SQLite database to `data\dapps.db` relative to its working directory. If you ran from `C:\Program Files\dapps` the OS may not let it write there — set the working directory to a writable location (e.g. `C:\ProgramData\dapps`).
+By default DAPPS writes the SQLite database to `data\dapps.db` relative to its working directory. If you ran from `C:\Program Files\dapps` the OS may not let it write there - set the working directory to a writable location (e.g. `C:\ProgramData\dapps`).
 
 ```powershell
 nssm set DAPPS AppDirectory "C:\ProgramData\dapps"

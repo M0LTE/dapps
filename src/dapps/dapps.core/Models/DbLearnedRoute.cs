@@ -3,7 +3,7 @@ using SQLite;
 namespace dapps.core.Models;
 
 /// <summary>
-/// A route this node has *learned* by observing inbound traffic — as
+/// A route this node has *learned* by observing inbound traffic - as
 /// opposed to <see cref="DbNeighbour"/> (manual operator config) and
 /// <see cref="DbRouteHint"/> (manual operator override). Populated by
 /// <see cref="dapps.core.Routing.PassiveLearningAlgorithm"/>: every
@@ -11,7 +11,7 @@ namespace dapps.core.Models;
 /// source teaches us the reverse direction. <c>To reach the
 /// originator, send via the neighbour that handed me this message.</c>
 ///
-/// One row per destination base callsign — newer observations
+/// One row per destination base callsign - newer observations
 /// overwrite older ones. Future work could keep a candidate list per
 /// destination with weighting, but a single best-effort entry is
 /// enough for the v0.x phase.
@@ -19,21 +19,21 @@ namespace dapps.core.Models;
 [Table("learnedroutes")]
 public class DbLearnedRoute
 {
-    /// <summary>Base callsign (no SSID) — keyed this way so messages
+    /// <summary>Base callsign (no SSID) - keyed this way so messages
     /// to <c>chat@G0FOO-1</c> and <c>mail@G0FOO-9</c> share the same
     /// learned route. SSID-specific routing is rare in practice and
     /// handled by manual neighbours when needed.</summary>
     [PrimaryKey]
     public string DestinationBaseCallsign { get; set; } = "";
 
-    /// <summary>Full callsign with SSID of the next-hop neighbour —
+    /// <summary>Full callsign with SSID of the next-hop neighbour -
     /// matches a <see cref="DbNeighbour.Callsign"/> row so the
     /// algorithm can resolve the bearer hint at use-time.</summary>
     public string NextHopCallsign { get; set; } = "";
 
     /// <summary>UTC timestamp of the most recent inbound message that
     /// confirmed this route. Updated on every <c>ObserveInboundAsync</c>
-    /// matching this destination — a quiet route ages out implicitly
+    /// matching this destination - a quiet route ages out implicitly
     /// when nothing's been heard for a while (sweep policy TBD).</summary>
     public DateTime LastSeenAt { get; set; }
 

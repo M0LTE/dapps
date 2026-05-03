@@ -4,17 +4,17 @@ using Microsoft.AspNetCore.Mvc;
 namespace dapps.core.Controllers;
 
 /// <summary>
-/// Plan C3 — operator-facing aggregate observability surface,
+/// Plan C3 - operator-facing aggregate observability surface,
 /// distinct from the dashboard's <c>/Events/*</c> endpoints
 /// (which are tightly coupled to the dashboard's UI shape and
 /// poll cadence).
 ///
 /// <list type="bullet">
-/// <item><c>GET /Operational</c> — top-level snapshot: liveness, all
+/// <item><c>GET /Operational</c> - top-level snapshot: liveness, all
 ///   counters, queue / peer / channel counts, trailing-hour airtime,
 ///   last-20 recent events. Same JSON shape as the periodic MQTT
 ///   heartbeat publish on <c>dapps/metrics/heartbeat</c>.</item>
-/// <item><c>GET /Operational/recent</c> — the full last-100 ring as
+/// <item><c>GET /Operational/recent</c> - the full last-100 ring as
 ///   JSON for ad-hoc scrapers / curl-grep workflows. Smaller body
 ///   than the full snapshot when you just want the event tail.</item>
 /// </list>

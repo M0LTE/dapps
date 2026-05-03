@@ -3,13 +3,13 @@ using SQLite;
 namespace dapps.core.Models;
 
 /// <summary>
-/// A message that DAPPS dropped — TTL expiry, hash mismatch on receive,
+/// A message that DAPPS dropped - TTL expiry, hash mismatch on receive,
 /// no-route give-up, etc. Soft-deletion target: rows move from
 /// <see cref="DbMessage"/> to here rather than being hard-deleted, so
 /// the operator can see what was thrown away during RF testing.
 ///
 /// Mirrors <see cref="DbMessage"/>'s shape plus <see cref="DroppedAt"/>
-/// + <see cref="Reason"/>. No retention policy yet — operator can purge
+/// + <see cref="Reason"/>. No retention policy yet - operator can purge
 /// manually if it grows.
 /// </summary>
 [Table("dropped_messages")]
@@ -31,7 +31,7 @@ public class DbDroppedMessage
     public DateTime DroppedAt { get; init; } = DateTime.UtcNow;
 
     /// <summary>Short tag explaining the drop. Currently used:
-    /// <c>ttl-expired</c>. Stable across releases — kept short for
+    /// <c>ttl-expired</c>. Stable across releases - kept short for
     /// dashboard display.</summary>
     public string Reason { get; init; } = "";
 }

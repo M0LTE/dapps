@@ -9,7 +9,7 @@ namespace dapps.core.uitests;
 /// session. WebApplicationFactory + TestServer don't speak HTTP to a
 /// browser, and the two-host trick (TestServer for WAF + Kestrel for
 /// the browser) trips on shared service-provider lifetime in WAF
-/// 8.x — subprocess is the simpler, more honest model: same binary
+/// 8.x - subprocess is the simpler, more honest model: same binary
 /// the operator runs, same env-var path, same startup ordering.
 ///
 /// Side-effects we tame:
@@ -37,7 +37,7 @@ public sealed class WebAppFixture : IAsyncLifetime
     private string? _workDir;
 
     public string BaseUrl => _baseUrl
-        ?? throw new InvalidOperationException("Fixture not initialised — call InitializeAsync first.");
+        ?? throw new InvalidOperationException("Fixture not initialised - call InitializeAsync first.");
 
     public async ValueTask InitializeAsync()
     {
@@ -83,7 +83,7 @@ public sealed class WebAppFixture : IAsyncLifetime
         _process.BeginOutputReadLine();
         _process.BeginErrorReadLine();
 
-        // 60s — first-time `dotnet run` does a build, which is slow.
+        // 60s - first-time `dotnet run` does a build, which is slow.
         // Subsequent runs reuse the already-built binary and are fast.
         var timeout = Task.Delay(TimeSpan.FromSeconds(60));
         var done = await Task.WhenAny(listening.Task, timeout);
@@ -92,7 +92,7 @@ public sealed class WebAppFixture : IAsyncLifetime
             try { _process.Kill(true); } catch { /* ignore */ }
             throw new TimeoutException(
                 "dapps.core didn't surface a 'Now listening on' line within 60s. " +
-                "First-time builds can be slow — try `dotnet build` from src/dapps once before running UI tests.");
+                "First-time builds can be slow - try `dotnet build` from src/dapps once before running UI tests.");
         }
         _baseUrl = await listening.Task;
     }
@@ -145,7 +145,7 @@ public sealed class WebAppFixture : IAsyncLifetime
     /// <summary>
     /// Pick a free TCP port the embedded MQTT broker can claim.
     /// Tiny race window (someone else binds it before dapps does)
-    /// is acceptable — the host will exit-code 78 and the test will
+    /// is acceptable - the host will exit-code 78 and the test will
     /// time out with a clear message.
     /// </summary>
     private static int PickEphemeralPort()

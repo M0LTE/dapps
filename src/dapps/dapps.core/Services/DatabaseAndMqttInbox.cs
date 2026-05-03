@@ -11,7 +11,7 @@ namespace dapps.core.Services;
 /// received message into the SQLite queue and, if the destination is a
 /// local app, pushes it to the MQTT broker for any connected subscriber.
 ///
-/// Bearer-neutral — this code doesn't know whether the message arrived
+/// Bearer-neutral - this code doesn't know whether the message arrived
 /// over a DAPPSv1 session or a MeshCore datagram. The bearer-specific
 /// receive layer is the one that called <see cref="DeliverAsync"/>.
 /// </summary>
@@ -35,7 +35,7 @@ public sealed class DatabaseAndMqttInbox(
         // set is part of an in-flight bounded flood. Multiple flood paths can
         // converge at this node from different neighbours; we only process
         // the first arrival and silently drop subsequent copies. The dedup
-        // key is (id, link-source) — different upstreams might be legitimate
+        // key is (id, link-source) - different upstreams might be legitimate
         // independent floods of distinct messages with the same id (rare,
         // but possible if two senders salt-collide). Including the link
         // source means we'll dedup re-arrivals from the SAME upstream
@@ -44,13 +44,13 @@ public sealed class DatabaseAndMqttInbox(
         {
             if (await routingContext.HasSeenFloodAsync(message.Id, sourceCallsign, ct))
             {
-                logger.LogDebug("Flood {0} from {1} dropped — already seen", message.Id, sourceCallsign);
+                logger.LogDebug("Flood {0} from {1} dropped - already seen", message.Id, sourceCallsign);
                 return;
             }
             await routingContext.RecordFloodSeenAsync(message.Id, sourceCallsign, ct);
         }
 
-        // Hand the message to the routing algorithm BEFORE persistence —
+        // Hand the message to the routing algorithm BEFORE persistence -
         // passive-learning algorithms care about the (originator, link-source)
         // pair, and that pair is only meaningful here at the wire boundary.
         // Algorithms that don't observe inbound (StaticRoutingAlgorithm) no-op
@@ -63,12 +63,12 @@ public sealed class DatabaseAndMqttInbox(
 
         var originator = message.Originator ?? "";
 
-        // F2 multi-part — destination-side reassembly. Fragments
+        // F2 multi-part - destination-side reassembly. Fragments
         // destined for a local app go into the reassembly buffer
         // instead of the regular DbMessage table; the regular table
         // gets the assembled payload as one row when the last fragment
         // arrives. Intermediate hops (where IsLocal is false) just
-        // forward each fragment as an opaque message — they take the
+        // forward each fragment as an opaque message - they take the
         // normal SaveMessage path below.
         var isFragmentForLocal = message.MasterId is not null
             && message.FragmentIndex.HasValue
@@ -110,7 +110,7 @@ public sealed class DatabaseAndMqttInbox(
             // source route (already stripped by the previous sender)
             // and the accumulated traversal record. Both are
             // persisted so that the algorithm can act on them on the
-            // next forwarder tick — e.g. re-flood with the right
+            // next forwarder tick - e.g. re-flood with the right
             // accumulator after a process restart.
             sourceRouteCsv: message.SourceRoute is { Count: > 0 }
                 ? string.Join(',', message.SourceRoute)
@@ -144,11 +144,11 @@ public sealed class DatabaseAndMqttInbox(
         }
         else
         {
-            logger.LogDebug("Message {0} for {1} is not local — leaving in queue for forwarding",
+            logger.LogDebug("Message {0} for {1} is not local - leaving in queue for forwarding",
                 message.Id, message.Destination);
         }
 
-        // Notify dashboard SSE subscribers regardless of local-vs-relay —
+        // Notify dashboard SSE subscribers regardless of local-vs-relay -
         // operators want to see traffic flowing through the node.
         events.Publish(new InboundEvent(
             ReceivedAt: timeProvider.GetUtcNow().UtcDateTime,
@@ -160,7 +160,7 @@ public sealed class DatabaseAndMqttInbox(
     }
 
     /// <summary>
-    /// Plan F2 — destination-side fragment handling. Stores the
+    /// Plan F2 - destination-side fragment handling. Stores the
     /// fragment in <see cref="DbFragment"/>, checks whether the full
     /// set is now present, and if so reassembles + delivers the
     /// assembled payload via the regular DbMessage + MQTT path.
@@ -192,17 +192,17 @@ public sealed class DatabaseAndMqttInbox(
         var fragments = await database.GetFragmentsForMaster(masterId);
         // Distinct-by-index covers the (rare) case where a fragment
         // is re-delivered via a different path before its sibling
-        // arrives — the upsert above keeps a single row per index, so
+        // arrives - the upsert above keeps a single row per index, so
         // Count here = unique-index count.
         if (fragments.Count < fragTotal)
         {
             logger.LogInformation(
-                "Fragment {Index} of {Total} for master {MasterId} stored ({Have} so far) — waiting for siblings",
+                "Fragment {Index} of {Total} for master {MasterId} stored ({Have} so far) - waiting for siblings",
                 fragIndex, fragTotal, masterId, fragments.Count);
             return;
         }
 
-        // All fragments present — assemble. Concatenate by 1-based
+        // All fragments present - assemble. Concatenate by 1-based
         // FragmentIndex. The fragments table query already orders.
         var totalLen = fragments.Sum(f => f.Payload.Length);
         var assembled = new byte[totalLen];
@@ -213,7 +213,7 @@ public sealed class DatabaseAndMqttInbox(
             offset += f.Payload.Length;
         }
 
-        // Use the master id as the assembled message's id — it's
+        // Use the master id as the assembled message's id - it's
         // the natural content-addressable identifier from the
         // originator's view, and the dashboard / app-interface
         // dapps-id user property reads coherently from sender to
@@ -250,7 +250,7 @@ public sealed class DatabaseAndMqttInbox(
         await database.DeleteFragmentsForMaster(masterId);
 
         logger.LogInformation(
-            "Reassembled master {0} ({1} fragments, {2} bytes) — delivered as one message",
+            "Reassembled master {0} ({1} fragments, {2} bytes) - delivered as one message",
             masterId, fragTotal, totalLen);
     }
 }

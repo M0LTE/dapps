@@ -12,7 +12,7 @@ public class AgwIntegrationTests(LinbpqIntegrationFixture fixture)
     /// <summary>
     /// Frame format end-to-end against real BPQ. If our 36-byte AGW header
     /// layout is wrong (offsets, LE DataLength, callsign field shape),
-    /// BPQ won't reply to an `R` (version) request — so a passing version
+    /// BPQ won't reply to an `R` (version) request - so a passing version
     /// exchange is strong validation of the frame layer.
     /// </summary>
     [Fact]
@@ -32,7 +32,7 @@ public class AgwIntegrationTests(LinbpqIntegrationFixture fixture)
 
         reply.Kind.Should().Be('R');
         reply.Payload.Length.Should().Be(8);
-        // AGWAPI.c hard-codes AGWVersion = {2003, 999} — locks the wire
+        // AGWAPI.c hard-codes AGWVersion = {2003, 999} - locks the wire
         // format in (LE uint32 pair).
         var major = BitConverter.ToUInt32(reply.Payload, 0);
         var minor = BitConverter.ToUInt32(reply.Payload, 4);
