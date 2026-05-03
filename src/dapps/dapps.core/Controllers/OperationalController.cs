@@ -25,8 +25,16 @@ public sealed class OperationalController(
     OperationalMetrics metrics,
     OperationalSnapshotBuilder snapshotBuilder) : ControllerBase
 {
+    /// <summary>
+    /// <c>?full=true</c> includes the per-row tables the dashboard
+    /// renders (outbound queue, local inbox, dropped, neighbours,
+    /// probed/polled nodes, discovered peers, channels, update card).
+    /// Default is the lighter heartbeat shape - excludes per-row data
+    /// to keep external scrapers' bandwidth small.
+    /// </summary>
     [HttpGet]
-    public Task<OperationalSnapshot> Get(CancellationToken ct) => snapshotBuilder.BuildAsync(ct);
+    public Task<OperationalSnapshot> Get([FromQuery] bool full, CancellationToken ct)
+        => full ? snapshotBuilder.BuildFullAsync(ct) : snapshotBuilder.BuildAsync(ct);
 
     [HttpGet("recent")]
     public IReadOnlyList<OperationalMetrics.OperationalEvent> GetRecent()

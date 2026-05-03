@@ -1,6 +1,7 @@
 using AwesomeAssertions;
 using dapps.core.Models;
 using dapps.core.Services;
+using dapps.core.Updater;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
@@ -72,7 +73,11 @@ public sealed class OperationalSnapshotBuilderTests : IAsyncLifetime
         var db = new Database(NullLogger<Database>.Instance, opts);
         await db.UpsertNeighbour("G7PEER-9", bpqPort: 1);
 
-        var builder = new OperationalSnapshotBuilder(opts, metrics, airtime, db, clock);
+        var builder = new OperationalSnapshotBuilder(
+            opts, metrics, airtime, db,
+            updateChecker: BuildUpdateChecker(),
+            updaterFs: new FakeUpdaterFs(),
+            timeProvider: clock);
         var snap = await builder.BuildAsync(TestContext.Current.CancellationToken);
 
         snap.Callsign.Should().Be("G7TST-9");
@@ -114,11 +119,90 @@ public sealed class OperationalSnapshotBuilderTests : IAsyncLifetime
         var airtime = new AirtimeAccountant(opts, clock, NullLogger<AirtimeAccountant>.Instance);
         var db = new Database(NullLogger<Database>.Instance, opts);
 
-        var builder = new OperationalSnapshotBuilder(opts, metrics, airtime, db, clock);
+        var builder = new OperationalSnapshotBuilder(
+            opts, metrics, airtime, db,
+            updateChecker: BuildUpdateChecker(),
+            updaterFs: new FakeUpdaterFs(),
+            timeProvider: clock);
         var snap = await builder.BuildAsync(TestContext.Current.CancellationToken);
 
         snap.CallsignConfigured.Should().BeFalse();
         snap.Status.Should().Be("degraded");
+    }
+
+    [Fact]
+    public async Task BuildFullAsync_PopulatesPerRowTables()
+    {
+        // Schema for the per-row tables BuildFullAsync queries.
+        using (var c = DbInfo.GetConnection())
+        {
+            c.CreateTable<DbDroppedMessage>();
+            c.CreateTable<DbProbedNode>();
+            c.CreateTable<DbPolledNode>();
+        }
+
+        var clock = new FakeTimeProvider(DateTimeOffset.Parse("2026-05-01T12:00:00Z"));
+        var opts = new TestOptionsMonitor<SystemOptions>(new SystemOptions
+        {
+            Callsign = "G7TST-9",
+            NodeHost = "127.0.0.1",
+            AgwPort = 1,
+            MqttPort = 1,
+        });
+        var metrics = new OperationalMetrics(clock);
+        var airtime = new AirtimeAccountant(opts, clock, NullLogger<AirtimeAccountant>.Instance);
+        var db = new Database(NullLogger<Database>.Instance, opts, clock);
+
+        await db.UpsertNeighbour("G7HOP-1", bpqPort: 0);
+        await db.SubmitOutboundMessage("chat", "G7DEST", "hello"u8.ToArray(), ttlSeconds: 600);
+
+        var builder = new OperationalSnapshotBuilder(
+            opts, metrics, airtime, db,
+            updateChecker: BuildUpdateChecker(),
+            updaterFs: new FakeUpdaterFs(),
+            timeProvider: clock);
+
+        var lite = await builder.BuildAsync(TestContext.Current.CancellationToken);
+        var full = await builder.BuildFullAsync(TestContext.Current.CancellationToken);
+
+        // Lite snapshot must NOT carry per-row tables - that's what
+        // makes it suitable for the periodic heartbeat publish.
+        lite.Tables.Should().BeNull();
+
+        // Full snapshot's tables get populated.
+        full.Tables.Should().NotBeNull();
+        full.Tables!.Outbound.Should().NotBeEmpty("the test inserted one outbound message");
+        full.Tables.Outbound[0].Destination.Should().Be("chat@G7DEST");
+        full.Tables.Neighbours.Should().HaveCount(1);
+        full.Tables.Neighbours[0].Callsign.Should().Be("G7HOP-1");
+        full.Tables.Update.Should().NotBeNull();
+        full.Tables.Update.Current.Should().NotBeNullOrEmpty();
+        full.Tables.Update.RequestPending.Should().BeFalse();
+
+        // Both shapes share the cheap fields verbatim.
+        full.Callsign.Should().Be(lite.Callsign);
+        full.NeighbourCount.Should().Be(lite.NeighbourCount).And.Be(1);
+    }
+
+    private static UpdateChecker BuildUpdateChecker()
+        => new(new NoopHttpClientFactory(), new TestOptionsMonitor<SystemOptions>(new SystemOptions()),
+               TimeProvider.System, NullLogger<UpdateChecker>.Instance);
+
+    private sealed class NoopHttpClientFactory : IHttpClientFactory
+    {
+        public HttpClient CreateClient(string name) => new();
+    }
+
+    private sealed class FakeUpdaterFs : IUpdaterFileSystem
+    {
+        private readonly Dictionary<string, string> store = new();
+        public bool Exists(string path) => store.ContainsKey(path);
+        public void SwapInPlace(string src, string dest, string previous) { }
+        public void Restore(string previous, string dest) { }
+        public void MarkExecutable(string path) { }
+        public string? ReadAllText(string path) => store.TryGetValue(path, out var v) ? v : null;
+        public void WriteAllText(string path, string contents) => store[path] = contents;
+        public void Delete(string path) => store.Remove(path);
     }
 
     private sealed class TestOptionsMonitor<T>(T value) : IOptionsMonitor<T>
