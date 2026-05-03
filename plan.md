@@ -6,7 +6,7 @@ Living planning document. Aim is to get DAPPS into the hands of node operators w
 
 The protocol is fully specified (`README.md`'s "On-air protocol" section, including F4 versioning policy). The implementation matches the spec; the on-air format is byte-validated against real BPQ in CI via `m0lte/linbpq` (Testcontainers-managed). Local apps talk to DAPPS via MQTT (durable, idempotent on `dapps-id`) or REST. TTL forwarding works across multi-hop topologies. F1 end-to-end source tracking, F2 multi-part messages, F3 `rev` polling (opportunistic + scheduled) all done. B5 passive-learning routing + B5.1 MeshCore-flavoured DSR alternative both shipped. B6.1 connected-mode probe-and-map with transitive `peers` discovery, B6.2 HF-NVIS solicit-and-listen (on-demand + scheduled cadence), B7 single-counter discovery airtime budget with probe strategies, all live. C1 single-file native binaries publish via CI on five platforms; C2 env-var seeding plus `dapps --show-config`; C3 `/Health`, `/Operational`, decision-events ring + structured journal mirror, MQTT heartbeat; C4 install/upgrade docs in the README; C5.1 update-availability banner + C5.2 triggered self-update via privileged `dapps-updater.service`. D1-D4 dashboard MVP. E1-E4 developer guide complete. Phase M (#81-#85) - MCP server at `/mcp` with 26 operator-facing tools.
 
-What's left is in the "Suggested ordering" near the bottom plus the open H bearer-integration phase. The biggest remaining items are external-blocked (H1/H2 MeshCore hardware, H3 RHP awaiting BPQ support, F5 signing awaiting an identity layer), parked (C5.3 scheduled auto-update - banner + one-click + `trigger_update` MCP cover today's operator population), or not-yet-prioritised (Phase G second-language reference impl, scratchpad phone messenger app).
+What's left is in the "Suggested ordering" near the bottom plus the open H bearer-integration phase. The biggest remaining items are external-blocked (H1/H2 MeshCore hardware, H3 RHP awaiting BPQ support), parked (C5.3 scheduled auto-update - banner + one-click + `trigger_update` MCP cover today's operator population; F5 signing - design parked, see the F5 section for the recommended shape when it gets pulled forward), or not-yet-prioritised (Phase G second-language reference impl, scratchpad phone messenger app).
 
 ## Tom's scratchpad of ideas
 
@@ -508,9 +508,23 @@ The "feature negotiation on the prompt" alternative was rejected: it lets implem
 
 Pre-shipping caveat - also in the README - applies until non-author operators are on the air: while there's nobody to coordinate with, breaking changes still get to skip the version-bump, because the compatibility tape buys nothing. Policy fully kicks in when the first independent operator picks DAPPS up.
 
-### F5. Authenticated message origin (signing)
+### F5. Authenticated message origin (signing) *(design parked)*
 
-Mentioned in the original gist. Long-term: messages signed by the source node so the recipient can verify the origin chain hasn't been tampered with. Pointless without a ham-radio-friendly identity layer; defer indefinitely until that exists.
+Messages signed by the source node so receivers can verify the origin chain hasn't been tampered with. Encryption is illegal under amateur regulation; signing is fine. Design discussion happened mid-Phase-M but the work is parked - pulling forward when there's a real abuse case to defend against, or when the OARC community has appetite for a key-registry side-project.
+
+**Sketch of the recommended shape (so the next pickup doesn't start cold):**
+
+- **Algorithm: Ed25519.** 32-byte pubkey, 64-byte sig, ~150 µs verify on a Pi-class device, deterministic (no per-sign entropy - important for embedded HF stations), patent-free, native in .NET 8. ECDSA needs fresh randomness per sign; RSA is too heavy; Schnorr aggregation is overkill for v1.
+- **Wire format:** new optional `sig=`, `sigtime=` (Unix epoch s), `kid=` (short key-id for rotation) headers on the `ihave` line. Per F4 these stay on `DAPPSv1>` as additive forward-compatible fields; pre-F5 receivers ignore them.
+- **Canonical pre-image** for the signature covers id-inputs (salt + payload - already what the message-id hashes) plus `dst`, `ttl`, `originator`, `sigtime`. Excludes optional `key=value` extension headers (those are operator-extensibility, not security-critical).
+- **Replay defence:** `sigtime` in the canonical bytes; receiver enforces ±7 days. Salt-based id dedup already covers exact-byte replays - `sigtime` makes timing-tampered ones detectable.
+- **Identity binding (the hard part):** layered. **Primary** - a community registry (OARC could host a signed JSON file in a GitHub repo at a stable URL, daemons fetch on a slow refresh, operators submit pubkeys via PR or web form). **Fallback** - periodic key beacons broadcasting our pubkey as a special discovery-class frame; receivers cache `(callsign -> pubkey)` TOFU-style. DNS-based binding (DKIM-style TXT records) was considered but rejected for v1 because most amateur sysops don't own DNS. Web-of-trust deferred indefinitely (bootstrapping problem).
+- **Three-tier verification:** no `sig=` -> backward-compatible (per-channel `RequireSignature` opt-in for stricter modes); sig present + verifies -> stamp `dapps-sig-ok=true` MQTT user property + green tick on dashboard; sig present + fails -> drop, record `sig.fail` event with originator and reason.
+- **Wire impact:** ~70 bytes per signed message. ~0.6 s extra at 1200 baud, ~2.3 s at 300-baud HF. Bearable; per-channel toggle for short-message chat.
+
+Out of scope even when this is picked up: confidentiality (illegal anyway), forward secrecy (irrelevant without confidentiality), per-message ephemeral keys, hardware key tokens.
+
+Pickup signal: a real-world need (abuse case, cross-implementation interop concern, or OARC-side appetite for the registry). No need to pull forward speculatively.
 
 ## Phase H - concrete bearer integrations
 
