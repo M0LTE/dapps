@@ -43,12 +43,14 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
-      - name: Pre-pull linbpq image
-        # The integration tests spin up two m0lte/linbpq containers
-        # (TwoInstanceLinbpqFixture). Pulling here makes per-test
-        # startup deterministic; without it the first integration test
-        # blocks on a docker pull and sometimes trips its own timeout.
-        run: docker pull m0lte/linbpq:latest
+      - name: Pre-pull integration images
+        # Integration tests spin up linbpq + xrouter containers.
+        # Pulling here makes per-test startup deterministic; without it
+        # the first integration test blocks on a docker pull and
+        # sometimes trips its own timeout.
+        run: |
+          docker pull m0lte/linbpq:latest
+          docker pull ghcr.io/packethacking/xrouter:latest
 
       - name: Restore
         run: dotnet restore src/dapps/dapps.sln
