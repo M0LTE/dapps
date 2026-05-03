@@ -96,6 +96,10 @@ public static class DbStartup
         InsertIfNotPresent(db, options, "HeartbeatIntervalSeconds", "60", logger);
         InsertIfNotPresent(db, options, "AutoDiscoverViaNodeCall", "false", logger);
         InsertIfNotPresent(db, options, "NodePromptApplicationCommand", "DAPPS", logger);
+        InsertIfNotPresent(db, options, "NodeBearer", "agw", logger);
+        InsertIfNotPresent(db, options, "RhpPort", "9000", logger);
+        InsertIfNotPresent(db, options, "RhpUser", "", logger);
+        InsertIfNotPresent(db, options, "RhpPass", "", logger);
 
         ValidateRequiredConfig(db, logger);
 

@@ -65,8 +65,15 @@ declare -A KIND=(   [A]=bpq   [B]=xr    [C]=bpq   [D]=xr   )
 # Container names (host-side).
 declare -A CTR=(    [A]=mxsim-bpq1  [B]=mxsim-xr2  [C]=mxsim-bpq3  [D]=mxsim-xr4 )
 
-# AGW listen port on each container (host loopback).
+# AGW listen port on each container (host loopback). Used by the
+# BPQ-side DAPPS daemons. XR-side DAPPS daemons use RHPv2 instead so
+# B and D's AGW ports are advisory; the value still has to be unique
+# per netns since XR's AGWHOST emulator binds it.
 declare -A AGW_PORT=( [A]=28001 [B]=28002 [C]=28003 [D]=28004 )
+
+# RHPv2 listen port on each XR container. BPQ doesn't speak RHPv2
+# today so A and C are unused.
+declare -A RHP_PORT=( [B]=29002 [D]=29004 )
 
 # AXUDP partner-link listen port for each container.
 declare -A AXUDP_PORT=( [A]=11001 [B]=11002 [C]=11003 [D]=11004 )
@@ -257,6 +264,7 @@ CONSOLECALL=$consolecall
 CHATCALL=$chatcall
 CHATALIAS=${alias:0:5}C
 AGWPORT=$agw
+RHPPORT=${RHP_PORT[$n]}
 IPADDRESS=44.128.0.1
 
 $interfaces
@@ -309,6 +317,9 @@ start_container() {
         netflags+=( -p "127.0.0.1:${AGW_PORT[D]}:${AGW_PORT[D]}" )
         netflags+=( -p "127.0.0.1:${TELNET_PORT[A]}:${TELNET_PORT[A]}" )
         netflags+=( -p "127.0.0.1:${TELNET_PORT[C]}:${TELNET_PORT[C]}" )
+        # XR-side DAPPS daemons reach their containers via RHPv2.
+        netflags+=( -p "127.0.0.1:${RHP_PORT[B]}:${RHP_PORT[B]}" )
+        netflags+=( -p "127.0.0.1:${RHP_PORT[D]}:${RHP_PORT[D]}" )
     else
         netflags+=( --network "container:${CTR[A]}" )
     fi
@@ -366,14 +377,28 @@ start_dapps() {
     mkdir -p "$d/data"
     rm -f "$d/data/dapps.db" "$d/dapps.log"
 
-    echo ">>> Starting DAPPS-$n (${DAPPS_CALL[$n]}) http=${HTTP_PORT[$n]} agw=${AGW_PORT[$n]}"
+    # Bearer + port byte are derived from the container kind. BPQ
+    # daemons use AGW (port byte 1 = AXUDP, port byte 0 = Telnet); XR
+    # daemons use RHPv2 (port name "1" = the AXUDP partner, which is
+    # PORT=1 in XROUTER.CFG, mapping to byte 0 internally because
+    # Rhpv2OutboundTransport adds 1 to the port byte for RHPv2's
+    # 1-indexed port names).
+    local bearer="agw" port_byte=1 rhp=""
+    if [ "${KIND[$n]}" = "xr" ]; then
+        bearer="rhpv2"
+        port_byte=0
+        rhp="${RHP_PORT[$n]}"
+    fi
+    echo ">>> Starting DAPPS-$n (${DAPPS_CALL[$n]}) http=${HTTP_PORT[$n]} bearer=$bearer"
     (
         cd "$d"
         env \
             DAPPS_CALLSIGN="${DAPPS_CALL[$n]}" \
             DAPPS_NODE_HOST=127.0.0.1 \
+            DAPPS_NODE_BEARER="$bearer" \
             DAPPS_AGW_PORT="${AGW_PORT[$n]}" \
-            DAPPS_DEFAULT_BPQ_PORT="$([ "${KIND[$n]}" = "xr" ] && echo 0 || echo 1)" \
+            DAPPS_RHP_PORT="${rhp:-9000}" \
+            DAPPS_DEFAULT_BPQ_PORT="$port_byte" \
             DAPPS_MQTT_PORT="${MQTT_PORT[$n]}" \
             DAPPS_UDP_LISTEN_PORT=0 \
             DAPPS_AUTH_REQUIRED=false \
