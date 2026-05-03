@@ -1,6 +1,8 @@
 # Connect via RHPv2
 
-**Status: planned, blocked on BPQ.** RHPv2 (Radio Host Protocol v2) is a more modern host-to-node protocol than AGW. As soon as BPQ ships RHPv2 in mainline, DAPPS will add a bearer that uses it preferentially over AGW. Until then, [BPQ AGW](bpq.md) is the path.
+**Status: planned.** RHPv2 (Radio Host Protocol v2) is a more modern host-to-node protocol than AGW. The DAPPS bearer is on the [Phase H roadmap](https://github.com/M0LTE/dapps/blob/master/plan.md#phase-h---concrete-bearer-integrations).
+
+[XRouter](xrouter.md) already supports RHPv2, so it's the natural first test target once we add the bearer. Mainline BPQ does not yet, but is expected to in due course; when it does, DAPPS will prefer RHPv2 over AGW for any host that exposes both.
 
 ## Why RHPv2
 
@@ -30,4 +32,4 @@ Everything above the bearer seam - the protocol, the app interface, the discover
 
 ## When?
 
-Tracking issue: [Phase H in plan.md](https://github.com/M0LTE/dapps/blob/master/plan.md#phase-h--concrete-bearer-integrations). The blocker is that mainline BPQ doesn't yet ship an RHPv2 listener; we'd need that before there's anything to talk to. If you have visibility into the BPQ side of this, [open an issue](https://github.com/M0LTE/dapps/issues).
+Tracking issue: [Phase H in plan.md](https://github.com/M0LTE/dapps/blob/master/plan.md#phase-h---concrete-bearer-integrations). XRouter's existing RHPv2 support means we don't have to wait for mainline BPQ to start work on the DAPPS side. If you're an XRouter operator with RHPv2 enabled and would like to be in the loop on testing, [open an issue](https://github.com/M0LTE/dapps/issues).
