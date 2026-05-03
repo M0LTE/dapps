@@ -33,6 +33,108 @@
 }
 
 <script>
+    // Dashboard-wide consolidation shim. Every per-feature panel
+    // historically polled its own /Events/health, /Events/queue,
+    // /Probes, /Polls, /Events/dropped, /Events/version, /Update/status.
+    // That fans out to 7+ network round-trips per cycle; here we
+    // collapse them to a single /Operational?full=true poll and
+    // synthesise the per-feature responses from the cached document.
+    //
+    // The existing render code in each panel's IIFE keeps using
+    // fetch(URL) unchanged - we override window.fetch for those exact
+    // GETs and pass everything else (POSTs, /Update/apply marker
+    // writes, action handlers) through to the native impl.
+    (function () {
+        window.__dappsSnap = null;
+        async function refresh() {
+            try {
+                const res = await __dappsNativeFetch('/Operational?full=true', { credentials: 'same-origin' });
+                if (res.ok) window.__dappsSnap = await res.json();
+            } catch { /* keep last cached snap */ }
+        }
+        const __dappsNativeFetch = window.fetch.bind(window);
+        window.__dappsNativeFetch = __dappsNativeFetch;
+
+        const ok = (body) => new Response(JSON.stringify(body), {
+            status: 200, headers: {'Content-Type': 'application/json'},
+        });
+        const synth = {
+            '/Events/version': s => ({
+                current: s.version,
+                isDevBuild: s.tables?.update?.isDevBuild ?? false,
+                latest: s.tables?.update?.latest ?? null,
+                releaseUrl: s.tables?.update?.releaseUrl ?? null,
+                isAvailable: s.tables?.update?.isAvailable ?? false,
+                fetchedAt: s.tables?.update?.fetchedAt ?? null,
+            }),
+            '/Update/status': s => s.tables?.update ?? {
+                current: s.version,
+                isDevBuild: false, latest: null, releaseUrl: null,
+                isAvailable: false, fetchedAt: null, requestPending: false,
+                lastRun: null,
+            },
+            '/Events/health': s => ({
+                forwardAttempts: s.forwardAttempts,
+                forwardSuccess: s.forwardSuccess,
+                forwardFailure: s.forwardFailure,
+                ttlExpiredDrops: s.ttlExpiredDrops,
+                noRouteSkips: s.noRouteSkips,
+                agwReconnects: s.agwReconnects,
+                agwLastReconnectAt: s.agwLastReconnectAt,
+                inboundConnects: s.inboundConnects,
+                hashMismatches: s.hashMismatches,
+                neighbours: s.neighbourLinks ?? [],
+                recentEvents: s.recentEvents ?? [],
+            }),
+            '/Events/queue': s => ({
+                totalMessages: s.totalMessagesCount,
+                pendingOutbound: s.pendingOutboundCount,
+                undeliveredLocal: s.undeliveredLocalCount,
+                outbound: s.tables?.outbound ?? [],
+                localInbox: s.tables?.localInbox ?? [],
+            }),
+            '/Events/dropped': s => s.tables?.dropped ?? [],
+            '/Probes': s => (s.tables?.probedNodes ?? []).map(p => ({
+                callsign: p.callsign,
+                lastBpqPort: p.lastBpqPort,
+                lastProbedAt: p.lastProbedAt,
+                lastSuccessAt: p.lastSuccessAt,
+                lastError: p.lastError,
+                consecutiveFailures: p.consecutiveFailures,
+                successCount: p.successCount,
+                optOut: p.optOut,
+                source: p.source && p.source.length ? p.source : 'neighbour',
+            })),
+            '/Polls': s => s.tables?.polledNodes ?? [],
+        };
+
+        window.fetch = function (url, init) {
+            const method = ((init && init.method) || 'GET').toUpperCase();
+            if (method === 'GET' && typeof url === 'string') {
+                const path = url.split('?')[0];
+                const fn = synth[path];
+                if (fn) {
+                    return (async () => {
+                        if (!window.__dappsSnap) await refresh();
+                        if (!window.__dappsSnap) return new Response('', { status: 503 });
+                        return ok(fn(window.__dappsSnap));
+                    })();
+                }
+            }
+            return __dappsNativeFetch(url, init);
+        };
+
+        // Master refresh on load + every 5s. Per-panel polls keep
+        // their own setInterval cadences but read from the cache.
+        refresh();
+        setInterval(refresh, 5000);
+        // Allow action handlers (Apply update etc.) to force a fresh
+        // snapshot after a mutation.
+        window.dappsRefreshSnap = refresh;
+    })();
+</script>
+
+<script>
     // Poll /Events/version once on load and every 10 minutes after.
     // Renders one of three states into #version-pill in the header:
     //   - dev build:        "dev <sha>"   (info pill)
@@ -313,6 +415,7 @@
                 alert(`Apply failed (${res.status}): ${text}`);
                 return;
             }
+            await (window.dappsRefreshSnap?.());
             poll();
         }
         async function dappsCheckNowFn() {
@@ -329,6 +432,7 @@
                     alert(`Check failed (${res.status}): ${text}`);
                     return;
                 }
+                await (window.dappsRefreshSnap?.());
                 await poll();
             } finally {
                 btn.disabled = false;
@@ -1219,6 +1323,7 @@ else
     async function dappsRunSweep() {
         if (!confirm('Probe every known peer now? Uses other operators\' airtime.')) return;
         if (await dappsPostJson('/Probes/run', null)) {
+            await (window.dappsRefreshSnap?.());
             window.dappsRefreshProbes && window.dappsRefreshProbes();
         }
     }
@@ -1245,6 +1350,7 @@ else
     async function dappsForgetProbe(callsign) {
         if (!confirm(`Forget probe row for ${decodeURIComponent(callsign)}?`)) return;
         if (await dappsPostJson('/Probes/' + callsign, null, 'DELETE')) {
+            await (window.dappsRefreshSnap?.());
             window.dappsRefreshProbes && window.dappsRefreshProbes();
         }
     }
@@ -1252,6 +1358,7 @@ else
     async function dappsRunPollSweep() {
         if (!confirm('Poll every neighbour for queued mail now?')) return;
         if (await dappsPostJson('/Polls/run', null)) {
+            await (window.dappsRefreshSnap?.());
             window.dappsRefreshPolls && window.dappsRefreshPolls();
         }
     }
@@ -1274,6 +1381,7 @@ else
     async function dappsForgetPoll(callsign) {
         if (!confirm(`Forget poll row for ${decodeURIComponent(callsign)}?`)) return;
         if (await dappsPostJson('/Polls/' + callsign, null, 'DELETE')) {
+            await (window.dappsRefreshSnap?.());
             window.dappsRefreshPolls && window.dappsRefreshPolls();
         }
     }
