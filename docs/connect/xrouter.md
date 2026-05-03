@@ -1,8 +1,10 @@
 # Connect via XRouter (AGW)
 
-**Status: untested, but expected to work.** XRouter (Paula Dowie, G8PZT) is a long-standing alternative to BPQ in the British packet community. It exposes an AGW interface in much the same shape BPQ does, and the AGW protocol is well-defined and stable, so DAPPS *should* connect to it the same way - register a callsign for inbound dispatch, dial out to remote callsigns on demand. We just haven't put a node on the air against XRouter ourselves yet.
+**Status: AGW frame layer tested in CI; on-air shake-down pending.** XRouter (Paula Dowie, G8PZT) is a long-standing alternative to BPQ in the British packet community. Its AGW emulator implements the AGW protocol byte-for-byte the same way BPQ does (it reports a different version stamp - 2000.20 vs BPQ's 2003.999 - but the wire format is identical). The DAPPS integration test suite now spins up `ghcr.io/packethacking/xrouter:latest` alongside `m0lte/linbpq:latest`, and the same AGW handshake test that runs against BPQ runs unchanged against XRouter.
 
-If you're an XRouter operator: we'd love to hear from you. [Open an issue](https://github.com/M0LTE/dapps/issues) if you try it - either to confirm it works (so we can drop the "untested" caveat) or to report what's different (so we can document the XRouter recipe properly here).
+What that proves: DAPPS's AGW transport is genuinely host-agnostic - the BPQ-specific assumptions we'd worried about (callsign registration shape, frame layout, version stamp) aren't there. The remaining BPQ-specific bits in the docs (the `APPLICATION` line shape, the BPQ-port-byte naming) translate cleanly to XRouter's INTERFACE/PORT model.
+
+What's still pending: a real on-air shake-down with XRouter as the bearer. Frame format works; we haven't yet verified end-to-end DAPPS message forwarding through an XRouter node. If you're an XRouter operator who wants to be in the loop on that, [open an issue](https://github.com/M0LTE/dapps/issues).
 
 ## What we expect
 
@@ -27,11 +29,11 @@ DAPPS_DEFAULT_BPQ_PORT=0
 
 `DAPPS_DEFAULT_BPQ_PORT` is named for historical reasons; it's just the byte AGW uses to identify which radio port to originate on. The XRouter mapping should be the same as the order ports appear in XRouter's config.
 
-## Why we haven't tested yet
+## What's tested in CI
 
-We've got a [Docker image for BPQ](https://hub.docker.com/r/m0lte/linbpq) that the integration tests spin up two of in CI, so every PR runs a real two-instance BPQ topology end-to-end. There isn't an equivalent XRouter image yet - building one would let us add XRouter to the integration matrix and ship the same level of confidence we have for BPQ.
+`ghcr.io/packethacking/xrouter:latest` (Paula Dowie's container build of XrLin) runs alongside `m0lte/linbpq:latest` in the integration test matrix. On every PR, both containers spin up via Testcontainers and the same AGW handshake test runs against each. That covers the frame-format end-to-end - if XRouter's AGW emulator drifted from the documented protocol in a way DAPPS would care about, the test would catch it.
 
-If you're a Docker-friendly XRouter operator who'd like to help dockerise XRouter for a CI fixture, that would unlock the testing story here.
+What's not yet tested: full two-instance topologies with XRouter on either end (analogous to BPQ's `TwoInstanceLinbpqFixture`), and real on-air shake-down with messages flowing through an XRouter-hosted DAPPS node. Both are reasonable follow-ups; neither is blocked on anything other than someone setting up the test.
 
 ## XRouter and RHPv2
 
