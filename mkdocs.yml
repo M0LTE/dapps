@@ -1,6 +1,6 @@
 site_name: DAPPS
 site_description: >
-  Distributed Asynchronous Packet Pub-Sub — operator and developer
+  Distributed Asynchronous Packet Pub-Sub - operator and developer
   manual for running and building against a DAPPS node.
 site_url: https://m0lte.github.io/dapps/
 repo_url: https://github.com/M0LTE/dapps
@@ -106,7 +106,7 @@ nav:
   - App developers:
       - app-developers/index.md
       - Concepts: app-developers/concepts.md
-      - Tutorial — hello world: app-developers/tutorial.md
+      - Tutorial - hello world: app-developers/tutorial.md
       - Reference: app-developers/reference.md
       - Sample gallery: app-developers/gallery.md
   - Troubleshooting: troubleshooting.md

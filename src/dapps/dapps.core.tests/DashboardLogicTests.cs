@@ -32,7 +32,7 @@ public class DashboardLogicTests
     [Fact]
     public void MessageStatus_LocalSsidVariant_StillCountsAsLocal()
     {
-        // "myapp@N0CALL-3" — same base callsign as us, different SSID.
+        // "myapp@N0CALL-3" - same base callsign as us, different SSID.
         var m = new DbMessage { Destination = "myapp@N0CALL-3", LocallyDelivered = true };
         IndexModel.MessageStatus(m, "N0CALL").Label.Should().Be("delivered");
     }

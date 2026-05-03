@@ -1,10 +1,10 @@
 # Connect via BPQ (AGW)
 
-This page is the full BPQ recipe for getting DAPPS on-air. Same shape applies to any AGW host (Direwolf, AGWPE, etc.) — only the specifics of the config file change.
+This page is the full BPQ recipe for getting DAPPS on-air. Same shape applies to any AGW host (Direwolf, AGWPE, etc.) - only the specifics of the config file change.
 
 ## What we're wiring up
 
-DAPPS uses **one** BPQ surface — AGW — for both inbound and outbound traffic. Outbound: DAPPS opens an AGW client connection to BPQ, registers its callsign, and dials remote callsigns when it has something to ship. Inbound: when a remote node L2-connects to your callsign with the application command `DAPPS`, BPQ dispatches the session over AGW to the registered DAPPS client.
+DAPPS uses **one** BPQ surface - AGW - for both inbound and outbound traffic. Outbound: DAPPS opens an AGW client connection to BPQ, registers its callsign, and dials remote callsigns when it has something to ship. Inbound: when a remote node L2-connects to your callsign with the application command `DAPPS`, BPQ dispatches the session over AGW to the registered DAPPS client.
 
 This is one TCP connection from DAPPS to BPQ (not co-located requirements; DAPPS can run on a different host as long as it can reach BPQ's AGW port over TCP).
 
@@ -18,14 +18,14 @@ APPLICATION 1,DAPPS,,,,, 0
 
 Field-by-field:
 
-- `1` — application slot number. Bump this if slot 1 is already in use; the value doesn't matter beyond uniqueness.
-- `DAPPS` — the command operators type at the BPQ node prompt to enter the DAPPS slot. If you'd rather use a different name (`MSG`, `APPS`, whatever), put it here, then set `DAPPS_NODE_PROMPT_APPLICATION_COMMAND` in the daemon's environment to match.
-- `,,,,,` — empty CMD field on purpose. Older recipes used `C N HOST K TRANS S` here; for DAPPS, leave it empty so BPQ doesn't run any node command on inbound — it just dispatches the L2 'C' frame to the registered AGW client.
-- `0` — application alias / number flag.
+- `1` - application slot number. Bump this if slot 1 is already in use; the value doesn't matter beyond uniqueness.
+- `DAPPS` - the command operators type at the BPQ node prompt to enter the DAPPS slot. If you'd rather use a different name (`MSG`, `APPS`, whatever), put it here, then set `DAPPS_NODE_PROMPT_APPLICATION_COMMAND` in the daemon's environment to match.
+- `,,,,,` - empty CMD field on purpose. Older recipes used `C N HOST K TRANS S` here; for DAPPS, leave it empty so BPQ doesn't run any node command on inbound - it just dispatches the L2 'C' frame to the registered AGW client.
+- `0` - application alias / number flag.
 
 Restart BPQ for the change to land.
 
-You can also enable AXIP / AXUDP / serial ports as you would for any application — DAPPS doesn't care which physical link AGW is fronting, as long as BPQ delivers sessions over the AGW socket.
+You can also enable AXIP / AXUDP / serial ports as you would for any application - DAPPS doesn't care which physical link AGW is fronting, as long as BPQ delivers sessions over the AGW socket.
 
 ## Step 2: confirm AGW is reachable from where DAPPS will run
 
@@ -69,7 +69,7 @@ From another packet node (or from the BPQ console):
 c <your-callsign>
 ```
 
-You should land at the `DAPPSv1>` prompt — that's DAPPS having taken the inbound session from AGW. Disconnect.
+You should land at the `DAPPSv1>` prompt - that's DAPPS having taken the inbound session from AGW. Disconnect.
 
 ## Step 6: prove the outbound side
 
@@ -87,13 +87,13 @@ Send a test message via the dashboard's **Send a test message** form. The forwar
 
 If your BPQ has multiple radio ports (e.g. port 1 = VHF FM, port 2 = HF), every neighbour record can specify which BPQ port to use for that peer. The dashboard's add-neighbour form has the BPQ-port field; the discovery system records the port a peer was heard on automatically.
 
-You don't need an `APPLICATION` line per port — the single `APPLICATION DAPPS` line covers all ports. The port choice is per-neighbour for outbound; for inbound, BPQ dispatches the same way no matter which port the connect arrived on.
+You don't need an `APPLICATION` line per port - the single `APPLICATION DAPPS` line covers all ports. The port choice is per-neighbour for outbound; for inbound, BPQ dispatches the same way no matter which port the connect arrived on.
 
 ## Sharing a callsign between BPQ and DAPPS
 
-The recommended pattern is to give DAPPS its own SSID under your callsign — `M0LTE-1` for the BBS, `M0LTE-7` for DAPPS, etc. AGW dispatches by exact call+SSID, so they coexist cleanly. You can run as many DAPPS instances against one BPQ as you have spare SSIDs.
+The recommended pattern is to give DAPPS its own SSID under your callsign - `M0LTE-1` for the BBS, `M0LTE-7` for DAPPS, etc. AGW dispatches by exact call+SSID, so they coexist cleanly. You can run as many DAPPS instances against one BPQ as you have spare SSIDs.
 
-Same-callsign-same-SSID with another application is **not** supported — AGW will dispatch to whichever client registered last and the first registration silently stops getting inbound traffic.
+Same-callsign-same-SSID with another application is **not** supported - AGW will dispatch to whichever client registered last and the first registration silently stops getting inbound traffic.
 
 ## Troubleshooting
 

@@ -1,6 +1,6 @@
 # Reference
 
-Complete shape of the local app interface — every endpoint, every topic, every property.
+Complete shape of the local app interface - every endpoint, every topic, every property.
 
 If you're new, read [Concepts](concepts.md) first and walk through the [tutorial](tutorial.md). This page assumes you know what `app@CALLSIGN` means and have written one app already.
 
@@ -8,15 +8,15 @@ The on-air protocol DAPPS speaks **between nodes** is summarised in the section 
 
 ## MQTT
 
-Embedded broker, default port 1883. Speak MQTT 5 — clean session is fine and recommended. The broker holds no persistent state; messages are durable in DAPPS's SQLite queue, the broker is just the real-time delivery channel.
+Embedded broker, default port 1883. Speak MQTT 5 - clean session is fine and recommended. The broker holds no persistent state; messages are durable in DAPPS's SQLite queue, the broker is just the real-time delivery channel.
 
 ### Topics
 
-#### `dapps/in/<app>` — inbox
+#### `dapps/in/<app>` - inbox
 
 DAPPS publishes one message here for each pending delivery to `<app>` on this node. Subscribe with QoS 1.
 
-**Replay on subscribe**: every pending message arrives the moment you subscribe — even ones submitted while the app was offline. There is no separate "fetch backlog" call.
+**Replay on subscribe**: every pending message arrives the moment you subscribe - even ones submitted while the app was offline. There is no separate "fetch backlog" call.
 
 **Payload**: the raw bytes the sender submitted. No envelope, no length prefix, no encoding imposed by DAPPS.
 
@@ -28,7 +28,7 @@ DAPPS publishes one message here for each pending delivery to `<app>` on this no
 | `dapps-source` | string (callsign)     | The originating callsign. Use as destination for replies.                |
 | `dapps-ttl`    | string (decimal int)  | *Optional.* Residual lifetime in seconds. Absent if the sender didn't set a TTL. |
 
-#### `dapps/out/<app>/<dest-callsign>` — outbox
+#### `dapps/out/<app>/<dest-callsign>` - outbox
 
 Publish here to submit a message for `<app>` running at `<dest-callsign>`. Use QoS 1.
 
@@ -40,11 +40,11 @@ The destination is encoded in the topic, not the payload. So submitting to `dapp
 
 | Name        | Type                          | Meaning                                                                                                  |
 |-------------|-------------------------------|----------------------------------------------------------------------------------------------------------|
-| `dapps-ttl` | string (positive decimal int) | Initial TTL in seconds. Decremented at each forwarder by the time the message dwelt in that hop's queue. Malformed values (non-integer, zero, negative) are silently ignored — the message is queued without a TTL. |
+| `dapps-ttl` | string (positive decimal int) | Initial TTL in seconds. Decremented at each forwarder by the time the message dwelt in that hop's queue. Malformed values (non-integer, zero, negative) are silently ignored - the message is queued without a TTL. |
 
-#### `dapps/ack/<app>` — acknowledge
+#### `dapps/ack/<app>` - acknowledge
 
-Publish a 7-character message id (as the UTF-8 payload) to mark it processed. Idempotent — re-acking is a no-op. Until you ack, DAPPS treats the message as still pending and will redeliver on next subscribe.
+Publish a 7-character message id (as the UTF-8 payload) to mark it processed. Idempotent - re-acking is a no-op. Until you ack, DAPPS treats the message as still pending and will redeliver on next subscribe.
 
 QoS 1 is fine; QoS 0 is acceptable since at worst the message gets redelivered (and your idempotency check will catch it).
 
@@ -112,9 +112,9 @@ List currently unacknowledged messages for `{app}`.
 | Field            | Type                  | Notes                                                                                  |
 |------------------|-----------------------|----------------------------------------------------------------------------------------|
 | `id`             | string                | Stable across redeliveries. Use as idempotency key.                                    |
-| `sourceCallsign` | string                | Same semantics as `dapps-source` on MQTT — originating callsign.                       |
+| `sourceCallsign` | string                | Same semantics as `dapps-source` on MQTT - originating callsign.                       |
 | `payload`        | bytes (base64)        | Raw payload.                                                                           |
-| `ttl`            | int seconds, nullable | **Residual** lifetime — initial TTL minus dwell time on this node. `null` if no TTL.    |
+| `ttl`            | int seconds, nullable | **Residual** lifetime - initial TTL minus dwell time on this node. `null` if no TTL.    |
 
 ```bash
 curl http://localhost:5000/AppApi/inbound/chat
@@ -170,14 +170,14 @@ A `seen` set can be size-bounded:
 - **Bounded by TTL**: keep `(id, expiry)` rows; sweep periodically. The TTL on the row should comfortably exceed the longest expected redelivery window.
 - **Bounded by count** (LRU): cheap, works in practice, fails badly if a backlog of old still-pending messages exceeds the LRU capacity.
 
-If you process a message and the work is itself idempotent (e.g. UPSERT-shaped database mutation), you can skip the `seen` set entirely — at-least-once redelivery becomes a non-issue. Often the easiest path.
+If you process a message and the work is itself idempotent (e.g. UPSERT-shaped database mutation), you can skip the `seen` set entirely - at-least-once redelivery becomes a non-issue. Often the easiest path.
 
 ## Limits
 
-DAPPS does not impose a hard payload-size limit at the app interface — submit any byte array. In practice:
+DAPPS does not impose a hard payload-size limit at the app interface - submit any byte array. In practice:
 
 - **The on-air bearer.** AX.25 frames are typically 256 bytes; a 4 KB payload becomes ~16 frames per hop, which under realistic packet-radio conditions might mean retries and noticeable latency.
-- **The fragment threshold** (default 4 KB; operator-configurable). Above this, the message is split into N fragments at submit and reassembled at the receiver. This works transparently — your app sees one inbound message regardless — but very large messages (MB-scale) are not what DAPPS is for.
+- **The fragment threshold** (default 4 KB; operator-configurable). Above this, the message is split into N fragments at submit and reassembled at the receiver. This works transparently - your app sees one inbound message regardless - but very large messages (MB-scale) are not what DAPPS is for.
 - **The id collision space** is 2^28 (~268M unique ids). At any realistic app traffic level, collisions are not a concern. If your app submits millions of distinct messages per day from a single source, think about it; otherwise don't.
 
 ## Topic / endpoint summary
@@ -216,12 +216,12 @@ Then a back-and-forth of one-line commands and responses:
 | `end`                                           | reply            | End of `peers` response.                            |
 | `rev <id>[,<id>...]`                            | either           | "Send me anything you're holding for these callsigns." |
 
-Headers on `ihave` are forward-compatible — receivers ignore unknown ones. New optional fields (e.g. `src=` for source tracking, `mid=` + `frag=N/M` for multi-part) ride the existing `DAPPSv1>` prompt. Breaking changes bump the prompt to `DAPPSv2>`.
+Headers on `ihave` are forward-compatible - receivers ignore unknown ones. New optional fields (e.g. `src=` for source tracking, `mid=` + `frag=N/M` for multi-part) ride the existing `DAPPSv1>` prompt. Breaking changes bump the prompt to `DAPPSv2>`.
 
 The full wire spec lives in the [main repository README](https://github.com/M0LTE/dapps/blob/master/README.md#on-air-protocol).
 
 ## See also
 
-- [Concepts](concepts.md) — the mental model.
-- [Tutorial](tutorial.md) — hello-world end-to-end.
-- [Sample gallery](gallery.md) — worked examples for common app shapes.
+- [Concepts](concepts.md) - the mental model.
+- [Tutorial](tutorial.md) - hello-world end-to-end.
+- [Sample gallery](gallery.md) - worked examples for common app shapes.

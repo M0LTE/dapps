@@ -1,7 +1,7 @@
 @page
 @model IHaveModel
 @{
-    ViewData["Title"] = $"DAPPS — manual ihave (@{Model.Options.Callsign})";
+    ViewData["Title"] = $"DAPPS - manual ihave (@{Model.Options.Callsign})";
 }
 
 <header class="app-header">
@@ -32,7 +32,7 @@
 
     <h2>Compose</h2>
     <p class="muted-inline">
-        Submits an outbound message via <code>Database.SubmitOutboundMessage</code> — same code path
+        Submits an outbound message via <code>Database.SubmitOutboundMessage</code> - same code path
         the dashboard's send-test form uses, just with every header field exposed for hand-crafting.
         Useful for debugging payload edge cases (TTL boundaries, salt collisions, fragment-threshold
         crossings) without writing an app first. Above the fragment threshold the message is split
@@ -42,11 +42,11 @@
     <form class="inline" method="post">
         <label for="App">App</label>
         <input id="App" type="text" name="@nameof(IHaveModel.Form).@nameof(IHaveModel.IHaveForm.App)" value="@Model.Form.App" required />
-        <small>Application name on the destination node — the receiver subscribes to <code>dapps/in/&lt;app&gt;</code> for this.</small>
+        <small>Application name on the destination node - the receiver subscribes to <code>dapps/in/&lt;app&gt;</code> for this.</small>
 
         <label for="Destination">Destination callsign</label>
         <input id="Destination" type="text" name="@nameof(IHaveModel.Form).@nameof(IHaveModel.IHaveForm.Destination)" value="@Model.Form.Destination" required />
-        <small>Includes optional SSID, e.g. <code>M0LTE-1</code>. Case-insensitive — normalised to upper-case before submit.</small>
+        <small>Includes optional SSID, e.g. <code>M0LTE-1</code>. Case-insensitive - normalised to upper-case before submit.</small>
 
         <label for="Payload">Payload (UTF-8 text)</label>
         <input id="Payload" type="text" name="@nameof(IHaveModel.Form).@nameof(IHaveModel.IHaveForm.Payload)" value="@Model.Form.Payload" />

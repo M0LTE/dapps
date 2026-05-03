@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging;
 namespace dapps.core.Updater;
 
 /// <summary>
-/// Plan C5.2 — the privileged update flow, factored as a pure state
+/// Plan C5.2 - the privileged update flow, factored as a pure state
 /// machine over the <see cref="IUpdaterFileSystem"/>,
 /// <see cref="IUpdaterDownloader"/>, <see cref="IUpdaterProcess"/>
 /// abstractions so the happy path AND every rollback path can be unit-
@@ -51,7 +51,7 @@ public sealed class UpdaterOrchestrator
         this.downloader = downloader;
         this.proc = proc;
         // The CLI side-door runs the orchestrator without DI. Default
-        // to system time when no TimeProvider is supplied — tests pass
+        // to system time when no TimeProvider is supplied - tests pass
         // a FakeTimeProvider to drive deadlines deterministically.
         this.timeProvider = timeProvider ?? TimeProvider.System;
         this.logger = logger;
@@ -76,7 +76,7 @@ public sealed class UpdaterOrchestrator
     {
         if (!fs.Exists(paths.RequestPath))
         {
-            // Common path — timer fired, no operator request. No-op.
+            // Common path - timer fired, no operator request. No-op.
             return 0;
         }
 
@@ -129,7 +129,7 @@ public sealed class UpdaterOrchestrator
 
         // 3a. Sanity-probe systemctl BEFORE we swap. If Process can't
         //     be loaded (we hit this on linux-arm with the in-memory
-        //     bundle resolver — fixed in v0.18.4 by extraction-on-
+        //     bundle resolver - fixed in v0.18.4 by extraction-on-
         //     startup, but defending here means the next class of
         //     "can't talk to systemd" never produces a swap-then-
         //     crash dead-end node), surface the failure with no swap
@@ -143,7 +143,7 @@ public sealed class UpdaterOrchestrator
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "systemctl probe failed — refusing to swap");
+            logger.LogError(ex, "systemctl probe failed - refusing to swap");
             WriteStatus(status with
             {
                 Phase = UpdatePhase.Failed, UpdatedAt = timeProvider.GetUtcNow().UtcDateTime,
@@ -226,7 +226,7 @@ public sealed class UpdaterOrchestrator
             }
         }
 
-        // 6. Stayed up the whole window — commit.
+        // 6. Stayed up the whole window - commit.
         WriteStatus(status with { Phase = UpdatePhase.Success, UpdatedAt = timeProvider.GetUtcNow().UtcDateTime });
         ClearRequest();
         logger.LogInformation("Update to v{0} successful", targetVersion);
@@ -242,7 +242,7 @@ public sealed class UpdaterOrchestrator
     {
         if (!fs.Exists(paths.PreviousBinaryPath))
         {
-            logger.LogError("No previous binary at {0} — cannot roll back", paths.PreviousBinaryPath);
+            logger.LogError("No previous binary at {0} - cannot roll back", paths.PreviousBinaryPath);
             return 2;
         }
         try
@@ -273,7 +273,7 @@ public sealed class UpdaterOrchestrator
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Rollback restore failed mid-update — node is in an inconsistent state");
+            logger.LogError(ex, "Rollback restore failed mid-update - node is in an inconsistent state");
             WriteStatus(status with
             {
                 Phase = UpdatePhase.Failed, UpdatedAt = timeProvider.GetUtcNow().UtcDateTime,
@@ -311,7 +311,7 @@ public sealed class UpdaterOrchestrator
     }
 
     /// <summary>Best-effort RID resolution. Mirrors the matrix in
-    /// <c>.github/workflows/ci.yml</c> — the file names match
+    /// <c>.github/workflows/ci.yml</c> - the file names match
     /// <c>dapps-{rid}</c>.</summary>
     public static string ResolveDefaultRid()
     {

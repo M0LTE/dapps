@@ -143,7 +143,7 @@ public sealed class DatabaseAndMqttInboxTests : IAsyncLifetime
         using var c = DbInfo.GetConnection();
         c.Find<DbMessage>("inbx002").Should().NotBeNull();
 
-        // No MQTT delivery — the destination is remote.
+        // No MQTT delivery - the destination is remote.
         var winner = await Task.WhenAny(
             received.Task,
             Task.Delay(TimeSpan.FromMilliseconds(500), ct));

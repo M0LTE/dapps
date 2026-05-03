@@ -49,7 +49,7 @@ public class OperationalMetricsTests
     public void NextSuccess_ClearsLastError()
     {
         // Sticky-error semantics would be confusing on the dashboard:
-        // "this neighbour just successfully forwarded — but it also
+        // "this neighbour just successfully forwarded - but it also
         // says 'last error: connection timeout'?" Last-error tracks
         // the most recent failure relative to the most recent success.
         var m = new OperationalMetrics();
@@ -167,7 +167,7 @@ public class OperationalMetricsTests
         m.LastForwardSuccessAt.Should().NotBeNull();
         var firstStamp = m.LastForwardSuccessAt!.Value;
 
-        // A failure between successes must not bump the timestamp —
+        // A failure between successes must not bump the timestamp -
         // /Health surfaces this as "node was actually doing real work
         // recently" and shouldn't be reset by a transient flap.
         m.RecordForwardFailure("aaa2222", "G7XYZ", 0, "timeout");

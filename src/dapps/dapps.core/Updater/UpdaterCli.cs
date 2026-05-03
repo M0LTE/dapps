@@ -4,22 +4,22 @@ using Microsoft.Extensions.Logging;
 namespace dapps.core.Updater;
 
 /// <summary>
-/// Plan C5.2 — the side-door CLI flags on the dapps binary that don't
+/// Plan C5.2 - the side-door CLI flags on the dapps binary that don't
 /// boot the host. Recognised before <c>WebApplication.CreateBuilder</c>
 /// runs:
 /// <list type="bullet">
-/// <item><c>--version</c> — print version, exit 0.</item>
-/// <item><c>--check-update</c> — query GitHub Releases, print the
+/// <item><c>--version</c> - print version, exit 0.</item>
+/// <item><c>--check-update</c> - query GitHub Releases, print the
 /// available tag (or "none"), exit 0.</item>
-/// <item><c>--apply-update</c> — privileged: download the latest
+/// <item><c>--apply-update</c> - privileged: download the latest
 /// asset for our RID, swap it in, restart the service, verify, roll
 /// back on any failure. ExecStart-ed by <c>dapps-updater.service</c>.
 /// Exit 0 on success / no-update-needed, 1 on rolled-back, 2 on
 /// failed-without-swap.</item>
-/// <item><c>--rollback</c> — privileged: restore <c>dapps.previous</c>
+/// <item><c>--rollback</c> - privileged: restore <c>dapps.previous</c>
 /// over <c>dapps</c> + restart. Manual operator rescue from SSH when
 /// the dashboard isn't enough.</item>
-/// <item><c>--show-config</c> — print the persisted
+/// <item><c>--show-config</c> - print the persisted
 /// <see cref="dapps.core.Models.SystemOptions"/> rows from
 /// <c>data/dapps.db</c> in <c>DAPPS_SCREAMING_SNAKE=value</c> form,
 /// exit 0. Useful for confirming what the daemon will resolve at

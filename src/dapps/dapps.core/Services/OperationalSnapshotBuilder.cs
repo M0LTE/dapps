@@ -7,7 +7,7 @@ using Microsoft.Extensions.Options;
 namespace dapps.core.Services;
 
 /// <summary>
-/// Plan C3 PR-B — single source of truth for the
+/// Plan C3 PR-B - single source of truth for the
 /// "what's going on with this node?" aggregate snapshot consumed by
 /// both <c>/Operational</c> (operator-facing JSON) and
 /// <c>HeartbeatPublisher</c> (periodic MQTT publish).
@@ -16,7 +16,7 @@ namespace dapps.core.Services;
 /// <see cref="OperationalMetrics"/>, queue / peer / channel /
 /// neighbour counts from <see cref="Database"/>, and trailing-hour
 /// airtime usage from <see cref="AirtimeAccountant"/>. Plus a
-/// trimmed recent-events tail (last 20 — lighter than the dashboard's
+/// trimmed recent-events tail (last 20 - lighter than the dashboard's
 /// full 100-entry ring; the heartbeat goes on the wire every minute
 /// and shouldn't carry the full history).
 /// </summary>

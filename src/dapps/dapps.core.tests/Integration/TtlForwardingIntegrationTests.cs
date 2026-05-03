@@ -28,7 +28,7 @@ namespace dapps.core.tests.Integration;
 ///      smaller than the original.
 ///
 /// Without A1's decrement, the wire bytes either omit ttl entirely or
-/// carry the original 60s — both fail the assertion.
+/// carry the original 60s - both fail the assertion.
 /// </summary>
 [Collection("Linbpq two-instance integration")]
 [Trait("Category", "Integration")]
@@ -50,7 +50,7 @@ public class TtlForwardingIntegrationTests(TwoInstanceLinbpqFixture fixture) : I
             c.CreateTable<DbNeighbour>();
             c.CreateTable<DbRouteHint>();
             c.CreateTable<DbDiscoveredPeer>();
-            // Adding the neighbour is enough — the resolver matches its
+            // Adding the neighbour is enough - the resolver matches its
             // base callsign against the destination's @-suffix, no
             // separate route hint required (A2).
             c.Insert(new DbNeighbour { Callsign = fixture.ApplCallB, BpqPort = fixture.AxipPortIndex });
@@ -152,7 +152,7 @@ public class TtlForwardingIntegrationTests(TwoInstanceLinbpqFixture fixture) : I
         ttl.Should().BeLessThan(originalTtl,
             "the forwarder MUST decrement ttl by the time the message spent in queue");
         ttl.Should().BeGreaterThan(0,
-            "30s of dwell against a 60s ttl leaves real headroom — anything ≤0 means we double-counted");
+            "30s of dwell against a 60s ttl leaves real headroom - anything ≤0 means we double-counted");
 
         await receiverTask.WaitAsync(TimeSpan.FromSeconds(5), ct);
     }

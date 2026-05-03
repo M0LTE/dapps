@@ -1,6 +1,6 @@
 # Install with Docker
 
-A published image is available on Docker Hub. Useful if you already orchestrate with compose, run a homelab stack, or just don't want to manage another systemd unit. The image runs the same binary as the bare-metal install — same configuration story, same dashboard.
+A published image is available on Docker Hub. Useful if you already orchestrate with compose, run a homelab stack, or just don't want to manage another systemd unit. The image runs the same binary as the bare-metal install - same configuration story, same dashboard.
 
 ## Image
 
@@ -63,7 +63,7 @@ Set `DAPPS_NODE_HOST` accordingly.
 
 ## Updates
 
-The supervised in-place update path (the `/Update/apply` button on the dashboard, the `trigger_update` MCP tool) does not work inside the standard image — the privileged updater wants to swap the binary on disk and restart its own service, which Docker doesn't model the same way.
+The supervised in-place update path (the `/Update/apply` button on the dashboard, the `trigger_update` MCP tool) does not work inside the standard image - the privileged updater wants to swap the binary on disk and restart its own service, which Docker doesn't model the same way.
 
 Instead, update by pulling a new image tag and restarting the container:
 
@@ -84,4 +84,4 @@ Everything DAPPS needs to remember between restarts is in the SQLite database at
 docker logs -f dapps
 ```
 
-Same content as the bare-metal install's stdout — start-up events, decision events, errors.
+Same content as the bare-metal install's stdout - start-up events, decision events, errors.

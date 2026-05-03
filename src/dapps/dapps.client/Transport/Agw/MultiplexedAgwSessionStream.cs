@@ -4,7 +4,7 @@ namespace dapps.client.Transport.Agw;
 
 /// <summary>
 /// Stream view of one AGW connected session when many sessions share a
-/// single AGW socket (the inbound case — the AGW frame stream is read
+/// single AGW socket (the inbound case - the AGW frame stream is read
 /// by a single dispatcher loop, which routes 'D' / 'd' frames to the
 /// matching session by callfrom/callto).
 ///
@@ -63,7 +63,7 @@ public sealed class MultiplexedAgwSessionStream : Stream
 
         var available = result.Buffer;
         var toCopy = (int)Math.Min(available.Length, buffer.Length);
-        // Span-typed work has to live in a sync helper — async methods
+        // Span-typed work has to live in a sync helper - async methods
         // can't hold ref-struct locals in C# 12 / .NET 8.
         CopyToMemory(available.Slice(0, toCopy), buffer);
         incoming.Reader.AdvanceTo(available.GetPosition(toCopy));

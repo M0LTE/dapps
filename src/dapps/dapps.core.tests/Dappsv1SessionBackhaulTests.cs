@@ -12,7 +12,7 @@ namespace dapps.core.tests;
 /// end-to-end <c>TtlForwardingIntegrationTests</c> exercises this
 /// against a real BPQ over AXIP-UDP, but those need Docker. These
 /// drive the protocol state machine directly with a fake transport
-/// that hands back canned receiver bytes — fast, hermetic, covers
+/// that hands back canned receiver bytes - fast, hermetic, covers
 /// each rejection path explicitly.
 /// </summary>
 public sealed class Dappsv1SessionBackhaulTests

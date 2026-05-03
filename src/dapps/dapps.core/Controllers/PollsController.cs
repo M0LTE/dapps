@@ -6,7 +6,7 @@ using Microsoft.Extensions.Options;
 namespace dapps.core.Controllers;
 
 /// <summary>
-/// Plan F3b — scheduled-poll REST surface. Mirrors
+/// Plan F3b - scheduled-poll REST surface. Mirrors
 /// <see cref="ProbesController"/> in shape: list state, sweep all
 /// now, poll one now, set opt-out, forget row.
 /// </summary>
@@ -41,7 +41,7 @@ public class PollsController(
         if (!hasRoute)
         {
             return BadRequest(
-                $"No AGW route to {normalized} — add a /Neighbours row first.");
+                $"No AGW route to {normalized} - add a /Neighbours row first.");
         }
 
         var row = await scheduler.PollAndRecordAsync(
@@ -68,7 +68,7 @@ public class PollsController(
     }
 
     /// <summary>Resolve the BPQ port byte for an on-demand poll. Only
-    /// considers manual neighbours (UDP-only excluded — F3 is AGW-only
+    /// considers manual neighbours (UDP-only excluded - F3 is AGW-only
     /// by design).</summary>
     private async Task<(int Port, bool HasRoute)> ResolvePort(string callsign)
     {

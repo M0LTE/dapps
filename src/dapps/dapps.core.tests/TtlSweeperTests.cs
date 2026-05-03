@@ -9,8 +9,8 @@ namespace dapps.core.tests;
 
 /// <summary>
 /// Drives <see cref="Database.DeleteExpired"/> against a real SQLite file.
-/// We don't run <see cref="TtlSweeperService"/> itself here — that's just
-/// the timer wrapper — but the sweeper's only behaviour is "call
+/// We don't run <see cref="TtlSweeperService"/> itself here - that's just
+/// the timer wrapper - but the sweeper's only behaviour is "call
 /// DeleteExpired", so this covers the contract.
 /// </summary>
 [Collection(SqliteOverridePathCollection.Name)]

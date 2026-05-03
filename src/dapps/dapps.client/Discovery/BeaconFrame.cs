@@ -4,11 +4,11 @@ namespace dapps.client.Discovery;
 /// A neighbour-discovery beacon. Bearer-neutral: AX.25 UI frames carry
 /// it as their information field, UDP multicast carries it as the
 /// datagram body, future bearers carry it however suits them. The wire
-/// form is a tiny ASCII line — see <see cref="BeaconCodec"/>.
+/// form is a tiny ASCII line - see <see cref="BeaconCodec"/>.
 ///
 /// <see cref="BearerHint"/> records the channel the beacon was heard on
 /// so a peer table can record more than just "we saw G7XYZ-9 somewhere"
-/// — it knows whether to talk back over BPQ port 1 or UDP 10.0.0.5:1880.
+/// - it knows whether to talk back over BPQ port 1 or UDP 10.0.0.5:1880.
 /// </summary>
 public sealed record BeaconFrame(
     string Callsign,

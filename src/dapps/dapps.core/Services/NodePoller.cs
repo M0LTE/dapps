@@ -6,11 +6,11 @@ using Microsoft.Extensions.Logging;
 namespace dapps.core.Services;
 
 /// <summary>
-/// Plan F3b — single-shot rev poll over an existing AGW transport.
+/// Plan F3b - single-shot rev poll over an existing AGW transport.
 /// Opens a fresh session to the target, waits for the
 /// <c>DAPPSv1&gt;</c> banner, sends <c>rev</c>, drains every offered
 /// message through <see cref="IBackhaulInbox.DeliverAsync"/>, and
-/// disconnects. Stateless — the same instance can serve many
+/// disconnects. Stateless - the same instance can serve many
 /// concurrent polls.
 ///
 /// Mirror of <see cref="NodeProber"/> for the C5.1-style reachability
@@ -26,7 +26,7 @@ public sealed class NodePoller(
     ILogger<NodePoller> logger)
 {
     /// <summary>Outcome of a single poll. Failure is captured rather
-    /// than thrown — the scheduler catches per-callsign failures so
+    /// than thrown - the scheduler catches per-callsign failures so
     /// one unreachable neighbour doesn't tank the whole sweep.</summary>
     public sealed record PollResult(
         string Callsign,
@@ -79,7 +79,7 @@ public sealed class NodePoller(
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            // Caller-driven cancellation — re-throw so the scheduler
+            // Caller-driven cancellation - re-throw so the scheduler
             // can exit cleanly on shutdown.
             throw;
         }

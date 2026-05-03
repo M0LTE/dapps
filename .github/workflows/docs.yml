@@ -43,7 +43,7 @@ jobs:
       - run: pip install -r docs/requirements.txt
 
       - name: Build site (strict)
-        # --strict turns warnings into errors — broken internal links,
+        # --strict turns warnings into errors - broken internal links,
         # missing nav entries, etc. Catches them before they ship.
         run: mkdocs build --strict
 

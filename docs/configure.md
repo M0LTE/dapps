@@ -6,7 +6,7 @@ Every operator-tunable setting on a DAPPS node has three configuration surfaces:
 2. **An environment variable**, of the form `DAPPS_SCREAMING_SNAKE_NAME`, which **overrides the persisted default at first start** and updates the persisted row.
 3. **The dashboard's `/Config` form** (or `POST /Config` REST API), which writes a new value to the persisted row at any time.
 
-For runtime-changeable knobs (probing on/off, fragment threshold, airtime budget, etc.), the dashboard is the right surface — changes pick up without a restart. For startup-only knobs (callsign, BPQ host/port, MQTT port, dashboard URL), the env var is the right surface — they're read once at boot.
+For runtime-changeable knobs (probing on/off, fragment threshold, airtime budget, etc.), the dashboard is the right surface - changes pick up without a restart. For startup-only knobs (callsign, BPQ host/port, MQTT port, dashboard URL), the env var is the right surface - they're read once at boot.
 
 ## Show the current persisted config
 
@@ -89,12 +89,12 @@ The admin password (for the dashboard cookie) is set on `/Setup` first-run flow,
 
 ## Versioning
 
-The session-protocol version is the suffix on the prompt — `DAPPSv1>` today; `DAPPSv2>` for any future incompatible cut. The policy:
+The session-protocol version is the suffix on the prompt - `DAPPSv1>` today; `DAPPSv2>` for any future incompatible cut. The policy:
 
 - **Forward-compatible additions stay on the current version.** New optional `ihave` headers and new commands ride the existing prompt; receivers ignore unknown headers and respond `?` to unrecognised commands.
 - **Bump the prompt on any incompatible wire change.** A clean version cut beats sticking a patch on `v1` and hoping every implementation interprets it the same way.
 - **Newer implementations should speak older versions** for one-way compatibility.
-- **The UDP / future MeshCore datagram bearer codec versions independently** — different format, different schedule.
+- **The UDP / future MeshCore datagram bearer codec versions independently** - different format, different schedule.
 
 **Pre-shipping caveat**: while DAPPS has no non-author operators on the air, breaking changes to either format are still fair game without a version bump. The cost of compatibility tape that nobody benefits from is real. The policy fully kicks in when the first independent operator picks DAPPS up.
 

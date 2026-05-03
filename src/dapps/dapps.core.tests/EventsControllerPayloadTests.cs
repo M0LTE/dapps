@@ -11,7 +11,7 @@ using Microsoft.Extensions.Time.Testing;
 namespace dapps.core.tests;
 
 /// <summary>
-/// D2 follow-up — /Events/payload/{id}: paint the operator-facing
+/// D2 follow-up - /Events/payload/{id}: paint the operator-facing
 /// behaviours that drive the /Inbound page's click-to-expand flow:
 /// 404 on missing rows, valid-UTF8 vs binary disambiguation,
 /// truncation at the 4 KiB cap, and that the metadata round-trip
@@ -123,7 +123,7 @@ public sealed class EventsControllerPayloadTests : IAsyncLifetime
         preview.Truncated.Should().BeTrue();
         preview.TextValid.Should().BeTrue();
         preview.Text.Should().Be(new string('A', 4 * 1024));
-        // Hex preview is also bounded — we never want to ship 10 KiB of
+        // Hex preview is also bounded - we never want to ship 10 KiB of
         // hex string back to the page when the binary itself is huge.
         preview.Hex.Length.Should().Be(4 * 1024 * 2);
     }

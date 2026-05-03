@@ -31,7 +31,7 @@ public class Database(
 {
     // Default to the system clock when DI / tests don't supply one.
     // Lets the existing test-fixture call sites
-    // (`new Database(NullLogger, opts)`) keep working — they get
+    // (`new Database(NullLogger, opts)`) keep working - they get
     // production semantics without each test having to construct a
     // FakeTimeProvider. Cadence-sensitive tests inject one.
     private readonly TimeProvider timeProvider = timeProviderOpt ?? TimeProvider.System;
@@ -77,7 +77,7 @@ public class Database(
     /// salt; returns the id for the caller to log/echo back to the app.
     ///
     /// <paramref name="ttlSeconds"/> is the residual lifetime the app
-    /// requests for this message — propagates onto the outgoing
+    /// requests for this message - propagates onto the outgoing
     /// <c>ihave</c> as <c>ttl=N</c>. Null means "no expiry", which makes
     /// the message persist in the queue indefinitely if it can't be
     /// forwarded; apps that want guaranteed cleanup should set a value.
@@ -220,7 +220,7 @@ public class Database(
     /// <summary>
     /// Soft-delete: copy the message into <c>dropped_messages</c> with
     /// the given reason + a now() timestamp, then remove from
-    /// <c>messages</c>. Idempotent — a missing row is a no-op (it might
+    /// <c>messages</c>. Idempotent - a missing row is a no-op (it might
     /// have been concurrently dropped). Used by the forwarder and TTL
     /// sweeper instead of <see cref="DeleteMessage"/> when discarding
     /// rather than acknowledging.
@@ -259,7 +259,7 @@ public class Database(
     /// <summary>
     /// Soft-delete every message whose TTL has elapsed. Hard-delete
     /// every offer whose TTL has elapsed (offers are protocol-level
-    /// scaffolding — there's no audit value in keeping a "we never
+    /// scaffolding - there's no audit value in keeping a "we never
     /// got the data for that offer" row around). Returns the count of
     /// rows actioned across both tables.
     /// </summary>
@@ -328,7 +328,7 @@ public class Database(
         return await connection.ExecuteScalarAsync<int>("select count(*) from messages");
     }
 
-    /// <summary>Pending outbound rows — messages destined for a remote
+    /// <summary>Pending outbound rows - messages destined for a remote
     /// node that haven't yet been forwarded.</summary>
     public async Task<int> CountPendingOutbound()
     {
@@ -339,7 +339,7 @@ public class Database(
             $"%@{local}%");
     }
 
-    /// <summary>Undelivered local rows — messages destined for a local
+    /// <summary>Undelivered local rows - messages destined for a local
     /// app that haven't been ack'd by the app yet.</summary>
     public async Task<int> CountUndeliveredLocal()
     {
@@ -353,7 +353,7 @@ public class Database(
     /// <summary>
     /// Insert or refresh a discovered-peer row. Keyed on
     /// (callsign, bearer, channel-key) so the same peer heard on
-    /// multiple channels occupies multiple rows. Idempotent — beacons
+    /// multiple channels occupies multiple rows. Idempotent - beacons
     /// re-arrive every cadence and just bump
     /// <see cref="DbDiscoveredPeer.LastSeen"/>.
     /// </summary>
@@ -374,7 +374,7 @@ public class Database(
 
     /// <summary>Insert a new <see cref="DbDiscoveryChannel"/> row, or
     /// update the bearer-specific tunables on an existing one. Identity
-    /// is (Bearer, ChannelKey) — same channel re-POSTed updates in
+    /// is (Bearer, ChannelKey) - same channel re-POSTed updates in
     /// place. Channel defaults are filled from <see cref="LinkClass"/>
     /// before persisting.</summary>
     internal async Task UpsertDiscoveryChannel(DbDiscoveryChannel channel)
@@ -479,7 +479,7 @@ public class Database(
 
     /// <summary>
     /// Record (or refresh) a learned route for the given destination.
-    /// One row per destination base callsign — newer observations
+    /// One row per destination base callsign - newer observations
     /// overwrite older ones. <see cref="DbLearnedRoute.LastSeenAt"/>
     /// always bumps to <c>now</c>; failure counter resets when the
     /// next-hop changes (a new path is fresh evidence of liveness).
@@ -514,7 +514,7 @@ public class Database(
     internal async Task<DbLearnedRoute?> GetLearnedRouteAsync(string destinationBaseCallsign)
         => await DbInfo.GetAsyncConnection().FindAsync<DbLearnedRoute>(destinationBaseCallsign);
 
-    /// <summary>Forward succeeded — reset failure counter, update <see cref="DbLearnedRoute.LastUsedAt"/>.</summary>
+    /// <summary>Forward succeeded - reset failure counter, update <see cref="DbLearnedRoute.LastUsedAt"/>.</summary>
     internal async Task RecordLearnedRouteSuccessAsync(string destinationBaseCallsign, DateTime now)
     {
         var connection = DbInfo.GetAsyncConnection();
@@ -525,7 +525,7 @@ public class Database(
         await connection.UpdateAsync(row);
     }
 
-    /// <summary>Forward failed — increment failure counter; delete the
+    /// <summary>Forward failed - increment failure counter; delete the
     /// row if the threshold is hit. Returns the new failure count, or
     /// <c>-1</c> if the row was deleted (i.e. invalidated).</summary>
     internal async Task<int> RecordLearnedRouteFailureAsync(string destinationBaseCallsign, int invalidationThreshold)
@@ -543,7 +543,7 @@ public class Database(
         return row.ConsecutiveFailures;
     }
 
-    /// <summary>All current learned routes — for dashboard / debug.</summary>
+    /// <summary>All current learned routes - for dashboard / debug.</summary>
     public async Task<IReadOnlyList<DbLearnedRoute>> GetLearnedRoutesAsync()
     {
         var connection = DbInfo.GetAsyncConnection();
@@ -651,7 +651,7 @@ public class Database(
         return row.ConsecutiveFailures;
     }
 
-    /// <summary>All current discovered paths — for dashboard / debug.</summary>
+    /// <summary>All current discovered paths - for dashboard / debug.</summary>
     public async Task<IReadOnlyList<DbDiscoveredPath>> GetDiscoveredPathsAsync()
     {
         var connection = DbInfo.GetAsyncConnection();
@@ -821,7 +821,7 @@ public class Database(
     /// Insert (or refresh, on a re-arrival of the same fragment) a
     /// DbFragment row. Idempotent on the (masterId, index) primary
     /// key. <see cref="DbFragment.FirstSeenAt"/> is preserved across
-    /// upserts — the stale-fragment sweep clock is set by the original
+    /// upserts - the stale-fragment sweep clock is set by the original
     /// arrival, not the latest copy. Plan F2.
     /// </summary>
     internal async Task UpsertFragment(DbFragment fragment)
@@ -871,7 +871,7 @@ public class Database(
             "delete from fragments where FirstSeenAt < ?", cutoff.Ticks);
     }
 
-    /// <summary>For dashboard/debug — list every fragment row, newest
+    /// <summary>For dashboard/debug - list every fragment row, newest
     /// first by first-seen time. Useful when an incomplete reassembly
     /// is hanging around and the sysop wants to know what's missing.</summary>
     public async Task<IReadOnlyList<DbFragment>> GetAllFragments()
@@ -884,17 +884,17 @@ public class Database(
     // ── F3 rev poll: messages we'd hand to a polling caller ─────────
 
     /// <summary>
-    /// Plan F3 — return outbound queue entries whose final destination
+    /// Plan F3 - return outbound queue entries whose final destination
     /// matches <paramref name="callerBaseCallsign"/> (the SSID-stripped
     /// base of the polling station's callsign). These are the messages
     /// that the rev handler would drain to a station calling <c>rev</c>.
     ///
     /// When <paramref name="requestedIds"/> is empty, returns every
     /// matching un-forwarded row. When non-empty, narrows to that
-    /// specific set — used for selective polling
+    /// specific set - used for selective polling
     /// (<c>rev id1 id2 ...</c>).
     ///
-    /// Final destination only — we don't drain transit messages where
+    /// Final destination only - we don't drain transit messages where
     /// the caller is just a known forwarder; the caller's session is
     /// for THEIR mail, not for them to act as a downstream relay
     /// (that's a separate request shape; design decision in plan F3).

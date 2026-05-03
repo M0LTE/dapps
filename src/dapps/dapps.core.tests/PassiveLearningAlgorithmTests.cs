@@ -14,7 +14,7 @@ namespace dapps.core.tests;
 /// contract: every inbound message whose F1 originator is reachable
 /// via the link source teaches the receiver "to reach <c>originator</c>,
 /// send via the neighbour <c>linkSource</c>." The static resolver's
-/// precedence is preserved — manual neighbour / discovered peer /
+/// precedence is preserved - manual neighbour / discovered peer /
 /// route hint always win; learned routes only fill in where those
 /// give up.
 /// </summary>
@@ -113,7 +113,7 @@ public sealed class PassiveLearningAlgorithmTests : IAsyncLifetime
         await algorithm.ObserveInboundAsync(
             noOriginator, DirectNeighbour, context, TestContext.Current.CancellationToken);
 
-        // No row created — we don't know who originated, so we
+        // No row created - we don't know who originated, so we
         // can't claim to have learned a route to anyone.
         var rows = await database.GetLearnedRoutesAsync();
         rows.Should().BeEmpty();
@@ -187,7 +187,7 @@ public sealed class PassiveLearningAlgorithmTests : IAsyncLifetime
     public async Task Resolve_PrefersStaticManualNeighbour_OverLearnedRoute()
     {
         // The destination has BOTH a manual neighbour AND a learned
-        // route. The manual entry must win — operator override beats
+        // route. The manual entry must win - operator override beats
         // anything we inferred.
         const string explicitCallsign = "G0EX-1";
         const string explicitBase = "G0EX";
@@ -207,7 +207,7 @@ public sealed class PassiveLearningAlgorithmTests : IAsyncLifetime
     [Fact]
     public async Task Resolve_FallsThroughToLearnedRoute_WhenStaticIsUnreachable()
     {
-        // No manual neighbour, no discovered peer, no hint — just a
+        // No manual neighbour, no discovered peer, no hint - just a
         // learned route. The fallback should kick in.
         await context.UpsertLearnedRouteAsync(DistantOriginatorBase, DirectNeighbour, TestContext.Current.CancellationToken);
 
@@ -222,7 +222,7 @@ public sealed class PassiveLearningAlgorithmTests : IAsyncLifetime
     {
         // Learned a route to a callsign whose next-hop neighbour has
         // since been removed. Algorithm should NOT return a route
-        // pointing at a phantom neighbour — drop and report Unreachable.
+        // pointing at a phantom neighbour - drop and report Unreachable.
         await context.UpsertLearnedRouteAsync(DistantOriginatorBase, "G0GONE-1", TestContext.Current.CancellationToken);
 
         var decision = await algorithm.ResolveAsync(OutboundFor(DistantOriginatorBase), context, TestContext.Current.CancellationToken);
@@ -276,7 +276,7 @@ public sealed class PassiveLearningAlgorithmTests : IAsyncLifetime
                 context, TestContext.Current.CancellationToken);
         }
 
-        // Threshold hit on the third failure — row deleted.
+        // Threshold hit on the third failure - row deleted.
         (await context.GetLearnedRouteAsync(DistantOriginatorBase, TestContext.Current.CancellationToken))
             .Should().BeNull();
     }

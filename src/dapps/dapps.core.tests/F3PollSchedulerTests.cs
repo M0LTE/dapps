@@ -12,7 +12,7 @@ using SQLite;
 namespace dapps.core.tests;
 
 /// <summary>
-/// Plan F3b — scheduled poll. Tests the enumeration, opt-out
+/// Plan F3b - scheduled poll. Tests the enumeration, opt-out
 /// handling, and persistence shape of <see cref="PollSchedulerService"/>
 /// against a real Database. The actual on-the-wire poll is mocked via
 /// a fake transport whose canned reply yields zero or more messages.
@@ -67,7 +67,7 @@ public sealed class F3PollSchedulerTests : IAsyncLifetime
     [Fact]
     public async Task EnumerateTargets_UdpOnlyNeighbour_Skipped()
     {
-        // Plan F3 is AGW-only by design — UDP-only neighbours don't
+        // Plan F3 is AGW-only by design - UDP-only neighbours don't
         // have a session-based protocol to poll over.
         await database.UpsertNeighbour("N0UDP-9", bpqPort: null, udpEndpoint: "127.0.0.1:1880");
         var sched = MakeScheduler(new RecordingPollTransport(), new RecordingInbox());
@@ -134,8 +134,8 @@ public sealed class F3PollSchedulerTests : IAsyncLifetime
     public async Task PollAndRecord_SuccessAfterFailure_ResetsCounter()
     {
         await database.UpsertNeighbour("N0FLAP-9", bpqPort: 1);
-        // First call: server doesn't emit prompt — fails. Second call:
-        // emits prompt + immediate drained — success.
+        // First call: server doesn't emit prompt - fails. Second call:
+        // emits prompt + immediate drained - success.
         var transport = new RecordingPollTransport(
             ("N0FLAP-9", ""),                       // EOF before prompt
             ("N0FLAP-9", "DAPPSv1>\nDAPPSv1>\n"));   // empty drain

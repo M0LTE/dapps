@@ -27,7 +27,7 @@ public class ConfigController(Database database, AdminPasswordStore adminPasswor
     ///
     /// First-use bootstrap: when no password is set, the admin auth
     /// middleware lets requests through, so this endpoint is reachable
-    /// without auth on a fresh node — same chicken-and-egg model as
+    /// without auth on a fresh node - same chicken-and-egg model as
     /// the existing app-token and bearer-auth bootstraps. Once a
     /// password is set, every subsequent call (including future
     /// rotations) goes through the cookie-authed path.

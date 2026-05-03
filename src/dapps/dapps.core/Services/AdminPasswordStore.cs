@@ -8,7 +8,7 @@ namespace dapps.core.Services;
 /// Single-sysop admin password for the dashboard and admin endpoints
 /// (<c>/Config</c>, <c>/Neighbours</c>, <c>/AppTokens</c>). Hashed at
 /// rest with the same PBKDF2-HMAC-SHA256 + 16-byte-salt + 100k-iter
-/// scheme as <see cref="AppTokenStore"/> — same threat model (a
+/// scheme as <see cref="AppTokenStore"/> - same threat model (a
 /// hostile peer on the LAN), same cost ceiling.
 ///
 /// Bootstrap path: <c>DAPPS_ADMIN_PASSWORD</c> env var on first start
@@ -34,7 +34,7 @@ public sealed class AdminPasswordStore(ILogger<AdminPasswordStore> logger)
 
     /// <summary>
     /// Constant-time check of a plaintext attempt against the stored
-    /// hash. Returns false (not throws) when no password is configured —
+    /// hash. Returns false (not throws) when no password is configured -
     /// callers gate that case via <see cref="IsConfiguredAsync"/>.
     /// </summary>
     public async Task<bool> VerifyAsync(string? plaintext)
@@ -59,7 +59,7 @@ public sealed class AdminPasswordStore(ILogger<AdminPasswordStore> logger)
             await connection.ExecuteAsync(
                 "delete from systemoptions where option in (?, ?)",
                 HashOption, SaltOption);
-            logger.LogWarning("Admin password cleared — dashboard now unauthenticated");
+            logger.LogWarning("Admin password cleared - dashboard now unauthenticated");
             return;
         }
 

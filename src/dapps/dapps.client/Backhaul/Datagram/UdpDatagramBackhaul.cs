@@ -14,7 +14,7 @@ namespace dapps.client.Backhaul.Datagram;
 /// Validates the seam end-to-end: nothing here knows about DAPPSv1
 /// session protocol, AGW frames, or the AGW outbound transport. The
 /// MTU is configurable so tests can dial it down to force aggressive
-/// fragmentation of small messages — closer to a real RF datagram
+/// fragmentation of small messages - closer to a real RF datagram
 /// constraint than UDP's 65k-byte natural maximum.
 ///
 /// Fire-and-forget: <see cref="SendAsync"/> returns success once every
@@ -23,7 +23,7 @@ namespace dapps.client.Backhaul.Datagram;
 /// </summary>
 public sealed class UdpDatagramBackhaul : IDappsBackhaul, IDisposable
 {
-    /// <summary>Default MTU in bytes — leaves headroom under typical
+    /// <summary>Default MTU in bytes - leaves headroom under typical
     /// LoRa-style frames (~250 byte payloads). Tests override.</summary>
     public const int DefaultMtu = 200;
 
@@ -59,7 +59,7 @@ public sealed class UdpDatagramBackhaul : IDappsBackhaul, IDisposable
         try
         {
             // Stamp the link source with our local callsign before
-            // encoding — UDP doesn't carry a session-level sender
+            // encoding - UDP doesn't carry a session-level sender
             // identity, so we have to put it in-band. Receivers use
             // this for passive routing learning. AGW bearers identify
             // the link source from the AX.25 C-frame and don't need
@@ -112,7 +112,7 @@ public sealed class UdpDatagramBackhaul : IDappsBackhaul, IDisposable
 
         // Resolve host. For numeric IPs, IPAddress.Parse short-circuits;
         // for names, fall back to a DNS lookup. Synchronous lookup is
-        // fine — the UDP backhaul only resolves once per send and DNS
+        // fine - the UDP backhaul only resolves once per send and DNS
         // is typically loopback-cached for ham-radio LAN deployments.
         if (IPAddress.TryParse(host, out var ip))
         {

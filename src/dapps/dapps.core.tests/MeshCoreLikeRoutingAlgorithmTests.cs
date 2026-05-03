@@ -110,7 +110,7 @@ public sealed class MeshCoreLikeRoutingAlgorithmTests : IAsyncLifetime
         // A flood originated by G0OR-1 reaches us after passing
         // through G0HOP1 then G0HOP2. The reverse path back to G0OR
         // from us is [G0HOP2, G0HOP1, G0OR] in terms of forward
-        // routing — so intermediates = [G0HOP2, G0HOP1] and the
+        // routing - so intermediates = [G0HOP2, G0HOP1] and the
         // destination is G0OR.
         var traversed = new[] { "G0HOP1-1", "G0HOP2-1" };
         await algorithm.ObserveInboundAsync(
@@ -141,7 +141,7 @@ public sealed class MeshCoreLikeRoutingAlgorithmTests : IAsyncLifetime
     public async Task ObserveInbound_NonFloodMessage_DoesNotPopulatePathTable()
     {
         // A regular routed message (no TraversedHops) tells us
-        // nothing about the originator's path — we have no record
+        // nothing about the originator's path - we have no record
         // of how it got here. Don't fabricate a discovered path.
         var routed = new BackhaulMessage(
             Id: "0000001",
@@ -170,7 +170,7 @@ public sealed class MeshCoreLikeRoutingAlgorithmTests : IAsyncLifetime
     public async Task ObserveInbound_FiltersOurOwnCallsign_OutOfReversePath()
     {
         // Pathological: a misbehaving peer included our callsign in
-        // the TraversedHops. Defensively strip it from the reverse —
+        // the TraversedHops. Defensively strip it from the reverse -
         // including ourselves in our own outbound source route would
         // loop the message right back.
         var traversed = new[] { "G0HOP1-1", OurCallsign, "G0HOP2-1" };
@@ -189,7 +189,7 @@ public sealed class MeshCoreLikeRoutingAlgorithmTests : IAsyncLifetime
     public async Task Resolve_PrefersStaticManualNeighbour_OverDiscoveredPath()
     {
         // Both a manual neighbour and a discovered path exist. The
-        // manual entry must win — operator override beats inferred.
+        // manual entry must win - operator override beats inferred.
         const string explicitCallsign = "G0EX-1";
         const string explicitBase = "G0EX";
         using (var c = DbInfo.GetConnection())
@@ -304,7 +304,7 @@ public sealed class MeshCoreLikeRoutingAlgorithmTests : IAsyncLifetime
     [Fact]
     public async Task Resolve_SourceRoutedWithEmptyRoute_TreatsDestinationAsNextHop()
     {
-        // Persisted with SourceRouteCsv = "" — message arrived with
+        // Persisted with SourceRouteCsv = "" - message arrived with
         // an empty SourceRoute (last intermediate already stripped).
         // Algorithm should treat the destination's callsign as the
         // next hop. Manual neighbour for that callsign must exist.

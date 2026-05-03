@@ -6,11 +6,11 @@ using SQLite;
 namespace dapps.core.Updater;
 
 /// <summary>
-/// Plan B7 follow-up — side-door <c>--show-config</c> subcommand.
+/// Plan B7 follow-up - side-door <c>--show-config</c> subcommand.
 /// Reads the on-disk <c>data/dapps.db</c> directly (no DI, no host)
 /// and prints the persisted systemoptions rows in
 /// <c>DAPPS_SCREAMING_SNAKE=value</c> form so a sysop can confirm what
-/// the daemon would resolve at boot — useful when /Config has been
+/// the daemon would resolve at boot - useful when /Config has been
 /// edited live and the persisted values diverge from the
 /// <c>EnvironmentFile</c> the operator thinks is authoritative.
 ///
@@ -26,14 +26,14 @@ internal static class ConfigCli
         try
         {
             using var db = DbInfo.GetConnection();
-            // Defensive — CreateTable is CREATE-IF-NOT-EXISTS so this
+            // Defensive - CreateTable is CREATE-IF-NOT-EXISTS so this
             // is a no-op on a real node, but it stops a fresh checkout
             // crashing when nothing has booted dapps yet.
             db.CreateTable<DbSystemOption>();
             var rows = db.Query<DbSystemOption>("select * from systemoptions order by Option");
             if (rows.Count == 0)
             {
-                Console.WriteLine("# (no rows in systemoptions — daemon has never booted)");
+                Console.WriteLine("# (no rows in systemoptions - daemon has never booted)");
                 return 0;
             }
 

@@ -15,7 +15,7 @@ namespace dapps.core.Services;
 /// <see cref="BackhaulMessageCodec"/>, hands the result to
 /// <see cref="IBackhaulInbox"/>.
 ///
-/// The bearer is fire-and-forget — we don't ack the sender, and we
+/// The bearer is fire-and-forget - we don't ack the sender, and we
 /// don't currently advertise our endpoint. Discovery over UDP and
 /// reliable delivery are higher-layer concerns (Phase B).
 /// </summary>
@@ -96,7 +96,7 @@ public sealed class UdpDatagramListener(
                 }
 
                 // Prefer the in-band link-source callsign (codec v3+)
-                // — it's authoritative because the sender stamps it
+                // - it's authoritative because the sender stamps it
                 // from its own configured callsign. Fall back to
                 // IP:port→neighbour mapping for v2/v1 messages and
                 // for cases where the sender didn't stamp it.
@@ -127,7 +127,7 @@ public sealed class UdpDatagramListener(
     /// <summary>
     /// Map an inbound IP:port to the configured neighbour's callsign.
     /// Tries an exact <c>UdpEndpoint</c> match first, then falls back
-    /// to port-only when nothing matches exactly — handles cases like
+    /// to port-only when nothing matches exactly - handles cases like
     /// loopback-vs-eth0 where the source IP we observe differs from
     /// the host literal the neighbour was configured with (common on
     /// WSL2 / containerised dev setups). Returns the literal "UDP"

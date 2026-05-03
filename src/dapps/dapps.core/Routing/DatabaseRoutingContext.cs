@@ -39,7 +39,7 @@ public sealed class DatabaseRoutingContext(
     public async Task UpsertLearnedRouteAsync(string destinationBaseCallsign, string nextHopCallsign, CancellationToken ct)
     {
         // Pre-check whether the row is a refresh or a real change. Skip
-        // the metrics event on refreshes — every successful inbound
+        // the metrics event on refreshes - every successful inbound
         // F1-stamped message would otherwise emit `route.learned`,
         // drowning the journal in noise. Two queries on the learning
         // hot path is fine (it's per-inbound-message at most, not per-
@@ -68,7 +68,7 @@ public sealed class DatabaseRoutingContext(
 
     public async Task UpsertDiscoveredPathAsync(string destinationBaseCallsign, IReadOnlyList<string> intermediates, CancellationToken ct)
     {
-        // Same diff-then-record shape as UpsertLearnedRouteAsync — only
+        // Same diff-then-record shape as UpsertLearnedRouteAsync - only
         // emit `route.learned` on a new path or a path-shape change,
         // not on every refresh tick.
         var existing = await database.GetDiscoveredPathAsync(destinationBaseCallsign);

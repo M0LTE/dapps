@@ -5,7 +5,7 @@ using dapps.core.Services;
 namespace dapps.core.tests;
 
 /// <summary>
-/// Plan B6.1 Phase 2b — the node-prompt navigation primitive on
+/// Plan B6.1 Phase 2b - the node-prompt navigation primitive on
 /// <see cref="NodeProber"/> uses <c>ReadUntilIdleAsync</c> to detect
 /// "the prompt has finished writing and is now waiting for input"
 /// without pattern-matching banner text. The shape: read until the
@@ -16,7 +16,7 @@ namespace dapps.core.tests;
 ///     timeout drains)
 ///   - data + EOF → returns the data
 ///   - data + delay + more data → returns data after idle, NOT
-///     including the second batch (that's the next reader's job —
+///     including the second batch (that's the next reader's job -
 ///     in the prober, that's <c>ReadInitialPromptAsync</c>)
 /// </summary>
 public sealed class NodeProberReadUntilIdleTests
@@ -52,7 +52,7 @@ public sealed class NodeProberReadUntilIdleTests
     public async Task DataThenSilenceLongerThanIdleWindow_ReturnsDataWithoutWaitingForMore()
     {
         // Push first chunk, wait past the idle window, push second chunk.
-        // ReadUntilIdle should return the FIRST chunk only — the idle
+        // ReadUntilIdle should return the FIRST chunk only - the idle
         // window expires before the second arrives, and that's the
         // "prompt is now waiting for input" signal.
         using var stream = new ScriptedStream();

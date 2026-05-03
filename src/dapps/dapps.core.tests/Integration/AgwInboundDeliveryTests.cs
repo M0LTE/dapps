@@ -13,7 +13,7 @@ namespace dapps.core.tests.Integration;
 /// <summary>
 /// End-to-end inbound delivery using the **AGW** path on both sides.
 /// Replaces the old BPQ-Apps-Interface (HOST/CMDPORT TCP-bridge) E2E
-/// — dapps now uses one BPQ surface (AGW) for both inbound and
+/// - dapps now uses one BPQ surface (AGW) for both inbound and
 /// outbound, removing the same-host constraint and the LF→CR
 /// rewriting Telnet-driver quirks.
 ///
@@ -28,11 +28,11 @@ namespace dapps.core.tests.Integration;
 ///
 /// Assertion: the received <see cref="BackhaulMessage"/> has the right
 /// id / payload / salt / destination, and <c>sourceCallsign</c> stamped
-/// onto the inbox call equals the sender's APPL callsign — the contract
+/// onto the inbox call equals the sender's APPL callsign - the contract
 /// that flows through to <c>dapps-source</c> on app-interface delivery.
 ///
 /// BPQ config note: the existing <see cref="TwoInstanceLinbpqFixture"/>
-/// uses <c>APPL1CALL</c> on both sides with no APPLICATION line CMD —
+/// uses <c>APPL1CALL</c> on both sides with no APPLICATION line CMD -
 /// exactly what AGW dispatch wants (the call goes onto BPQ's L2
 /// listen-list as part of the APPL config, and the AGW client picks it
 /// up via the <c>'X'</c> register). <see cref="TwoInstanceAgwSmokeTests"/>
@@ -132,7 +132,7 @@ public sealed class AgwInboundDeliveryTests(TwoInstanceLinbpqFixture fixture) : 
 
         captured.SourceCallsign.Should().Be(fixture.ApplCallA,
             "the AGW inbound dispatcher reads CallFrom off the 'C' frame and stamps it onto the inbox " +
-            "call — that's what dapps-source surfaces to subscribed apps");
+            "call - that's what dapps-source surfaces to subscribed apps");
     }
 
     private sealed record InboxCapture(BackhaulMessage Message, string SourceCallsign);

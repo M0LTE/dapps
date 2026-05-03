@@ -9,14 +9,14 @@ using SQLite;
 namespace dapps.core.tests;
 
 /// <summary>
-/// Plan C3 PR-B — `OperationalSnapshotBuilder` is the single source of
+/// Plan C3 PR-B - `OperationalSnapshotBuilder` is the single source of
 /// truth feeding both <c>/Operational</c> and the periodic MQTT
 /// heartbeat. These tests pin its composition so a future field
 /// rename / removal can't silently drift the operator-visible
 /// shape across the two surfaces.
 ///
 /// The TCP probes (BPQ + MQTT) intentionally run against unbound
-/// loopback ports in the test fixture — they'll fail fast and the
+/// loopback ports in the test fixture - they'll fail fast and the
 /// resulting snapshot's <c>Status</c> = "degraded" is the easiest
 /// thing to assert against.
 /// </summary>

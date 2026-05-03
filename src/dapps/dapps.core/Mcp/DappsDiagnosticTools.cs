@@ -8,13 +8,13 @@ using ModelContextProtocol.Server;
 namespace dapps.core.Mcp;
 
 /// <summary>
-/// Plan M PR-C — composite diagnostic tools. The actual point of the
+/// Plan M PR-C - composite diagnostic tools. The actual point of the
 /// MCP work: each method gathers data from 3-5 underlying surfaces
 /// (Database, OperationalMetrics, OperationalSnapshotBuilder), works
 /// through a deterministic decision tree, and returns a structured
 /// finding plus a one-paragraph human-readable summary.
 ///
-/// The summaries are deliberately flat strings — they're prompts for
+/// The summaries are deliberately flat strings - they're prompts for
 /// the LLM to riff on, not finished prose. The structured fields
 /// support more nuanced narratives if the agent wants them.
 /// </summary>
@@ -97,8 +97,8 @@ public sealed class DappsDiagnosticTools(
 
     [McpServerTool(Name = "diagnose_silent_neighbour")]
     [Description(
-        "Walk every state surface for a given callsign — manual neighbour config, last-heard discovery beacon, " +
-        "B6.1 probe history, F3b poll history — and stitch together 'when did we last see them, when did we " +
+        "Walk every state surface for a given callsign - manual neighbour config, last-heard discovery beacon, " +
+        "B6.1 probe history, F3b poll history - and stitch together 'when did we last see them, when did we " +
         "last forward to them, what's been failing'. Useful when an operator notices a peer hasn't shown " +
         "activity for a while.")]
     public async Task<NeighbourDiagnosis> DiagnoseSilentNeighbourAsync(
@@ -155,7 +155,7 @@ public sealed class DappsDiagnosticTools(
             }
             else if (probed.LastError.Length > 0)
             {
-                sb.Append($"never probed successfully ({probed.ConsecutiveFailures} failure(s) — last: {probed.LastError}); ");
+                sb.Append($"never probed successfully ({probed.ConsecutiveFailures} failure(s) - last: {probed.LastError}); ");
             }
         }
         if (polled is not null && polled.LastSuccessAt.HasValue)
@@ -248,7 +248,7 @@ public sealed class DappsDiagnosticTools(
     [Description(
         "Look at the current network state and suggest concrete changes: heard-but-not-configured peers " +
         "the operator should consider adding; long-silent neighbours that may want investigating or " +
-        "removing; high-failure-streak probed nodes that may be misconfigured. Pure read-only — proposes, " +
+        "removing; high-failure-streak probed nodes that may be misconfigured. Pure read-only - proposes, " +
         "doesn't act. Each proposal has a rationale string the operator can sanity-check before " +
         "running the corresponding action tool.")]
     public async Task<TopologyProposals> ProposeTopologyChangesAsync()
@@ -303,7 +303,7 @@ public sealed class DappsDiagnosticTools(
         if (addCandidates.Count == 0 && investigateCandidates.Count == 0)
         {
             sb.Clear();
-            sb.Append("No actionable proposals — neighbours match heard peers, no probe targets stuck in failure.");
+            sb.Append("No actionable proposals - neighbours match heard peers, no probe targets stuck in failure.");
         }
 
         return new TopologyProposals(

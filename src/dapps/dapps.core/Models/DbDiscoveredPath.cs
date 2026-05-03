@@ -4,7 +4,7 @@ namespace dapps.core.Models;
 
 /// <summary>
 /// A path this node has learned by observing the
-/// <c>TraversedHops</c> field on an inbound flood-discovery message —
+/// <c>TraversedHops</c> field on an inbound flood-discovery message -
 /// the MeshCore-flavoured equivalent of <see cref="DbLearnedRoute"/>,
 /// but storing the full ordered intermediate-hop list rather than
 /// just the next hop. When this node later wants to send to
@@ -20,7 +20,7 @@ namespace dapps.core.Models;
 [Table("discoveredpaths")]
 public class DbDiscoveredPath
 {
-    /// <summary>Base callsign (no SSID) — keyed this way so messages
+    /// <summary>Base callsign (no SSID) - keyed this way so messages
     /// to <c>chat@G0FOO-1</c> and <c>mail@G0FOO-9</c> share the same
     /// discovered path. SSID-specific routing is rare in practice and
     /// handled by manual neighbours when needed.</summary>

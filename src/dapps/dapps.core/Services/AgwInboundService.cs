@@ -29,7 +29,7 @@ namespace dapps.core.Services;
 /// Reconnect policy: on any AGW socket error, sleep
 /// <see cref="ReconnectBackoff"/> and retry. In-flight inbound sessions
 /// are lost (their streams get EOF); the sender's bearer surfaces a
-/// timeout and retries on its next forwarder run — matches the
+/// timeout and retries on its next forwarder run - matches the
 /// existing at-least-once semantics.
 /// </summary>
 public sealed class AgwInboundService(

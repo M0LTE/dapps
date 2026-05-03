@@ -15,7 +15,7 @@ namespace dapps.core.tests;
 /// Drives <see cref="OutboundMessageManager.DoRun"/> with a fake backhaul
 /// that captures the <see cref="BackhaulMessage"/> + <see cref="BackhaulRoute"/>
 /// the manager hands off. Lets the test assert TTL decrement and routing
-/// without standing up real BPQ or even a real DAPPSv1 session protocol —
+/// without standing up real BPQ or even a real DAPPSv1 session protocol -
 /// the seam (Plan A0) makes those concerns the bearer's, not the manager's.
 /// </summary>
 [Collection(SqliteOverridePathCollection.Name)]
@@ -248,7 +248,7 @@ public sealed class OutboundMessageManagerTests : IAsyncLifetime
         backhaul.Sent.Should().ContainSingle();
         var route = backhaul.Sent.Single().Route;
         route.BpqPort.Should().Be(1,
-            "VHF/UHF FM (RF, line-of-sight) is the project's preferred class — should beat HF and the IP bridge");
+            "VHF/UHF FM (RF, line-of-sight) is the project's preferred class - should beat HF and the IP bridge");
         route.UdpEndpoint.Should().BeNull("IP must not be picked when an RF route is fresh");
     }
 
@@ -257,7 +257,7 @@ public sealed class OutboundMessageManagerTests : IAsyncLifetime
     {
         // Preferred RF channel has gone silent past its advertised TTL.
         // The resolver must fall back to the next-fresh option even
-        // when that's an internet bridge — that's exactly why we keep
+        // when that's an internet bridge - that's exactly why we keep
         // IP routes as a last resort. RF first when available, IP when
         // RF has dropped.
         using (var c = DbInfo.GetConnection())
@@ -289,14 +289,14 @@ public sealed class OutboundMessageManagerTests : IAsyncLifetime
 
         var route = backhaul.Sent.Single().Route;
         route.UdpEndpoint.Should().Be("10.0.0.5:1881",
-            "RF route is stale — internet fallback is the right answer here");
+            "RF route is stale - internet fallback is the right answer here");
     }
 
     [Fact]
     public async Task DoRun_ManualNeighbourWinsOverCheaperDiscoveredPeer()
     {
         // Operator sets a manual neighbour entry. Resolver MUST honour
-        // that even if a cheaper discovered channel exists — it's an
+        // that even if a cheaper discovered channel exists - it's an
         // explicit override.
         using (var c = DbInfo.GetConnection())
         {
@@ -346,7 +346,7 @@ public sealed class OutboundMessageManagerTests : IAsyncLifetime
         await manager.DoRun(TestContext.Current.CancellationToken);
 
         backhaul.Sent.Single().Route.BpqPort.Should().Be(2,
-            "tied costs break on hop count — direct neighbour beats 3-hop relay");
+            "tied costs break on hop count - direct neighbour beats 3-hop relay");
     }
 
     private static void InsertMessage(string id, int? ttl, DateTime createdAt)
@@ -375,7 +375,7 @@ public sealed class OutboundMessageManagerTests : IAsyncLifetime
     /// <summary>
     /// In-memory backhaul that captures every send for assertion. The
     /// shape of the capture is the seam payoff over the prior
-    /// stream-mocking contraption — tests assert at the message level.
+    /// stream-mocking contraption - tests assert at the message level.
     /// </summary>
     private sealed class FakeBackhaul : IDappsBackhaul
     {

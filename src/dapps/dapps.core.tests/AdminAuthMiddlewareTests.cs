@@ -73,9 +73,9 @@ public sealed class AdminAuthMiddlewareTests : IAsyncLifetime
         var (mw, ctx, nextCalled) = Build(path);
 
         // Without an admin cookie, the middleware triggers the cookie
-        // auth scheme's challenge — which on a real pipeline turns into
+        // auth scheme's challenge - which on a real pipeline turns into
         // a 302 to /Login. The synthetic HttpContext doesn't have an
-        // authentication service registered, so ChallengeAsync throws —
+        // authentication service registered, so ChallengeAsync throws -
         // catch broadly because the relevant assertion is just that
         // next() didn't run for these gated paths.
         try { await mw.InvokeAsync(ctx, store); } catch { /* expected */ }

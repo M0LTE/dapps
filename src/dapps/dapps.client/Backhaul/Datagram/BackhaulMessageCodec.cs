@@ -13,7 +13,7 @@ namespace dapps.client.Backhaul.Datagram;
 /// Wire format (all integers little-endian). The version byte is the
 /// first thing on the wire; receivers reject anything other than the
 /// current <see cref="Version"/>. We're pre-shipping, so there's no
-/// in-flight traffic that would break — the version mechanism is
+/// in-flight traffic that would break - the version mechanism is
 /// preserved (so a future format change still hard-fails cleanly
 /// rather than silently misinterpreting bytes), but we don't carry
 /// historical decoder paths.
@@ -49,7 +49,7 @@ namespace dapps.client.Backhaul.Datagram;
 ///   [4]  payload len
 ///   [P]  payload bytes
 /// </code>
-/// Length-prefixed throughout — no escapes, binary-safe.
+/// Length-prefixed throughout - no escapes, binary-safe.
 /// </summary>
 public static class BackhaulMessageCodec
 {
@@ -364,7 +364,7 @@ public static class BackhaulMessageCodec
     }
 
     /// <summary>Length-prefixed list of UTF-8 callsigns. Count is one
-    /// byte (max 255 hops — far beyond anything realistic; AODV-style
+    /// byte (max 255 hops - far beyond anything realistic; AODV-style
     /// algorithms cap at ~10) and each hop's length is one byte (max
     /// 255 chars; a callsign is ~9 incl SSID).</summary>
     private static byte[] EncodeCallsignList(IReadOnlyList<string> hops)

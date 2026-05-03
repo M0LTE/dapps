@@ -4,8 +4,8 @@ namespace dapps.core.Models;
 
 /// <summary>
 /// Per-(message-id, link-source) flood-deduplication ledger. Every
-/// flooded message we receive — whether destined for us or just
-/// transiting — gets recorded here so a re-flood from the same
+/// flooded message we receive - whether destined for us or just
+/// transiting - gets recorded here so a re-flood from the same
 /// upstream peer is silently dropped instead of starting an infinite
 /// echo around the mesh.
 ///

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-pager.py — two-way pager / messenger over DAPPS.
+pager.py - two-way pager / messenger over DAPPS.
 
 Two modes:
 
@@ -14,7 +14,7 @@ Two modes:
       python pager.py send G7XYZ "the eagle has landed"
 
       Submits a single message and exits.  No subscription, no ack
-      handling — useful from cron, scripts, or your shell.
+      handling - useful from cron, scripts, or your shell.
 
 What this demonstrates:
   - Two distinct lifetimes from the same app: a long-running listener

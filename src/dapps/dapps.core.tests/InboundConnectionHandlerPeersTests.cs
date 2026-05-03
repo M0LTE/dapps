@@ -11,7 +11,7 @@ using SQLite;
 namespace dapps.core.tests;
 
 /// <summary>
-/// Plan B6.1 Phase 2 — server-side test for the new <c>peers</c>
+/// Plan B6.1 Phase 2 - server-side test for the new <c>peers</c>
 /// command on the DAPPSv1 receiver. Spins up an
 /// <see cref="InboundConnectionHandler"/> against a fake duplex stream
 /// preloaded with <c>peers\nq\n</c> (the <c>q</c> closes the session
@@ -82,7 +82,7 @@ public sealed class InboundConnectionHandlerPeersTests : IAsyncLifetime
         output.Should().Contain("peer N0NEIGH-9 source=n");
         output.Should().Contain("port=1");
         output.Should().Contain("peer N0BCN-7 source=d");
-        // Neighbours emit before discovered peers — pin that ordering
+        // Neighbours emit before discovered peers - pin that ordering
         // so future shuffles in HandlePeers are noticed.
         output.IndexOf("peer N0NEIGH-9").Should().BeLessThan(output.IndexOf("peer N0BCN-7"));
         output.Should().Contain("end\n");
@@ -105,7 +105,7 @@ public sealed class InboundConnectionHandlerPeersTests : IAsyncLifetime
     [Fact]
     public async Task PeersCommand_UdpDiscoveredPeer_ExcludedFromPeersList()
     {
-        // Same rule for discovered peers — UDP-bearer rows live in the
+        // Same rule for discovered peers - UDP-bearer rows live in the
         // same table but aren't AGW-reachable for our asker.
         await database.UpsertDiscoveredPeer(new DbDiscoveredPeer
         {
@@ -130,7 +130,7 @@ public sealed class InboundConnectionHandlerPeersTests : IAsyncLifetime
     {
         // Same callsign appears as both a manual neighbour and a
         // beacon-discovered peer. We emit it once, with source=n
-        // (neighbour wins) — the asker doesn't need to dedupe.
+        // (neighbour wins) - the asker doesn't need to dedupe.
         await database.UpsertNeighbour("N0BOTH-9", bpqPort: 5);
         await database.UpsertDiscoveredPeer(new DbDiscoveredPeer
         {

@@ -2,106 +2,106 @@
 
 Terms used throughout this manual.
 
-**ack** — Acknowledgement. In DAPPS, the protocol-level confirmation that a complete message was received and its content hash matched the offer.
+**ack** - Acknowledgement. In DAPPS, the protocol-level confirmation that a complete message was received and its content hash matched the offer.
 
-**AGW** — A long-standing TCP host protocol for talking to a packet node / TNC, originating with AGWPE in the 1990s. The current bearer DAPPS uses to dispatch sessions in and out of BPQ (and other AGW-aware hosts).
+**AGW** - A long-standing TCP host protocol for talking to a packet node / TNC, originating with AGWPE in the 1990s. The current bearer DAPPS uses to dispatch sessions in and out of BPQ (and other AGW-aware hosts).
 
-**airtime budget** — Trailing-hour cap on discovery-class transmissions (beacons + solicits + probes), set with `DAPPS_DISCOVERY_AIRTIME_BUDGET_SECONDS_PER_HOUR`. Both global (one cap for all channels) and per-channel knobs exist.
+**airtime budget** - Trailing-hour cap on discovery-class transmissions (beacons + solicits + probes), set with `DAPPS_DISCOVERY_AIRTIME_BUDGET_SECONDS_PER_HOUR`. Both global (one cap for all channels) and per-channel knobs exist.
 
-**AODV** — Ad-hoc On-Demand Distance Vector — a class of mesh routing protocol where routes are discovered when needed and learned passively from observed traffic. The default DAPPS routing algorithm (`passive-flood`) is AODV-flavoured.
+**AODV** - Ad-hoc On-Demand Distance Vector - a class of mesh routing protocol where routes are discovered when needed and learned passively from observed traffic. The default DAPPS routing algorithm (`passive-flood`) is AODV-flavoured.
 
-**app** — A piece of software using DAPPS as a transport. Identified by an `app` slug (e.g. `mail`, `chat`, `hello`) — the destination is `app@CALLSIGN`.
+**app** - A piece of software using DAPPS as a transport. Identified by an `app` slug (e.g. `mail`, `chat`, `hello`) - the destination is `app@CALLSIGN`.
 
-**app interface** — The MQTT and REST surfaces DAPPS exposes to local applications.
+**app interface** - The MQTT and REST surfaces DAPPS exposes to local applications.
 
-**`app@CALLSIGN`** — DAPPS's destination addressing scheme. Names a specific app on a specific node; SSID is part of the callsign (e.g. `chat@M0LTE-1` is different from `chat@M0LTE-7`).
+**`app@CALLSIGN`** - DAPPS's destination addressing scheme. Names a specific app on a specific node; SSID is part of the callsign (e.g. `chat@M0LTE-1` is different from `chat@M0LTE-7`).
 
-**asynchronous** — Messages are queued; delivery happens when the network allows. Real-time connectivity is not a goal.
+**asynchronous** - Messages are queued; delivery happens when the network allows. Real-time connectivity is not a goal.
 
-**backhaul** — The bearer-side communication between two DAPPS nodes (as distinct from the app interface, which is local). AGW today; MeshCore + RHPv2 in flight.
+**backhaul** - The bearer-side communication between two DAPPS nodes (as distinct from the app interface, which is local). AGW today; MeshCore + RHPv2 in flight.
 
-**bearer** — The underlying medium DAPPS hands off to: AGW (via BPQ or another AGW host), MeshCore Companion / KISS, RHPv2, UDP datagram. The bearer-agnostic seam means apps and routing don't care which.
+**bearer** - The underlying medium DAPPS hands off to: AGW (via BPQ or another AGW host), MeshCore Companion / KISS, RHPv2, UDP datagram. The bearer-agnostic seam means apps and routing don't care which.
 
-**beacon** — A small periodic transmission on a discovery channel advertising "I am here, I am callsign X, I'm reachable on this bearer at this cost." Stateless, no session.
+**beacon** - A small periodic transmission on a discovery channel advertising "I am here, I am callsign X, I'm reachable on this bearer at this cost." Stateless, no session.
 
-**BPQ** — A long-running packet-radio multi-protocol stack, the most common AGW host in service. DAPPS supports BPQ as the production backhaul. Not a hard dependency — anything with an AGW interface should work.
+**BPQ** - A long-running packet-radio multi-protocol stack, the most common AGW host in service. DAPPS supports BPQ as the production backhaul. Not a hard dependency - anything with an AGW interface should work.
 
-**BPQ port byte** — A 0-indexed identifier for which BPQ port (= which physical radio, in `bpq32.cfg`'s `PORTS` layout) DAPPS should use for outbound. Per-neighbour or default.
+**BPQ port byte** - A 0-indexed identifier for which BPQ port (= which physical radio, in `bpq32.cfg`'s `PORTS` layout) DAPPS should use for outbound. Per-neighbour or default.
 
-**callsign** — Your radio licence callsign, optionally with an SSID (`-1`, `-7`, etc). DAPPS treats the full call+SSID as a unique identifier for routing; the base callsign without SSID is used for some discovery features.
+**callsign** - Your radio licence callsign, optionally with an SSID (`-1`, `-7`, etc). DAPPS treats the full call+SSID as a unique identifier for routing; the base callsign without SSID is used for some discovery features.
 
-**channel** (discovery channel) — A `(bearer, channel-key)` tuple DAPPS will beacon on / listen on / run scheduled solicits over. Operators add channels explicitly; nothing is on by default.
+**channel** (discovery channel) - A `(bearer, channel-key)` tuple DAPPS will beacon on / listen on / run scheduled solicits over. Operators add channels explicitly; nothing is on by default.
 
-**cookie auth** — How the dashboard identifies you. One admin password for the whole node, set on `/Setup`, hashed with PBKDF2-HMAC-SHA256.
+**cookie auth** - How the dashboard identifies you. One admin password for the whole node, set on `/Setup`, hashed with PBKDF2-HMAC-SHA256.
 
-**dapps-id** — User property on MQTT publishes / REST submits that DAPPS uses for idempotent at-least-once delivery. Same `dapps-id` twice → second submit is a no-op.
+**dapps-id** - User property on MQTT publishes / REST submits that DAPPS uses for idempotent at-least-once delivery. Same `dapps-id` twice → second submit is a no-op.
 
-**dapps-source** — User property carrying the originating callsign. Set by DAPPS at the source node, propagated end-to-end with F1 source tracking.
+**dapps-source** - User property carrying the originating callsign. Set by DAPPS at the source node, propagated end-to-end with F1 source tracking.
 
-**dapps-ttl** — User property carrying the residual TTL in seconds. Decremented on each forwarding hop; messages are dropped on zero.
+**dapps-ttl** - User property carrying the residual TTL in seconds. Decremented on each forwarding hop; messages are dropped on zero.
 
-**DAPPSv1** — The current on-air session-protocol version. The version is the suffix on the prompt; future incompatible cuts would be `DAPPSv2>` etc.
+**DAPPSv1** - The current on-air session-protocol version. The version is the suffix on the prompt; future incompatible cuts would be `DAPPSv2>` etc.
 
-**DSR** — Dynamic Source Routing — a routing class where the sender stamps the path on the message. The `meshcore` algorithm is DSR-flavoured.
+**DSR** - Dynamic Source Routing - a routing class where the sender stamps the path on the message. The `meshcore` algorithm is DSR-flavoured.
 
-**F1** — End-to-end source tracking. The originating callsign is preserved on the message all the way to the destination, even across multiple forwarding hops.
+**F1** - End-to-end source tracking. The originating callsign is preserved on the message all the way to the destination, even across multiple forwarding hops.
 
-**F2** — Multi-part messages. Payloads larger than the fragment threshold are split into N fragments at submit, each delivered independently and reassembled at the receiver.
+**F2** - Multi-part messages. Payloads larger than the fragment threshold are split into N fragments at submit, each delivered independently and reassembled at the receiver.
 
-**F3** — Reverse polling. A peer can ask another peer for queued messages, instead of waiting for them to be pushed. Two flavours: opportunistic (free, at the end of every push session) and scheduled (periodic).
+**F3** - Reverse polling. A peer can ask another peer for queued messages, instead of waiting for them to be pushed. Two flavours: opportunistic (free, at the end of every push session) and scheduled (periodic).
 
-**F4** — Versioning policy. How DAPPS manages compatibility on the wire — forward-compatible additions stay on the current version, breaking changes bump the prompt.
+**F4** - Versioning policy. How DAPPS manages compatibility on the wire - forward-compatible additions stay on the current version, breaking changes bump the prompt.
 
-**fragment** — A piece of a multi-part message. Each fragment carries its master ID, fragment index, fragment total, and is forwarded / acked independently.
+**fragment** - A piece of a multi-part message. Each fragment carries its master ID, fragment index, fragment total, and is forwarded / acked independently.
 
-**forwarder** — The background loop that walks the messages table and dispatches outbound forwards over the bearer. Ticks every 5 s.
+**forwarder** - The background loop that walks the messages table and dispatches outbound forwards over the bearer. Ticks every 5 s.
 
-**heartbeat** — Periodic operational snapshot published to MQTT topic `dapps/metrics/heartbeat`. Same content as `/Operational`.
+**heartbeat** - Periodic operational snapshot published to MQTT topic `dapps/metrics/heartbeat`. Same content as `/Operational`.
 
-**`ihave`** — The first command in a DAPPSv1 session: the sender announces the message's hash, destination, size, and TTL. Receiver responds `send` (ship it) or `?` (already have it).
+**`ihave`** - The first command in a DAPPSv1 session: the sender announces the message's hash, destination, size, and TTL. Receiver responds `send` (ship it) or `?` (already have it).
 
-**inbox** (local inbox) — Messages that have arrived at this node for an app on this node, but the app hasn't acked yet.
+**inbox** (local inbox) - Messages that have arrived at this node for an app on this node, but the app hasn't acked yet.
 
-**KISS** — A simple framing protocol for talking to a TNC over a serial / TCP link. MeshCore-as-DAPPS-bearer will support a KISS variant for operators who already drive their MeshCore radio in TNC mode.
+**KISS** - A simple framing protocol for talking to a TNC over a serial / TCP link. MeshCore-as-DAPPS-bearer will support a KISS variant for operators who already drive their MeshCore radio in TNC mode.
 
-**link class** — Discovery-channel hint about the bearer's characteristics (1200-baud VHF FM, HF NVIS, IP backbone, etc.). Feeds the routing cost model.
+**link class** - Discovery-channel hint about the bearer's characteristics (1200-baud VHF FM, HF NVIS, IP backbone, etc.). Feeds the routing cost model.
 
-**master ID** — The shared identifier across the fragments of one multi-part message. The receiver uses it to reassemble.
+**master ID** - The shared identifier across the fragments of one multi-part message. The receiver uses it to reassemble.
 
-**MCP** — Model Context Protocol. The endpoint at `/mcp` exposes operator-facing tools to AI assistants.
+**MCP** - Model Context Protocol. The endpoint at `/mcp` exposes operator-facing tools to AI assistants.
 
-**MeshCore** — A modern small-mesh radio firmware (LoRa-shaped today). Planned DAPPS bearer; design supports it but no ship yet.
+**MeshCore** - A modern small-mesh radio firmware (LoRa-shaped today). Planned DAPPS bearer; design supports it but no ship yet.
 
-**MQTT** — A pub-sub messaging protocol; DAPPS embeds an MQTT broker for the local app interface.
+**MQTT** - A pub-sub messaging protocol; DAPPS embeds an MQTT broker for the local app interface.
 
-**neighbour** — A callsign DAPPS will actually forward to. May be hand-added or auto-promoted from a successful probe.
+**neighbour** - A callsign DAPPS will actually forward to. May be hand-added or auto-promoted from a successful probe.
 
-**node-prompt** — The text prompt presented when an L2 connect lands on a packet node (BPQ et al). Phase 2b discovery uses this to probe peers that aren't directly DAPPS — connect, type the application command (`DAPPS` by default), then run a normal probe from the resulting prompt.
+**node-prompt** - The text prompt presented when an L2 connect lands on a packet node (BPQ et al). Phase 2b discovery uses this to probe peers that aren't directly DAPPS - connect, type the application command (`DAPPS` by default), then run a normal probe from the resulting prompt.
 
-**NODECALL** — A callsign assigned to a packet node itself (as distinct from the operator's own callsign). For example, `GB7XYZ` might be the node call and `M0LTE` the operator's call.
+**NODECALL** - A callsign assigned to a packet node itself (as distinct from the operator's own callsign). For example, `GB7XYZ` might be the node call and `M0LTE` the operator's call.
 
-**NVIS** — Near-Vertical Incidence Skywave. An HF propagation mode used for short-to-medium-range communication when ground-wave doesn't reach. DAPPS's B6.2 solicit-and-listen is shaped around its asymmetric-coverage characteristics.
+**NVIS** - Near-Vertical Incidence Skywave. An HF propagation mode used for short-to-medium-range communication when ground-wave doesn't reach. DAPPS's B6.2 solicit-and-listen is shaped around its asymmetric-coverage characteristics.
 
-**`peers`** — A DAPPSv1 command added in Phase 2 of the probe work. After a successful probe, the prober asks "who do you know?" and seeds each unknown callsign as a candidate to probe later.
+**`peers`** - A DAPPSv1 command added in Phase 2 of the probe work. After a successful probe, the prober asks "who do you know?" and seeds each unknown callsign as a candidate to probe later.
 
-**probe** — A connected-mode session opened to a peer to confirm reachability. Three flavours: direct (Phase 1), transitive via the peer's `peers` response (Phase 2), and node-prompt-discovered (Phase 2b).
+**probe** - A connected-mode session opened to a peer to confirm reachability. Three flavours: direct (Phase 1), transitive via the peer's `peers` response (Phase 2), and node-prompt-discovered (Phase 2b).
 
-**`rev`** — A DAPPSv1 command added in Phase F3: "send me anything you're holding for me." Used by both opportunistic and scheduled polling.
+**`rev`** - A DAPPSv1 command added in Phase F3: "send me anything you're holding for me." Used by both opportunistic and scheduled polling.
 
-**REST** — DAPPS's HTTP-based app interface, alongside MQTT. Same submit shape; different protocol.
+**REST** - DAPPS's HTTP-based app interface, alongside MQTT. Same submit shape; different protocol.
 
-**RHPv2** — Radio Host Protocol v2 — a more modern host-to-node protocol than AGW. Planned bearer; awaiting BPQ support.
+**RHPv2** - Radio Host Protocol v2 - a more modern host-to-node protocol than AGW. Planned bearer; awaiting BPQ support.
 
-**route hint** — A manual override that says "for messages destined for X, always try Y first." Stored in the route-hints table.
+**route hint** - A manual override that says "for messages destined for X, always try Y first." Stored in the route-hints table.
 
-**session protocol** — The DAPPSv1 session shape: prompt → `ihave` → `send` / `?` → `data` → `ack`. The on-air conversation between two DAPPS nodes.
+**session protocol** - The DAPPSv1 session shape: prompt → `ihave` → `send` / `?` → `data` → `ack`. The on-air conversation between two DAPPS nodes.
 
-**solicit** — On-demand or scheduled "is anyone out there?" transmission on a discovery channel. Replies collected for a window. Useful on HF NVIS where push beaconing's airtime is too expensive.
+**solicit** - On-demand or scheduled "is anyone out there?" transmission on a discovery channel. Replies collected for a window. Useful on HF NVIS where push beaconing's airtime is too expensive.
 
-**source-routing** — Stamping the full path on a message at the sender, instead of letting each hop pick the next one. The `meshcore` routing algorithm.
+**source-routing** - Stamping the full path on a message at the sender, instead of letting each hop pick the next one. The `meshcore` routing algorithm.
 
-**SSID** — The number after the dash on a callsign (`-1`, `-7`, `-15`). Lets one operator distinguish multiple stations / applications. AGW dispatches by exact call+SSID match.
+**SSID** - The number after the dash on a callsign (`-1`, `-7`, `-15`). Lets one operator distinguish multiple stations / applications. AGW dispatches by exact call+SSID match.
 
-**TTL** — Time To Live. In DAPPS, the residual lifetime of a message (in seconds). Decremented on each forwarding hop; messages are soft-deleted on zero.
+**TTL** - Time To Live. In DAPPS, the residual lifetime of a message (in seconds). Decremented on each forwarding hop; messages are soft-deleted on zero.
 
-**watchdog** — An external monitoring process scraping `/Health`, `/Operational`, or the MQTT heartbeat to detect when the daemon is unhealthy.
+**watchdog** - An external monitoring process scraping `/Health`, `/Operational`, or the MQTT heartbeat to detect when the daemon is unhealthy.

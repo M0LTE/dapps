@@ -6,7 +6,7 @@ using ModelContextProtocol.Server;
 namespace dapps.core.Mcp;
 
 /// <summary>
-/// Plan M PR-A — read-only tools covering the routing-state surface:
+/// Plan M PR-A - read-only tools covering the routing-state surface:
 /// learned routes (B5 passive learning), discovered paths (B5.1
 /// MeshCore-flavoured DSR), manual route hints, plus per-callsign
 /// probe (B6.1) and poll (F3b) state. Composed by the diagnostic
@@ -26,7 +26,7 @@ public sealed class DappsRoutingTools(Database database)
 
     [McpServerTool(Name = "list_discovered_paths")]
     [Description(
-        "Source-routed paths discovered by the MeshCore-like algorithm (B5.1 — selectable via " +
+        "Source-routed paths discovered by the MeshCore-like algorithm (B5.1 - selectable via " +
         "SystemOptions.RoutingAlgorithm = 'meshcore'). Stores the full ordered intermediate-hop list rather than " +
         "just the next hop. Empty on a passive-flood-only deployment.")]
     public async Task<IReadOnlyList<DbDiscoveredPath>> ListDiscoveredPathsAsync()
@@ -34,7 +34,7 @@ public sealed class DappsRoutingTools(Database database)
 
     [McpServerTool(Name = "list_route_hints")]
     [Description(
-        "Manual route-hint overrides — operator-configured 'I know X is reachable via Y' entries. Consulted " +
+        "Manual route-hint overrides - operator-configured 'I know X is reachable via Y' entries. Consulted " +
         "before learned routes and discovered peers when resolving a forward path. Usually empty in cold-start " +
         "deployments since B5 passive learning covers most cases automatically.")]
     public async Task<IReadOnlyList<DbRouteHint>> ListRouteHintsAsync()

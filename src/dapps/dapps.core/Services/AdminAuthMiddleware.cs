@@ -6,7 +6,7 @@ namespace dapps.core.Services;
 /// <summary>
 /// Gate the dashboard and admin endpoints behind the cookie auth
 /// scheme. Runs after <see cref="BearerAuthMiddleware"/>, which owns
-/// <c>/AppApi/*</c> with its own bearer-token model — those requests
+/// <c>/AppApi/*</c> with its own bearer-token model - those requests
 /// pass through here untouched.
 ///
 /// Three states:
@@ -27,16 +27,16 @@ public sealed class AdminAuthMiddleware(RequestDelegate next)
         var path = ctx.Request.Path.Value ?? "";
 
         // Pass-through for paths the middleware deliberately doesn't gate:
-        //   /AppApi/*       — owned by BearerAuthMiddleware
-        //   /Setup          — first-use password creation; gated by
+        //   /AppApi/*       - owned by BearerAuthMiddleware
+        //   /Setup          - first-use password creation; gated by
         //                     state, not auth (see PageModel)
-        //   /Login, /Logout — the auth UX itself
-        //   /Health         — C3 liveness; systemd watchdog units +
+        //   /Login, /Logout - the auth UX itself
+        //   /Health         - C3 liveness; systemd watchdog units +
         //                     external uptime monitors can't log in
-        //   /Operational    — C3 metrics aggregate; same posture as
+        //   /Operational    - C3 metrics aggregate; same posture as
         //                     /Events/health which the dashboard JS
         //                     polls without auth context anyway
-        //   /mcp            — Plan G MCP endpoint; clients (Claude,
+        //   /mcp            - Plan G MCP endpoint; clients (Claude,
         //                     Cursor) don't have admin cookies. An
         //                     MCP-specific token model can come later.
         //   static asset paths Razor's StaticFiles middleware serves

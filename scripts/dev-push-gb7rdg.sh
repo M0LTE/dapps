@@ -2,13 +2,13 @@
 #
 # Local cross-build → gb7rdg-node deploy. Avoids the GitHub Actions
 # round-trip during dev iteration: ~1 min cycle vs ~5 min for tag → CI →
-# release → curl. Don't use for actual releases — use the master-push
+# release → curl. Don't use for actual releases - use the master-push
 # version-bump path for those.
 #
 # Usage: scripts/dev-push-gb7rdg.sh
 #
 # Requires:
-#   - dotnet 8.0 SDK locally (any host arch — we cross-compile to ARM)
+#   - dotnet 8.0 SDK locally (any host arch - we cross-compile to ARM)
 #   - ssh + scp configured for tf@gb7rdg-node
 #   - sudo NOPASSWD on tf@gb7rdg-node for /opt/dapps/dapps and
 #     systemctl restart dapps.service (or be ready to type the password)
@@ -26,7 +26,7 @@ TAG="$SHA${DIRTY:+-dirty}"
 echo ">>> Building $RID  ($TAG)"
 # Stamp the build with the git short SHA + dirty marker, so the
 # dashboard's footer / startup log says exactly what's running. Doesn't
-# touch <Version> — that drives release tagging, not dev pushes.
+# touch <Version> - that drives release tagging, not dev pushes.
 rm -rf "$REPO/publish-dev"
 dotnet publish "$PROJ" \
     --configuration Release \

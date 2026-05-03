@@ -18,7 +18,7 @@ namespace dapps.core.Services;
 ///
 /// Failure handling: network is flaky in the wild, so a fetch failure
 /// is logged at Debug and the cached snapshot stays put. We never
-/// surface "I don't know what's latest" as an error in the UI — at
+/// surface "I don't know what's latest" as an error in the UI - at
 /// worst the dashboard says "checking…" until the first fetch lands.
 /// </summary>
 public sealed class UpdateChecker(
@@ -30,7 +30,7 @@ public sealed class UpdateChecker(
     private const string ReleasesUrl = "https://api.github.com/repos/M0LTE/dapps/releases/latest";
     // 1 hour: GitHub's unauthenticated rate limit is 60 req/hour/IP, so
     // one poll/hour is well within budget. 6h was too long for "I just
-    // shipped, do my nodes see it?" — the dashboard would tell operators
+    // shipped, do my nodes see it?" - the dashboard would tell operators
     // their freshly-pushed release didn't exist for hours. Operators
     // wanting instant feedback hit POST /Update/check or the dashboard
     // "Check now" button.
@@ -82,7 +82,7 @@ public sealed class UpdateChecker(
     /// Used by the dashboard's "Check now" button and the
     /// <c>POST /Update/check</c> endpoint when an operator wants
     /// instant confirmation that a freshly-shipped release is visible
-    /// to this node — instead of waiting up to an hour for the next
+    /// to this node - instead of waiting up to an hour for the next
     /// scheduled poll.
     /// </summary>
     public Task RefreshAsync(CancellationToken ct) => PollOnce(ct);
@@ -119,7 +119,7 @@ public sealed class UpdateChecker(
                 FetchedAt: timeProvider.GetUtcNow().UtcDateTime);
             logger.LogInformation(
                 "Update check: latest is {0} (running {1}{2})",
-                _latest.Tag, Current, UpdateAvailable ? " — UPDATE AVAILABLE" : "");
+                _latest.Tag, Current, UpdateAvailable ? " - UPDATE AVAILABLE" : "");
         }
         catch (Exception ex)
         {

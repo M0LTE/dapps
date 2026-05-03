@@ -91,11 +91,11 @@ public sealed class Dappsv1SessionBackhaul : IDappsBackhaul
                 return BackhaulSendResult.Fail($"payload rejected for {message.Id}");
             }
 
-            // Plan F3 — opportunistic poll. The session is open, the
+            // Plan F3 - opportunistic poll. The session is open, the
             // ack just landed; if the operator's enabled the feature
             // and we have a place to deliver inbound, send `rev` and
             // drain anything the remote has queued for us. Failures
-            // here don't flip the SendResult to fail — the push was
+            // here don't flip the SendResult to fail - the push was
             // the actual ask, the drain is a bonus.
             if (opportunisticInbox is not null && (opportunisticEnabled?.Invoke() ?? false))
             {

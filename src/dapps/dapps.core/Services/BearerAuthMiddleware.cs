@@ -24,7 +24,7 @@ public sealed class BearerAuthMiddleware(
 {
     /// <summary>Path prefix the middleware enforces against. Other
     /// surfaces (/Config, /Neighbours, /AppTokens) are admin-flavoured
-    /// and intentionally not covered — those need the operator-level
+    /// and intentionally not covered - those need the operator-level
     /// auth model documented in the README's loopback warning.</summary>
     public const string ProtectedPrefix = "/AppApi";
 
@@ -90,7 +90,7 @@ public static class AuthenticatedAppExtensions
     public static bool IsAuthorisedForApp(this HttpContext context, string app)
     {
         var authed = context.GetAuthenticatedApp();
-        if (authed is null) return true; // open mode — middleware didn't run
+        if (authed is null) return true; // open mode - middleware didn't run
         return string.Equals(authed, app, StringComparison.OrdinalIgnoreCase);
     }
 }

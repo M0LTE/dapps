@@ -22,7 +22,7 @@ public class LinkClassDefaultsTests
         var minIp = ipClasses.Min(LinkClassDefaults.CostHint);
 
         maxRf.Should().BeLessThan(minIp,
-            "every RF class must be cheaper than every IP class — DAPPS routes RF-first; IP is a fallback to bridge between RF islands");
+            "every RF class must be cheaper than every IP class - DAPPS routes RF-first; IP is a fallback to bridge between RF islands");
     }
 
     [Fact]
@@ -54,7 +54,7 @@ public class LinkClassDefaultsTests
     [Fact]
     public void AdvertisedTtl_HfIsLongest()
     {
-        // HF propagation closes overnight — a peer that went silent at
+        // HF propagation closes overnight - a peer that went silent at
         // sundown is still very much "there" at sunup. Long TTL keeps
         // the peer in the discovered table across the prop cycle.
         var hf = LinkClassDefaults.AdvertisedTtlSeconds(LinkClass.Hf);
@@ -68,7 +68,7 @@ public class LinkClassDefaultsTests
     [Fact]
     public void BeaconInterval_RfChannelsBeaconLessOftenThanIp()
     {
-        // Channel-sharing politeness — a 1200 baud VHF doesn't want a
+        // Channel-sharing politeness - a 1200 baud VHF doesn't want a
         // beacon every minute regardless of which we'd rather route on.
         LinkClassDefaults.BeaconIntervalSeconds(LinkClass.LanMulticast)
             .Should().BeLessThan(LinkClassDefaults.BeaconIntervalSeconds(LinkClass.VhfUhfFm));

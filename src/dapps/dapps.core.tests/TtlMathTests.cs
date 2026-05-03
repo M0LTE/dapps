@@ -46,7 +46,7 @@ public class TtlMathTests
     public void Residual_SubSecondOverrun_RoundsToOneSecondElapsed()
     {
         // 0.4s past creation should consume one second of headroom rather
-        // than zero — preferring "expire on time" over "expire late".
+        // than zero - preferring "expire on time" over "expire late".
         TtlMath.Residual(ttl: 60, createdAt: BaseTime, now: BaseTime.AddMilliseconds(400))
             .Should().Be(59);
     }

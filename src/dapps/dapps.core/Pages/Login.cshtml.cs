@@ -60,7 +60,7 @@ public sealed class LoginModel(AdminPasswordStore store) : PageModel
     }
 
     /// <summary>Defensive: only allow same-origin local paths as
-    /// post-login redirect targets — never an off-host URL even if it
+    /// post-login redirect targets - never an off-host URL even if it
     /// arrived in a query string.</summary>
     private static string SafeReturn(string? candidate)
     {

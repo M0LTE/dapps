@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace dapps.core.Controllers;
 
 /// <summary>
-/// REST app interface — mirrors the MQTT topic structure for apps that
+/// REST app interface - mirrors the MQTT topic structure for apps that
 /// prefer plain HTTP. Same SQLite-backed queue, same ack contract.
 ///
 /// Map (MQTT → REST):
@@ -35,7 +35,7 @@ public class AppApiController(Database database) : ControllerBase
 
     /// <summary>
     /// List currently unacknowledged inbound messages for the given app.
-    /// Equivalent to subscribing to `dapps/in/{app}` — but pull-based.
+    /// Equivalent to subscribing to `dapps/in/{app}` - but pull-based.
     /// </summary>
     [HttpGet("inbound/{app}")]
     public async Task<ActionResult<List<InboundMessage>>> GetInbound(string app)
@@ -50,7 +50,7 @@ public class AppApiController(Database database) : ControllerBase
     }
 
     /// <summary>
-    /// Acknowledge receipt of an inbound message — once ack'd, the message
+    /// Acknowledge receipt of an inbound message - once ack'd, the message
     /// no longer appears in subsequent /inbound responses or MQTT replays.
     /// Equivalent to publishing the id on `dapps/ack/{app}`.
     /// </summary>
@@ -65,7 +65,7 @@ public class AppApiController(Database database) : ControllerBase
 
 /// <summary>
 /// Submit-an-outbound-message request body. <see cref="Ttl"/> is
-/// optional residual lifetime in seconds — propagates onto the
+/// optional residual lifetime in seconds - propagates onto the
 /// outgoing <c>ihave</c> as <c>ttl=N</c>. Null = no expiry; the
 /// message stays in the queue until forwarded or manually deleted.
 /// Apps that care about cleanup should set a value.
@@ -78,8 +78,8 @@ public sealed record OutboundResponse(string Id);
 /// One pending inbound message. <see cref="Ttl"/> is the residual
 /// lifetime in seconds at the moment of the GET (initial TTL minus
 /// dwell time on this node); null when the message has no TTL.
-/// <see cref="OriginatorCallsign"/> is the F1 end-to-end source — the
-/// callsign that *originated* the message — or null if the upstream
+/// <see cref="OriginatorCallsign"/> is the F1 end-to-end source - the
+/// callsign that *originated* the message - or null if the upstream
 /// chain didn't tell us. Distinct from <see cref="SourceCallsign"/>
 /// (link source). Apps should fall back to <c>SourceCallsign</c> when
 /// <c>OriginatorCallsign</c> is null.

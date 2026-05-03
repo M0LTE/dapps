@@ -31,7 +31,7 @@ public interface IUpdaterFileSystem
     /// creating or replacing. Mode 0644 on Unix.</summary>
     void WriteAllText(string path, string contents);
 
-    /// <summary>Idempotent delete — no error if the file isn't there.</summary>
+    /// <summary>Idempotent delete - no error if the file isn't there.</summary>
     void Delete(string path);
 }
 
@@ -57,7 +57,7 @@ public interface IUpdaterProcess
     /// <summary>Restart the named systemd service. Returns the exit code.
     /// 0 = scheduled; non-zero = systemctl rejected the request (e.g.
     /// service not found, no permissions). Does NOT wait for the
-    /// service to come back up — see <see cref="IsServiceActive"/>.</summary>
+    /// service to come back up - see <see cref="IsServiceActive"/>.</summary>
     Task<int> RestartServiceAsync(string serviceName, CancellationToken ct);
 
     /// <summary>Probe systemd for whether the named service is currently

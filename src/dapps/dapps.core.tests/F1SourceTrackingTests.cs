@@ -9,7 +9,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace dapps.core.tests;
 
 /// <summary>
-/// Plan-item F1 — end-to-end source tracking. The <c>src=</c> field on
+/// Plan-item F1 - end-to-end source tracking. The <c>src=</c> field on
 /// the <c>ihave</c> line carries the *originating* callsign (the node a
 /// message was first submitted at, by a local app), distinct from the
 /// link source (the callsign that handed *this* hop the message). The
@@ -29,7 +29,7 @@ public class F1SourceTrackingTests
 
         result.IsValid.Should().BeTrue("validator failed: {0}", result.Error);
         result.Offer!.Originator.Should().Be("G0ORIG-7");
-        // src= is reserved — must not leak into AdditionalHeaders alongside.
+        // src= is reserved - must not leak into AdditionalHeaders alongside.
         result.Offer.AdditionalHeaders.Should().NotContainKey("src");
     }
 

@@ -5,7 +5,7 @@ namespace dapps.client.Discovery;
 
 /// <summary>
 /// Encodes and parses the beacon wire form. Plan B2 sketches a positional
-/// line; we use the same KV style as <c>ihave</c> instead — both for
+/// line; we use the same KV style as <c>ihave</c> instead - both for
 /// extensibility (future fields don't reorder existing parsers) and so
 /// hand-typing or grepping captured AX.25 UI traffic stays trivial.
 ///
@@ -14,11 +14,11 @@ namespace dapps.client.Discovery;
 ///   DAPPS v1 callsign=M0LTE-9 hops=0 ttl=300
 /// </code>
 ///
-/// One line, no trailing newline. ASCII-only on the wire — callsigns
+/// One line, no trailing newline. ASCII-only on the wire - callsigns
 /// are ASCII anyway and the KV values are integers.
 ///
 /// The bearer-specific source hint (<see cref="BeaconFrame.Bearer"/>) is
-/// NOT carried in the wire form — it's stamped by the receive bearer
+/// NOT carried in the wire form - it's stamped by the receive bearer
 /// based on the channel the beacon arrived on. Including it on the wire
 /// would let a misbehaving peer claim to be reachable on routes it
 /// isn't.
@@ -65,7 +65,7 @@ public static class BeaconCodec
                     if (!int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var t) || t <= 0) return false;
                     ttl = t;
                     break;
-                // Unknown keys ignored — forward-compat with future fields.
+                // Unknown keys ignored - forward-compat with future fields.
             }
         }
 

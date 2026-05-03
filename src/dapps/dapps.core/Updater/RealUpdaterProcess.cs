@@ -9,7 +9,7 @@ public sealed class RealUpdaterProcess : IUpdaterProcess
     public async Task<int> RestartServiceAsync(string serviceName, CancellationToken ct)
     {
         // `systemctl restart` returns once the unit transition is
-        // scheduled — does NOT block until the unit is fully active.
+        // scheduled - does NOT block until the unit is fully active.
         // We follow up with poll-based is-active checks during the
         // health window.
         var psi = new ProcessStartInfo("systemctl", $"restart {serviceName}")

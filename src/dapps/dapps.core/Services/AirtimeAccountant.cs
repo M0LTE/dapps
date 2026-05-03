@@ -4,7 +4,7 @@ using Microsoft.Extensions.Options;
 namespace dapps.core.Services;
 
 /// <summary>
-/// Plan B7 — discovery airtime budget. Beacons, solicit replies, and
+/// Plan B7 - discovery airtime budget. Beacons, solicit replies, and
 /// probes all share one pool of airtime per hour: the scratchpad
 /// called for "this DAPPS node is using N% of channel time" as one
 /// operator-tuneable knob rather than a per-subsystem silo.
@@ -43,7 +43,7 @@ public sealed class AirtimeAccountant(
     /// its cap.
     ///
     /// <paramref name="reason"/> is logged on a deferred call and
-    /// surfaced via diagnostics — pass something recognisable
+    /// surfaced via diagnostics - pass something recognisable
     /// (e.g. "beacon udp/239.x", "probe G0CALL", "solicit").
     /// <paramref name="channelKey"/> is the per-channel bucket;
     /// pass null for transmissions that don't belong to a channel
@@ -74,7 +74,7 @@ public sealed class AirtimeAccountant(
                 if (globalConsumed + estimatedSeconds > globalBudget)
                 {
                     logger.LogInformation(
-                        "Airtime budget exhausted (global) — refusing {Reason} ({Estimate:0.000}s); consumed {Consumed:0.000}s of {Budget}s/hour",
+                        "Airtime budget exhausted (global) - refusing {Reason} ({Estimate:0.000}s); consumed {Consumed:0.000}s of {Budget}s/hour",
                         reason, estimatedSeconds, globalConsumed, globalBudget);
                     metrics?.RecordBudgetRefused($"global cap: {reason}");
                     return false;
@@ -89,7 +89,7 @@ public sealed class AirtimeAccountant(
                 if (channelConsumed + estimatedSeconds > channelBudgetSecondsPerHour)
                 {
                     logger.LogInformation(
-                        "Airtime budget exhausted (channel {Channel}) — refusing {Reason} ({Estimate:0.000}s); consumed {Consumed:0.000}s of {Budget}s/hour",
+                        "Airtime budget exhausted (channel {Channel}) - refusing {Reason} ({Estimate:0.000}s); consumed {Consumed:0.000}s of {Budget}s/hour",
                         channelKey, reason, estimatedSeconds, channelConsumed, channelBudgetSecondsPerHour);
                     metrics?.RecordBudgetRefused($"{channelKey} cap: {reason}");
                     return false;

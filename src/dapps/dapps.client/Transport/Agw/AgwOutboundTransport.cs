@@ -37,7 +37,7 @@ public sealed class AgwOutboundTransport(string host, int port, ILoggerFactory l
 
             // Register our local callsign first. Without this BPQ has no
             // valid source for the SABM and emits frames with a blank src
-            // field — the remote ignores them and we time out with
+            // field - the remote ignores them and we time out with
             // RETRYOUT. (linbpq's own AGW two-instance test does this for
             // the same reason.)
             logger.LogDebug("AGW: registering {local}", localCallsign);
@@ -83,7 +83,7 @@ public sealed class AgwOutboundTransport(string host, int port, ILoggerFactory l
                 }
 
                 // BPQ's 'C' confirmation comes back with callfrom/callto
-                // swapped relative to the request — the remote (the one we
+                // swapped relative to the request - the remote (the one we
                 // dialed) is now the FROM and we're the TO. Accept either
                 // orientation defensively, since the spec is ambiguous and
                 // some clients don't swap.
@@ -137,7 +137,7 @@ public sealed class AgwOutboundTransport(string host, int port, ILoggerFactory l
             // session immediately rather than waiting for the link's idle
             // timeout. Without this, a follow-up connect from the same
             // callsign pair within a few minutes collides with the stale
-            // half-up link — surfaced repeatedly in integration runs.
+            // half-up link - surfaced repeatedly in integration runs.
             try
             {
                 using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(2));

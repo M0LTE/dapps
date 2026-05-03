@@ -1,6 +1,6 @@
 # Sample gallery
 
-Three small apps that demonstrate common shapes you'll build on top of DAPPS. Each is short, runnable, and chosen to surface a specific design point. None are production-ready — they're written to be read.
+Three small apps that demonstrate common shapes you'll build on top of DAPPS. Each is short, runnable, and chosen to surface a specific design point. None are production-ready - they're written to be read.
 
 If you haven't yet, read [Concepts](concepts.md) and walk through the [tutorial](tutorial.md) first.
 
@@ -14,11 +14,11 @@ Run a DAPPS instance locally, replace `<your-callsign>` with your own throughout
 
 The runnable source for each example lives in the repo at [`docs/examples/`](https://github.com/M0LTE/dapps/tree/master/docs/examples).
 
-## Group chat — `chat.py`
+## Group chat - `chat.py`
 
 [chat.py on GitHub](https://github.com/M0LTE/dapps/blob/master/docs/examples/chat.py)
 
-A line-mode chat app. Each line you type at the prompt is broadcast to a fixed list of peer callsigns; incoming lines from anyone are printed inline. Run the same script (with appropriate args) on every node that wants to participate — there is no central server, no registry, no membership protocol.
+A line-mode chat app. Each line you type at the prompt is broadcast to a fixed list of peer callsigns; incoming lines from anyone are printed inline. Run the same script (with appropriate args) on every node that wants to participate - there is no central server, no registry, no membership protocol.
 
 ```bash
 # On node A (G7XYZ):
@@ -35,21 +35,21 @@ Type a line on any node; the others see it.
 
 **What this demonstrates**:
 
-- **One-to-many fan-out** — DAPPS doesn't have multicast at the app layer, so the app loops and publishes once per recipient. Each recipient sees the same `dapps-id`.
+- **One-to-many fan-out** - DAPPS doesn't have multicast at the app layer, so the app loops and publishes once per recipient. Each recipient sees the same `dapps-id`.
 - **Reading `dapps-source`** to display "who said what."
-- **TTL of 1 hour** — chat is more useful than a 5-minute reply window, less useful than yesterday's transcript.
+- **TTL of 1 hour** - chat is more useful than a 5-minute reply window, less useful than yesterday's transcript.
 
 **What this glosses over**:
 
 - The `seen` set is in-memory; restart the script and you'll re-print the backlog. Persist it to SQLite for a real app.
-- No formatting, no nicknames, no slash-commands — the wire format is "raw UTF-8 bytes." A real chat app would put a small JSON envelope around each line for sender display name, format, etc.
+- No formatting, no nicknames, no slash-commands - the wire format is "raw UTF-8 bytes." A real chat app would put a small JSON envelope around each line for sender display name, format, etc.
 - Membership is hard-coded. A self-organising version would have nodes announce themselves on a "join" topic and others react.
 
-## Sensor publisher — `sensor.py`
+## Sensor publisher - `sensor.py`
 
 [sensor.py on GitHub](https://github.com/M0LTE/dapps/blob/master/docs/examples/sensor.py)
 
-A periodic publisher with no listening surface. Reads a (faked) sensor every N seconds and pushes a JSON reading to a list of subscriber callsigns. Pure submit-and-go — no `on_message`, no acks.
+A periodic publisher with no listening surface. Reads a (faked) sensor every N seconds and pushes a JSON reading to a list of subscriber callsigns. Pure submit-and-go - no `on_message`, no acks.
 
 ```bash
 # Long-running mode (publishes every 60s):
@@ -64,26 +64,26 @@ A subscriber on the receiving side would look like the `hello.py` shape: subscri
 **What this demonstrates**:
 
 - **Submit-only apps.** Not every DAPPS app cares about responses. The shape is a normal MQTT publisher with QoS 1; DAPPS handles all the radio-side awkwardness.
-- **Long TTL (24 h)** — a sensor reading is *useful information* well past the next reading. Compare to chat (1 h) or pager (5 m). TTL isn't "freshness urgency," it's "after this point, the message is more clutter than signal."
-- **`--once` mode** — DAPPS tolerates the publisher coming and going. Submit, exit, the queue takes care of delivery.
+- **Long TTL (24 h)** - a sensor reading is *useful information* well past the next reading. Compare to chat (1 h) or pager (5 m). TTL isn't "freshness urgency," it's "after this point, the message is more clutter than signal."
+- **`--once` mode** - DAPPS tolerates the publisher coming and going. Submit, exit, the queue takes care of delivery.
 
 **What this glosses over**:
 
-- The fake sensor — `read_sensor()` returns random numbers. Replace with `psutil`, a serial-port read, an I²C call — whatever you actually want to publish.
+- The fake sensor - `read_sensor()` returns random numbers. Replace with `psutil`, a serial-port read, an I²C call - whatever you actually want to publish.
 - One JSON object per message. For higher-rate sensors you'd batch readings into a single payload to reduce per-message overhead on the radio side.
 
-## Two-way pager — `pager.py`
+## Two-way pager - `pager.py`
 
 [pager.py on GitHub](https://github.com/M0LTE/dapps/blob/master/docs/examples/pager.py)
 
 A messenger app with two distinct CLI modes. Run with no arguments to listen for incoming pages; run `pager.py send <callsign> <message>` to fire off a single page and exit.
 
 ```bash
-# Receiver — long-running, on the recipient's node:
+# Receiver - long-running, on the recipient's node:
 python pager.py
 [pager] listening on dapps/in/pager
 
-# Sender — one-shot, from anywhere:
+# Sender - one-shot, from anywhere:
 python pager.py send G7XYZ "the eagle has landed"
 -> sent to G7XYZ: 'the eagle has landed'
 ```
@@ -98,7 +98,7 @@ The receiver prints incoming messages with `[<source>] <text>` and notes the res
 
 **What this glosses over**:
 
-- No reply-to / threading. A real messenger would build that on top — perhaps using a header in the payload to correlate.
+- No reply-to / threading. A real messenger would build that on top - perhaps using a header in the payload to correlate.
 - No history; restart the receiver and old pages re-arrive (because `seen` is in-memory). In production, persist `seen` and on startup also fetch the queue once via REST to display the backlog before the broker replay fires.
 
 ## When to write your own
@@ -113,4 +113,4 @@ These three apps cover the major DAPPS-shaped patterns:
 | Periodic submit        | `sensor.py` (default)  | Publisher only; no `on_message`.                                 |
 | Mixed listener + sender| `pager.py`             | Two CLI modes share the same app slot.                           |
 
-If your app fits one of these shapes, copy the closest example and adapt. If it doesn't, the [reference](reference.md) has the full surface — almost any DAPPS app boils down to combinations of subscribe, publish, and ack against your own `<app>` slot.
+If your app fits one of these shapes, copy the closest example and adapt. If it doesn't, the [reference](reference.md) has the full surface - almost any DAPPS app boils down to combinations of subscribe, publish, and ack against your own `<app>` slot.

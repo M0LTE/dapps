@@ -1,12 +1,12 @@
 # MCP for assistants
 
-DAPPS exposes its operator surface to AI assistants via [MCP — the Model Context Protocol](https://modelcontextprotocol.io). An assistant connected to your node's `/mcp` endpoint can do everything an operator can do from the dashboard, plus a few things only they can do (like trigger an `--apply-update` to close the deploy loop after merging a PR).
+DAPPS exposes its operator surface to AI assistants via [MCP - the Model Context Protocol](https://modelcontextprotocol.io). An assistant connected to your node's `/mcp` endpoint can do everything an operator can do from the dashboard, plus a few things only they can do (like trigger an `--apply-update` to close the deploy loop after merging a PR).
 
 ## When this is useful
 
 - **Operations.** "What's the state of my node? Are there pending updates? Is anything broken?" gets a useful structured answer rather than a long screenshot description.
-- **Diagnosis.** "Why didn't message X arrive at G7XYZ?" can be answered by walking the dropped-messages, decision-events, and probed-nodes tables — exactly the path you'd walk by hand on the dashboard.
-- **Steering experiments.** "Probe via this NODECALL", "send a test message to that callsign", "flip the routing algorithm for this restart" — the assistant can drive multi-step exploration without round-trips to a human.
+- **Diagnosis.** "Why didn't message X arrive at G7XYZ?" can be answered by walking the dropped-messages, decision-events, and probed-nodes tables - exactly the path you'd walk by hand on the dashboard.
+- **Steering experiments.** "Probe via this NODECALL", "send a test message to that callsign", "flip the routing algorithm for this restart" - the assistant can drive multi-step exploration without round-trips to a human.
 - **Closing the deploy loop.** Merge a PR → wait for CI → trigger an update on the destination node → smoke-test the new version, all in one conversation.
 
 ## How to connect
@@ -17,7 +17,7 @@ Most MCP clients want a URL. Point yours at:
 http://<node>:5000/mcp
 ```
 
-The endpoint is **open access** — no admin cookie required, since MCP clients don't carry one. If your node is on the public internet, firewall the path or run the daemon behind an authenticating reverse proxy. (Same applies to `/Health` and `/Operational`.)
+The endpoint is **open access** - no admin cookie required, since MCP clients don't carry one. If your node is on the public internet, firewall the path or run the daemon behind an authenticating reverse proxy. (Same applies to `/Health` and `/Operational`.)
 
 For Claude Code specifically:
 
@@ -25,7 +25,7 @@ For Claude Code specifically:
 claude mcp add --scope user --transport http dapps http://<node>:5000/mcp
 ```
 
-## What's exposed — by category
+## What's exposed - by category
 
 ### Read-only
 
@@ -53,16 +53,16 @@ claude mcp add --scope user --transport http dapps http://<node>:5000/mcp
 |-------------------------------|------------------------------------------------------------------------------------------------|
 | `update_config`               | Apply a partial update to the persisted config. Risky knobs (callsign, ports) are excluded.    |
 | `send_test_message`           | Submit an outbound message via the same path an app would take.                                |
-| `run_probe`                   | Probe a single callsign now (bypasses the airtime budget — explicit human action).             |
+| `run_probe`                   | Probe a single callsign now (bypasses the airtime budget - explicit human action).             |
 | `run_probe_sweep`             | Probe every known target.                                                                      |
 | `probe_via_nodecall`          | Phase-2b: connect to a non-DAPPS NODECALL, type the application command, probe.                |
 | `run_solicit`                 | Send a solicit on a discovery channel.                                                         |
 | `run_poll`                    | Poll a single target for queued messages.                                                      |
 | `run_poll_sweep`              | Poll every known target.                                                                       |
 | `check_for_updates`           | Force a re-poll of GitHub Releases.                                                            |
-| `trigger_update`              | Write the update-request marker — same code path as the dashboard's Apply button.              |
+| `trigger_update`              | Write the update-request marker - same code path as the dashboard's Apply button.              |
 
-### Diagnostics — composite
+### Diagnostics - composite
 
 | Tool                          | What it does                                                                                   |
 |-------------------------------|------------------------------------------------------------------------------------------------|
@@ -71,7 +71,7 @@ claude mcp add --scope user --transport http dapps http://<node>:5000/mcp
 | `diagnose_silent_neighbour`   | For a peer that's gone quiet, walk reachability + probe history + recent activity.             |
 | `summarize_recent_activity`   | Compact summary of what's happened recently.                                                   |
 
-### Exploration — supervised
+### Exploration - supervised
 
 | Tool                          | What it does                                                                                   |
 |-------------------------------|------------------------------------------------------------------------------------------------|
@@ -120,11 +120,11 @@ Walks neighbours, then learned routes, then discovered peers, and returns an hon
 
 A few config knobs are deliberately not in `update_config`:
 
-- **Callsign** — wrong value takes the node off-air.
-- **Node host / AGW port / MQTT port / UDP listen port** — all need a daemon restart and a wrong value bricks the daemon's connection to its packet node.
+- **Callsign** - wrong value takes the node off-air.
+- **Node host / AGW port / MQTT port / UDP listen port** - all need a daemon restart and a wrong value bricks the daemon's connection to its packet node.
 
 If you need to change those, use the `/Config` dashboard form or set the env var and restart. The dashboard form has the field validation; the MCP tool would have to duplicate it, and the kinds of mistakes those knobs invite are exactly the kind an MCP-driven agent shouldn't make at 02:00 on a Saturday.
 
 ## Authentication
 
-The MCP endpoint is open by default for the same reason `/Health` is — most MCP clients don't carry the dashboard's admin cookie. If you need authentication (the node is on the public internet), the right answer today is a reverse proxy in front of `/mcp` doing whatever auth your stack supports. A native bearer-token model for MCP clients may land in a future release.
+The MCP endpoint is open by default for the same reason `/Health` is - most MCP clients don't carry the dashboard's admin cookie. If you need authentication (the node is on the public internet), the right answer today is a reverse proxy in front of `/mcp` doing whatever auth your stack supports. A native bearer-token model for MCP clients may land in a future release.

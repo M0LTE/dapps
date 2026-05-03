@@ -3,14 +3,14 @@ using SQLite;
 namespace dapps.core.Models;
 
 /// <summary>
-/// Plan F2 — multi-part message reassembly buffer. One row per
+/// Plan F2 - multi-part message reassembly buffer. One row per
 /// fragment that's arrived at the FINAL destination but whose siblings
 /// haven't all arrived yet. Once the full set is present, the inbox
 /// concatenates them by <see cref="FragmentIndex"/>, delivers the
 /// assembled message via the regular <c>DbMessage</c> + MQTT path,
 /// and drops every fragment row sharing the same <see cref="MasterId"/>.
 ///
-/// Intermediate hops (transit nodes) DO NOT use this table — they
+/// Intermediate hops (transit nodes) DO NOT use this table - they
 /// forward each fragment as an opaque <c>DbMessage</c> row and let
 /// the destination reassemble. Only the destination's inbox routes
 /// inbound fragments here.
@@ -45,7 +45,7 @@ public sealed class DbFragment
 
     public byte[] Payload { get; set; } = [];
 
-    /// <summary>Carried from the inbound message — the assembled message
+    /// <summary>Carried from the inbound message - the assembled message
     /// uses this when delivered. All fragments of the same master id
     /// should agree on these fields; we keep them per-row rather than
     /// requiring a separate per-master metadata table.</summary>
@@ -57,7 +57,7 @@ public sealed class DbFragment
 
     /// <summary>UTC instant the FIRST fragment of this master id arrived.
     /// Drives the stale-fragment sweep. Re-arrivals (idempotent retransmit
-    /// of the same fragment) don't refresh it — the clock starts when
+    /// of the same fragment) don't refresh it - the clock starts when
     /// the originator's window started, not when the latest copy
     /// happens to land.</summary>
     public DateTime FirstSeenAt { get; set; }

@@ -10,7 +10,7 @@ namespace dapps.core.tests.Integration;
 /// (issue #6). Asserts that an AGW connect from one BPQ's APPL call to
 /// the other BPQ's APPL call dispatches into a registered AGW listener
 /// on the receiving side. Without the entrypoint-bypass fix, the
-/// inbound 'C' frame never fires — see <see cref="TwoInstanceLinbpqFixture"/>.
+/// inbound 'C' frame never fires - see <see cref="TwoInstanceLinbpqFixture"/>.
 ///
 /// This is the gate for an end-to-end DAPPS forwarding integration test
 /// (TTL decrement across hops, etc.); having proven the BPQ side works

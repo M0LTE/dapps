@@ -5,7 +5,7 @@ using dapps.client.Transport.Agw;
 namespace dapps.core.tests;
 
 /// <summary>
-/// Unit tests for the multiplexed AGW session stream — the inbound-side
+/// Unit tests for the multiplexed AGW session stream - the inbound-side
 /// glue that lets <c>InboundConnectionHandler</c> consume bytes from a
 /// shared AGW socket as if it had a private duplex stream.
 /// </summary>

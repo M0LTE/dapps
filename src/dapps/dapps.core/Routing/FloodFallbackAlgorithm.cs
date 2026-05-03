@@ -4,7 +4,7 @@ using dapps.core.Models;
 namespace dapps.core.Routing;
 
 /// <summary>
-/// Bounded-flood fallback for cold-start routing — the second half
+/// Bounded-flood fallback for cold-start routing - the second half
 /// of B5. When the inner algorithm has no route and the message
 /// hasn't yet been flooded, send to every direct neighbour with a
 /// hop budget. Each forwarding hop decrements before re-flooding;
@@ -17,12 +17,12 @@ namespace dapps.core.Routing;
 /// last-resort fallback. Floods that succeed in reaching the
 /// destination cause the receiver to send replies back via passive
 /// learning (which observed the inbound flood and learned reverse
-/// routes) — so floods diminish as the network warms up.
+/// routes) - so floods diminish as the network warms up.
 ///
 /// In-flight flood messages: when a message arrives at this node
 /// already in flood mode (<see cref="DbMessage.FloodHopsRemaining"/>
 /// is set), <see cref="ResolveAsync"/> handles the propagation
-/// regardless of what the inner algorithm thinks — the flood IS the
+/// regardless of what the inner algorithm thinks - the flood IS the
 /// route, and we just need to spread it without circling back to the
 /// link source.
 /// </summary>
@@ -39,7 +39,7 @@ public sealed class FloodFallbackAlgorithm(
     public async Task<RouteDecision> ResolveAsync(DbMessage message, IRoutingContext ctx, CancellationToken ct)
     {
         // In-flight flood: this node is mid-propagating. Continue the
-        // flood regardless of what inner says — the flood mechanism
+        // flood regardless of what inner says - the flood mechanism
         // owns the routing decision once a message is in flood mode.
         if (message.FloodHopsRemaining is { } remaining)
         {
@@ -63,7 +63,7 @@ public sealed class FloodFallbackAlgorithm(
         }
 
         // Regular routing path: try inner first; flood only as last
-        // resort. The inner-then-flood ordering matters — if learning
+        // resort. The inner-then-flood ordering matters - if learning
         // has produced a route, use it (cheaper than a flood); only
         // fall back to flood when there's genuinely no other way.
         var innerDecision = await inner.ResolveAsync(message, ctx, ct);

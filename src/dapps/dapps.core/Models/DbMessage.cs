@@ -14,7 +14,7 @@ public class DbMessage
     /// <summary>
     /// The callsign that handed us this message. For an inbound message
     /// from a neighbour DAPPS instance this is the AX.25 connecting station
-    /// (the link source — last hop, not necessarily the original sender if
+    /// (the link source - last hop, not necessarily the original sender if
     /// the message was relayed). For a message submitted by a local app
     /// this is our own NODECALL.
     /// </summary>
@@ -23,7 +23,7 @@ public class DbMessage
     /// <summary>
     /// F1 end-to-end source tracking: the *originating* callsign, parsed
     /// from the inbound <c>ihave</c>'s <c>src=</c> field. Empty when the
-    /// sender pre-dates F1 — in that case the originator is unknown
+    /// sender pre-dates F1 - in that case the originator is unknown
     /// (could be the link source on a single hop, or any upstream hop on
     /// a relay path). For a locally submitted message this is our own
     /// callsign. Preserved verbatim across re-forwards.
@@ -46,7 +46,7 @@ public class DbMessage
     /// <see cref="CreatedAt"/>.</summary>
     public int? Ttl { get; init; }
 
-    /// <summary>UTC instant the row was created — when the message arrived
+    /// <summary>UTC instant the row was created - when the message arrived
     /// or was submitted locally. Used with <see cref="Ttl"/> to compute
     /// residual lifetime on forward and to age out expired rows.</summary>
     public DateTime CreatedAt { get; init; } = DateTime.UtcNow;
@@ -58,7 +58,7 @@ public class DbMessage
     /// the flood stops at zero. Null means this is a regular routed
     /// message, not a flood. Persisted on the message row so a
     /// flood mid-propagation survives a forwarder tick / process
-    /// restart — the next forwarder run picks it back up and
+    /// restart - the next forwarder run picks it back up and
     /// continues at the same hop budget.
     /// </summary>
     public byte? FloodHopsRemaining { get; init; }
@@ -79,7 +79,7 @@ public class DbMessage
     /// message has visited so far (excluding originator and the
     /// local node). Each forwarder appends its own callsign before
     /// encoding the outbound copy. Carried only on flood-discovery
-    /// messages — the destination uses the inbound value reversed
+    /// messages - the destination uses the inbound value reversed
     /// to populate its <c>discoveredpaths</c> table.
     /// </summary>
     public string? TraversedHopsCsv { get; init; }

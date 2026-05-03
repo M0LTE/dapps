@@ -4,7 +4,7 @@ using dapps.core.Models;
 namespace dapps.core.Routing;
 
 /// <summary>
-/// AODV-flavoured passive routing — but without explicit RREQ/RREP
+/// AODV-flavoured passive routing - but without explicit RREQ/RREP
 /// control messages. Every inbound message that carries an F1
 /// originator different from the link source teaches the receiver
 /// "to reach <c>originator</c>, send via the neighbour
@@ -42,7 +42,7 @@ public sealed class PassiveLearningAlgorithm(
             return staticDecision;
         }
 
-        // Static gave up — try learned routes.
+        // Static gave up - try learned routes.
         var destBaseCall = message.Destination.Split('@').Last().Split('-')[0];
         var learned = await ctx.GetLearnedRouteAsync(destBaseCall, ct);
         if (learned is null) return new RouteDecision.Unreachable();
@@ -51,7 +51,7 @@ public sealed class PassiveLearningAlgorithm(
         // row so we get the bearer hint (BPQ port / UDP endpoint).
         // If the neighbour has gone away (e.g. operator removed it
         // while a learned route still references it), drop the
-        // learned route and report Unreachable — re-learning will
+        // learned route and report Unreachable - re-learning will
         // re-populate when traffic returns from the original source.
         var nextHop = await ctx.GetNeighbourByCallsignAsync(learned.NextHopCallsign, ct);
         if (nextHop is null)
@@ -78,16 +78,16 @@ public sealed class PassiveLearningAlgorithm(
         // The contract: <c>To reach the originator, send via the link
         // source.</c> Several reasons to ignore an observation:
         //
-        //   - No originator (pre-F1 sender) — the (originator, link)
+        //   - No originator (pre-F1 sender) - the (originator, link)
         //     pair isn't well-defined.
-        //   - Originator IS us — message looped back somehow; learning
+        //   - Originator IS us - message looped back somehow; learning
         //     would tell us "to reach myself, send via the loop"
         //     which is wrong.
-        //   - Originator base-callsign IS the link source — single-hop
+        //   - Originator base-callsign IS the link source - single-hop
         //     send; the learned route would just duplicate the
         //     existing direct-neighbour entry. Static resolution
         //     handles direct neighbours already; no need to clutter.
-        //   - Link source isn't actually one of our neighbours — we
+        //   - Link source isn't actually one of our neighbours - we
         //     received from a station we didn't know about. Learning
         //     a route through an unknown next-hop would be unusable
         //     (the resolver re-checks the neighbour exists at use
@@ -105,8 +105,8 @@ public sealed class PassiveLearningAlgorithm(
         if (nextHopNeighbour is null)
         {
             // The link source isn't in our neighbours table. This
-            // shouldn't normally happen — bearers only deliver from
-            // configured neighbours — but if it does, skip.
+            // shouldn't normally happen - bearers only deliver from
+            // configured neighbours - but if it does, skip.
             return;
         }
 

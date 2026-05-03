@@ -8,8 +8,8 @@ namespace dapps.client.Backhaul;
 /// Plan A0 inbound counterpart to <see cref="IDappsBackhaul"/>: the
 /// DAPPSv1 session reader, a future MeshCore datagram reader, and any
 /// other bearer all converge here once they have a hashed-and-checked
-/// message. Anything that DAPPS does to a received message — write to
-/// the queue, push to MQTT, decide to forward onwards — happens behind
+/// message. Anything that DAPPS does to a received message - write to
+/// the queue, push to MQTT, decide to forward onwards - happens behind
 /// this interface, not in the bearer code.
 /// </summary>
 public interface IBackhaulInbox

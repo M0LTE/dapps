@@ -5,7 +5,7 @@ namespace dapps.client.Backhaul.Datagram;
 
 /// <summary>
 /// Splits an opaque byte buffer into fragments of size ≤ MTU and
-/// reassembles them on the receiving side. Bearer-agnostic — the UDP
+/// reassembles them on the receiving side. Bearer-agnostic - the UDP
 /// backhaul uses it today; a MeshCore Companion / KISS adapter with a
 /// similarly small MTU will reuse it directly. Plan A0.3: fragmentation
 /// is DAPPS-owned, not bearer-owned.
@@ -13,8 +13,8 @@ namespace dapps.client.Backhaul.Datagram;
 /// Fragment format:
 /// <code>
 ///   [7]  message id (UTF-8 ASCII; matches DappsMessage 7-hex id)
-///   [2]  seq          (uint16 LE — 0-based fragment index)
-///   [2]  count        (uint16 LE — total fragments for this message)
+///   [2]  seq          (uint16 LE - 0-based fragment index)
+///   [2]  count        (uint16 LE - total fragments for this message)
 ///   [2]  chunk len    (uint16 LE)
 ///   [N]  chunk
 /// </code>
@@ -53,7 +53,7 @@ public static class Packetiser
         var idBytes = Encoding.ASCII.GetBytes(messageId);
 
         // Empty buffers still produce a single fragment with chunk len 0
-        // — the receiver needs to know the message exists at all to
+        // - the receiver needs to know the message exists at all to
         // deliver it via the inbox.
         var fragmentCount = buffer.Length == 0
             ? 1
@@ -156,7 +156,7 @@ public sealed class Reassembler
         }
         else if (pending.Count != header.Count)
         {
-            // Conflicting fragment count for the same id — likely a sender
+            // Conflicting fragment count for the same id - likely a sender
             // restart with the same id mid-stream. Drop the old state.
             pending = new Pending
             {
@@ -179,7 +179,7 @@ public sealed class Reassembler
 
         if (pending.Received < pending.Count) return null;
 
-        // Complete — concatenate.
+        // Complete - concatenate.
         _byId.Remove(header.Id);
         var totalLen = pending.Chunks.Sum(c => c?.Length ?? 0);
         var assembled = new byte[totalLen];

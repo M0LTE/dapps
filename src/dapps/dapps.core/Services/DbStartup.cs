@@ -26,14 +26,14 @@ public static class DbStartup
 {
     /// <summary>Sentinel callsign in the seeded defaults. If the resolved
     /// value still matches this after seed it means the operator never
-    /// configured a real one — refuse to start rather than transmit
+    /// configured a real one - refuse to start rather than transmit
     /// frames stamped with it.</summary>
     private const string PlaceholderCallsign = "N0CALL";
 
     /// <summary>
     /// Create every table the daemon needs and seed the first-run
     /// systemoptions defaults (env-var overrides → hardcoded fallback).
-    /// Safe to call multiple times — every step is idempotent.
+    /// Safe to call multiple times - every step is idempotent.
     ///
     /// Called once from Program.cs *before* <c>builder.Build()</c> so
     /// the eager DI materialisation of hosted services (which transit
@@ -67,7 +67,7 @@ public static class DbStartup
 
         // Seeded defaults. When an env var DAPPS_<KEY> is set, it wins;
         // otherwise the hardcoded fallback applies. Either way the value
-        // is only written when no row exists — once configured (here or
+        // is only written when no row exists - once configured (here or
         // via /Config), the row sticks and env vars stop mattering.
         InsertIfNotPresent(db, options, "NodeType", "BPQ", logger);
         InsertIfNotPresent(db, options, "NodeHost", "localhost", logger);
@@ -123,7 +123,7 @@ public static class DbStartup
     /// <summary>
     /// Refuse to start on a misconfigured-or-missing callsign. The
     /// placeholder default is fine in tests but actively dangerous in
-    /// the wild — frames go on the air with the configured callsign,
+    /// the wild - frames go on the air with the configured callsign,
     /// and pretending to be N0CALL is both wrong and traceable to us.
     /// </summary>
     private static void ValidateRequiredConfig(SQLiteConnection db, ILogger? logger)

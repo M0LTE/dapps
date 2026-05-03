@@ -11,7 +11,7 @@ namespace dapps.core.Services;
 ///
 /// Implementation: per-subscriber bounded <see cref="Channel{T}"/>.
 /// Slow subscribers are dropped on overflow rather than blocking
-/// publishers — the inbox's job is to persist messages, not to wait
+/// publishers - the inbox's job is to persist messages, not to wait
 /// for browser tabs to keep up.
 /// </summary>
 public sealed class InboundEventBus

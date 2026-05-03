@@ -13,10 +13,10 @@ namespace dapps.client.Discovery;
 /// yields parsed `U` frames stamped with the matching channel key.
 ///
 /// AGW protocol primitives:
-///   `X` — register our callsign (BPQ won't accept emitted frames otherwise)
-///   `m` — toggle monitor mode on a port (sent once per port we want)
-///   `M` — emit a UI frame on a port
-///   `U` — inbound monitored UI frame (BPQ → us)
+///   `X` - register our callsign (BPQ won't accept emitted frames otherwise)
+///   `m` - toggle monitor mode on a port (sent once per port we want)
+///   `M` - emit a UI frame on a port
+///   `U` - inbound monitored UI frame (BPQ → us)
 ///
 /// Channels for this bearer have <c>ChannelKey</c> = the BPQ port
 /// byte stringified ("0", "1", …). The bearer rejects any other key
@@ -165,11 +165,11 @@ public sealed class AgwUiDiscoveryBearer : IDiscoveryBearer
 
                 if (!_portToChannelKey.TryGetValue(frame.Port, out var channelKey))
                 {
-                    // Frame on a port we didn't ask to monitor — odd; skip.
+                    // Frame on a port we didn't ask to monitor - odd; skip.
                     continue;
                 }
 
-                // Try the solicit codec first — its magic prefix is
+                // Try the solicit codec first - its magic prefix is
                 // strictly longer than the beacon's, so a beacon never
                 // matches it. Beacons rejected by the solicit parser
                 // (no "solicit" keyword) fall through to the beacon

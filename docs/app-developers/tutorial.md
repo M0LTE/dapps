@@ -4,7 +4,7 @@ Build a tiny DAPPS app called `hello`. It does one thing: when someone sends it 
 
 - A working Python script that talks to your local DAPPS instance over MQTT.
 - A clear understanding of how submit, deliver, and ack flow through the queue.
-- An idempotent message handler — the reflex you'll reach for in every DAPPS app.
+- An idempotent message handler - the reflex you'll reach for in every DAPPS app.
 
 If you haven't yet, read [Concepts](concepts.md) first.
 
@@ -15,11 +15,11 @@ If you haven't yet, read [Concepts](concepts.md) first.
 - `paho-mqtt` 2.x: `pip install paho-mqtt`.
 - `mosquitto-clients` (for `mosquitto_pub`) on the side, so we can poke the app from the command line. On Debian/Ubuntu: `apt install mosquitto-clients`. macOS: `brew install mosquitto`.
 
-We'll use MQTT in this tutorial. The same flow works against the REST endpoints — there's a `curl`-only version at the end.
+We'll use MQTT in this tutorial. The same flow works against the REST endpoints - there's a `curl`-only version at the end.
 
 ## The full script
 
-The complete script lives in the repo at [`docs/examples/hello.py`](https://github.com/M0LTE/dapps/blob/master/docs/examples/hello.py). Drop it into a directory, run it, and skip ahead to [Try it out](#try-it-out) if you'd rather see it working before reading the explanation. Otherwise, read on — the next sections walk through it piece by piece.
+The complete script lives in the repo at [`docs/examples/hello.py`](https://github.com/M0LTE/dapps/blob/master/docs/examples/hello.py). Drop it into a directory, run it, and skip ahead to [Try it out](#try-it-out) if you'd rather see it working before reading the explanation. Otherwise, read on - the next sections walk through it piece by piece.
 
 ## Step 1: connect to the broker
 
@@ -39,18 +39,18 @@ client.connect("127.0.0.1", 1883, keepalive=30)
 client.loop_forever()
 ```
 
-`loop_forever()` blocks until the process is killed. For a real app you'd run it under systemd, supervisord, or a container restart policy — DAPPS is built to tolerate the app being down, but we still want it running when there's work to do.
+`loop_forever()` blocks until the process is killed. For a real app you'd run it under systemd, supervisord, or a container restart policy - DAPPS is built to tolerate the app being down, but we still want it running when there's work to do.
 
 ## Step 2: subscribe to your inbox
 
-When the connection completes, subscribe to your app's inbox topic — the place DAPPS publishes messages addressed to you:
+When the connection completes, subscribe to your app's inbox topic - the place DAPPS publishes messages addressed to you:
 
 ```python
 def on_connect(client, userdata, flags, reason_code, properties):
     client.subscribe("dapps/in/hello", qos=1)
 ```
 
-`dapps/in/<app>` is the canonical inbox for app `<app>`. QoS 1 (at-least-once) is the right choice — DAPPS is already at-least-once on the wire, and matching it on the broker hop avoids "I delivered the bytes but you never acked the broker frame" surprises. Don't use QoS 0 unless you have a specific reason.
+`dapps/in/<app>` is the canonical inbox for app `<app>`. QoS 1 (at-least-once) is the right choice - DAPPS is already at-least-once on the wire, and matching it on the broker hop avoids "I delivered the bytes but you never acked the broker frame" surprises. Don't use QoS 0 unless you have a specific reason.
 
 The moment you subscribe, DAPPS replays any **already-pending messages** for `hello` that arrived before the app came online. The "queue persists across app restarts" guarantee shows up here as ordinary MQTT delivery on subscribe.
 
@@ -84,7 +84,7 @@ payload = msg.payload.decode("utf-8", errors="replace")
 
 ## Step 4: be idempotent
 
-A message you've already processed will sometimes arrive a second time — DAPPS or your app crashed before the ack was recorded. **Don't trust that every delivery is a fresh one.** Check the id against a "seen" store before doing real work:
+A message you've already processed will sometimes arrive a second time - DAPPS or your app crashed before the ack was recorded. **Don't trust that every delivery is a fresh one.** Check the id against a "seen" store before doing real work:
 
 ```python
 seen: set[str] = set()  # in real code: SQLite / Redis / a file
@@ -95,11 +95,11 @@ if msg_id in seen:
     return
 ```
 
-For this tutorial an in-memory set is fine — restart the script and it'll happily reply to old messages again, but that's exactly the bug the persistent store fixes when you're ready for a real app.
+For this tutorial an in-memory set is fine - restart the script and it'll happily reply to old messages again, but that's exactly the bug the persistent store fixes when you're ready for a real app.
 
 ## Step 5: reply
 
-Replying is symmetric to receiving — publish to `dapps/out/<app>/<destination-callsign>`. The destination is whoever sent us the message; that's the `dapps-source` user property we just read.
+Replying is symmetric to receiving - publish to `dapps/out/<app>/<destination-callsign>`. The destination is whoever sent us the message; that's the `dapps-source` user property we just read.
 
 ```python
 from paho.mqtt.properties import Properties
@@ -118,7 +118,7 @@ client.publish(
 )
 ```
 
-The optional `dapps-ttl` user property gives the message a 5-minute residual lifetime. If the receiver doesn't pull this from their queue within 5 minutes, DAPPS drops it — no point greeting somebody an hour late.
+The optional `dapps-ttl` user property gives the message a 5-minute residual lifetime. If the receiver doesn't pull this from their queue within 5 minutes, DAPPS drops it - no point greeting somebody an hour late.
 
 ## Step 6: acknowledge
 
@@ -183,7 +183,7 @@ curl http://127.0.0.1:5000/AppApi/inbound/hello
 # [{"id":"abc1234","sourceCallsign":"G7XYZ","payload":"d29ybGQ=","ttl":287}]
 ```
 
-`ttl` is the *residual* — the same 5-minute window you set, minus however long the message dwelt on this node. `null` means the sender didn't set one.
+`ttl` is the *residual* - the same 5-minute window you set, minus however long the message dwelt on this node. `null` means the sender didn't set one.
 
 Ack:
 
@@ -191,11 +191,11 @@ Ack:
 curl -X POST http://127.0.0.1:5000/AppApi/inbound/hello/abc1234/ack
 ```
 
-Both surfaces share the same queue. An app written against MQTT and a cron job hitting REST can run side by side and won't see each other's traffic — they're both authenticated as `hello` in the queue's view, but the queue handles concurrency for them.
+Both surfaces share the same queue. An app written against MQTT and a cron job hitting REST can run side by side and won't see each other's traffic - they're both authenticated as `hello` in the queue's view, but the queue handles concurrency for them.
 
 ## Where to go next
 
-- **Read [the gallery](gallery.md)** for working examples of the other common app shapes — group chat, sensor publisher, two-way pager.
+- **Read [the gallery](gallery.md)** for working examples of the other common app shapes - group chat, sensor publisher, two-way pager.
 - **Read [the reference](reference.md)** for the full MQTT/REST surface, every user property's semantics, and the idempotency contract spelled out explicitly.
 - **Persist `seen` to disk.** SQLite (`sqlite3` stdlib) is easiest. Insert the id under `INSERT OR IGNORE` and use the `changes()` count to decide whether to reply.
 - **Handle malformed payloads.** `decode("utf-8", errors="replace")` keeps the demo from crashing on a binary blob, but a real app should validate input and ack-without-replying on garbage rather than ignoring it (otherwise garbage piles up in your queue).

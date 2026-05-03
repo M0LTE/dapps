@@ -116,7 +116,7 @@ public sealed class DbStartupTests : IAsyncLifetime
     [Fact]
     public void EnsureSchemaAndSeed_ExistingPlaceholderCallsign_StillThrows()
     {
-        // Operator left N0CALL in the DB somehow — must still error,
+        // Operator left N0CALL in the DB somehow - must still error,
         // not silently transmit on it.
         using (var c = DbInfo.GetConnection())
         {

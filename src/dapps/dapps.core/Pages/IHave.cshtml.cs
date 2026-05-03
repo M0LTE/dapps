@@ -8,11 +8,11 @@ using Microsoft.Extensions.Options;
 namespace dapps.core.Pages;
 
 /// <summary>
-/// Plan D2 — manual ihave compose page. Server-rendered POST handler
+/// Plan D2 - manual ihave compose page. Server-rendered POST handler
 /// calls <see cref="Database.SubmitOutboundMessage"/> directly (same
 /// path the dashboard's send-test form uses). Distinct from the
 /// dashboard's send-test in that it surfaces every operator-relevant
-/// field — TTL, the upcoming on-air ihave preview — for debugging
+/// field - TTL, the upcoming on-air ihave preview - for debugging
 /// the protocol layer without writing an app.
 /// </summary>
 public sealed class IHaveModel(
@@ -73,7 +73,7 @@ public sealed class IHaveModel(
                     ? $"ihave {id} len={bytes.Length} dst={LastDestinationFull}"
                     : $"ihave {id} len={bytes.Length} dst={LastDestinationFull} ttl={ttl}";
                 FlashOk = $"Queued message {id} ({bytes.Length} bytes) for {LastDestinationFull}.";
-                // Don't reset the form — operator may want to tweak and resubmit.
+                // Don't reset the form - operator may want to tweak and resubmit.
             }
             catch (Exception ex)
             {

@@ -11,9 +11,9 @@ namespace dapps.core.Services;
 /// Embedded MQTT broker that fronts the DAPPS app interface.
 ///
 /// Topic structure (from the spec / gist):
-///   - `dapps/in/&lt;app&gt;`              — apps subscribe; DAPPS publishes
-///   - `dapps/out/&lt;app&gt;/&lt;dest&gt;` — apps publish; DAPPS queues for forwarding
-///   - `dapps/ack/&lt;app&gt;`             — apps publish msg-id to ack receipt
+///   - `dapps/in/&lt;app&gt;`              - apps subscribe; DAPPS publishes
+///   - `dapps/out/&lt;app&gt;/&lt;dest&gt;` - apps publish; DAPPS queues for forwarding
+///   - `dapps/ack/&lt;app&gt;`             - apps publish msg-id to ack receipt
 ///
 /// Durability: DAPPS owns the queue (in SQLite). The broker is just a
 /// real-time delivery channel. Messages stay in the database until the app
@@ -65,7 +65,7 @@ public sealed class MqttBrokerService(
             // "Hosting failed to start" stack trace and crash-loops via
             // systemd's Restart=on-failure. Operators running into this
             // hit it as e.g. a co-located mosquitto container holding
-            // :1883 — the cause is operational, not a bug. Surface a
+            // :1883 - the cause is operational, not a bug. Surface a
             // single short actionable line so the journal shows what to
             // do, then rethrow as a clean InvalidOperationException so
             // the host's stack-trace dump references *our* message
@@ -102,15 +102,15 @@ public sealed class MqttBrokerService(
     /// <summary>
     /// Publish an inbound (received-from-another-DAPPS) message to its
     /// local app's topic. Called by InboundConnectionHandler on receipt.
-    /// If no subscriber is connected, the broker drops the publish — the
+    /// If no subscriber is connected, the broker drops the publish - the
     /// message is in the DB and will be replayed on next subscribe.
     /// </summary>
     /// <summary>
-    /// Plan C3 PR-B — publish a retained message on a fixed topic
+    /// Plan C3 PR-B - publish a retained message on a fixed topic
     /// (heartbeat use case). Retained = true so a subscriber connecting
     /// later sees the latest snapshot immediately rather than waiting
     /// for the next interval. QoS 0 because the next snapshot is
-    /// always &lt;interval&gt; seconds away — losing one in flight is
+    /// always &lt;interval&gt; seconds away - losing one in flight is
     /// no big deal.
     /// </summary>
     public async Task<bool> PublishRetainedAsync(string topic, byte[] payload, CancellationToken ct = default)
@@ -154,7 +154,7 @@ public sealed class MqttBrokerService(
         // F1 end-to-end source tracking: dapps-origin = originating
         // callsign when the upstream chain told us. Distinct from
         // dapps-source (link source / last hop). Omitted when unknown
-        // — apps should fall back to dapps-source if dapps-origin is
+        // - apps should fall back to dapps-source if dapps-origin is
         // absent.
         if (!string.IsNullOrEmpty(message.OriginatorCallsign))
         {
@@ -204,7 +204,7 @@ public sealed class MqttBrokerService(
             if (authRequired)
             {
                 e.ReasonCode = MQTTnet.Protocol.MqttConnectReasonCode.BadUserNameOrPassword;
-                logger.LogInformation("MQTT: rejected client {0} — missing credentials", e.ClientId);
+                logger.LogInformation("MQTT: rejected client {0} - missing credentials", e.ClientId);
             }
             return;
         }
@@ -215,7 +215,7 @@ public sealed class MqttBrokerService(
             if (authRequired)
             {
                 e.ReasonCode = MQTTnet.Protocol.MqttConnectReasonCode.BadUserNameOrPassword;
-                logger.LogInformation("MQTT: rejected client {0} — invalid credentials", e.ClientId);
+                logger.LogInformation("MQTT: rejected client {0} - invalid credentials", e.ClientId);
             }
             return;
         }
@@ -249,7 +249,7 @@ public sealed class MqttBrokerService(
         var topic = e.TopicFilter.Topic;
         if (!topic.StartsWith(InTopicPrefix, StringComparison.Ordinal))
         {
-            // Non-DAPPS topic — keep MQTTnet's default behaviour for app
+            // Non-DAPPS topic - keep MQTTnet's default behaviour for app
             // coordination topics that aren't ours.
             return Task.CompletedTask;
         }
@@ -277,7 +277,7 @@ public sealed class MqttBrokerService(
 
     private async Task OnInterceptingPublish(InterceptingPublishEventArgs e)
     {
-        // Internal injections (server-side) have null ClientId — let those through
+        // Internal injections (server-side) have null ClientId - let those through
         // without re-routing. Only intercept publishes from real clients.
         if (string.IsNullOrEmpty(e.ClientId)) return;
 
@@ -336,7 +336,7 @@ public sealed class MqttBrokerService(
                 logger.LogError(ex, "MQTT: failed to persist outbound publish on {0}", topic);
             }
 
-            // Don't fan out the dapps/out/* publish to subscribers — it's
+            // Don't fan out the dapps/out/* publish to subscribers - it's
             // app→DAPPS only.
             e.ProcessPublish = false;
             return;
@@ -373,7 +373,7 @@ public sealed class MqttBrokerService(
 
         if (topic.StartsWith(InTopicPrefix, StringComparison.Ordinal))
         {
-            // Apps shouldn't be publishing to in/* — it's DAPPS→app only.
+            // Apps shouldn't be publishing to in/* - it's DAPPS→app only.
             // Block but don't error noisily.
             logger.LogDebug("MQTT: blocking client publish to in-topic {0}", topic);
             e.ProcessPublish = false;

@@ -2,7 +2,7 @@
 #
 # Local 6-node multi-hop simulator. Spins up six dapps.core instances on
 # loopback in a small-region mesh that exercises chained relays,
-# branching, and off-spine paths — the kind of topology a real RF test
+# branching, and off-spine paths - the kind of topology a real RF test
 # network would produce. Drives several A→…→Z sends across the
 # topology and reports each receiver's view of OriginatorCallsign so
 # F1 source-tracking can be verified end-to-end at a glance.
@@ -46,7 +46,7 @@ BIN_DIR="$SIM_DIR/bin"
 PROJ="$REPO/src/dapps/dapps.core/dapps.core.csproj"
 SIM_PWD="${SIM_PWD:-simpassw0rd}"
 
-# Routing algorithm: passive-flood (default — AODV-flavoured passive
+# Routing algorithm: passive-flood (default - AODV-flavoured passive
 # learning + bounded flood) or meshcore (DSR-style source routing
 # with passive discovery). Set via env: SIM_ALGO=meshcore. Picked up
 # by every node via DAPPS_ROUTING_ALGORITHM at startup.
@@ -60,7 +60,7 @@ declare -A UDP_PORT=(  [A]=50071 [B]=50072 [C]=50073 [D]=50074 [E]=50075 [F]=500
 declare -A AGW_PORT=(  [A]=18001 [B]=18002 [C]=18003 [D]=18004 [E]=18005 [F]=18006 )   # closed; AGW probe will fail, harmless
 declare -A CALLSIGN=(  [A]=G0SIA-1 [B]=G0SIB-1 [C]=G0SIC-1 [D]=G0SID-1 [E]=G0SIE-1 [F]=G0SIF-1 )
 
-# Discovery channels — UDP multicast groups standing in for distinct
+# Discovery channels - UDP multicast groups standing in for distinct
 # RF "broadcast domains". All five share the same UDP port and differ
 # only in multicast group address; this used to leak across groups
 # within a process (see UdpMulticastDiscoveryBearer's bind comment for
@@ -80,7 +80,7 @@ declare -A CHANNELS=(
     [F]="$G5"
 )
 
-# Direct neighbours — entries are space-separated "<letter>" lookups
+# Direct neighbours - entries are space-separated "<letter>" lookups
 # into the rest of the tables. Resolves to the matching callsign + UDP
 # endpoint at configuration time.
 declare -A NEIGHBOURS=(
@@ -92,7 +92,7 @@ declare -A NEIGHBOURS=(
     [F]="E"
 )
 
-# Route hints — used to be pre-B5 "force the relay" entries here, but
+# Route hints - used to be pre-B5 "force the relay" entries here, but
 # B5 (PR-B passive learning + PR-C bounded flood) means the network
 # converges from cold-start without any explicit hints. The simulator
 # is a clean validation of that: only direct neighbours are configured;
@@ -129,7 +129,7 @@ start_node() {
     local n=$1
     local d; d="$(node_dir "$n")"
     mkdir -p "$d/data"
-    # Fresh start — wipe DB + log so the topology comes up from a
+    # Fresh start - wipe DB + log so the topology comes up from a
     # clean slate every `up`. Use restart_node when you want to bounce
     # a node mid-test without losing its configured channels / peers.
     rm -f "$d/data/dapps.db" "$d/dapps.log"
@@ -137,7 +137,7 @@ start_node() {
     _launch_node "$n"
 }
 
-# Bounce a node without wiping its DB — same env, same paths, same
+# Bounce a node without wiping its DB - same env, same paths, same
 # port. Used by tests that need DiscoveryService to re-read channel
 # config (e.g. SolicitIntervalSeconds, which is captured at
 # StartAsync) without losing operator-configured rows.
@@ -226,7 +226,7 @@ configure_node() {
         for entry in ${ROUTE_HINTS[$n]}; do
             local dest_letter="${entry%%:*}"
             local hop_letter="${entry##*:}"
-            # Route hint Destination is the BASE callsign (no SSID) — that's
+            # Route hint Destination is the BASE callsign (no SSID) - that's
             # what the resolver uses as the lookup key. NextHop is the full
             # neighbour callsign with SSID.
             local dest_base="${CALLSIGN[$dest_letter]%-*}"
@@ -244,7 +244,7 @@ con.commit()
 # ── exercise the topology ──────────────────────────────────────────────
 trigger_run() {
     local n=$1
-    # /Message/dorun is admin-protected — pass the cookie set up at
+    # /Message/dorun is admin-protected - pass the cookie set up at
     # configure_node, otherwise the request gets a 302 to /Login and
     # the forwarder silently never runs.
     local cookie; cookie="$(node_dir "$n")/cookie.txt"
@@ -254,7 +254,7 @@ trigger_run() {
 # Drain queues. With the auto-forwarder hosted service on a 5-second
 # tick, a 4-hop chain takes ~20s to drain on its own. To make the
 # canned exercises finish quickly, we manually kick every node every
-# second for 8 rounds — each round each relay forwards whatever just
+# second for 8 rounds - each round each relay forwards whatever just
 # arrived from the upstream kick. The DoRun mutex makes the kicks
 # benign even when they overlap the auto-forwarder's own tick.
 drain_queues() {
@@ -308,7 +308,7 @@ cmd_verify() {
     for n in "${NODES[@]}"; do show_inbox "$n"; done
 }
 
-# Dump every node's learned-routes table — populated by the passive
+# Dump every node's learned-routes table - populated by the passive
 # learning algorithm as inbound traffic arrives carrying F1 src=
 # headers. After the canned exercises, these tables are the proof
 # that learning actually happened.
@@ -333,7 +333,7 @@ PY
     done
 }
 
-# Dump every node's discovered-paths table — the MeshCore-flavoured
+# Dump every node's discovered-paths table - the MeshCore-flavoured
 # algorithm's equivalent of learned-routes, but storing the FULL
 # ordered intermediate-hop list rather than just the next hop.
 # Populated as flood-discovery messages traverse the mesh.
@@ -362,7 +362,7 @@ PY
 # MeshCore equivalent of cmd_prove_learning. Wipe route-hints and
 # discovered-peers (leaving only the meshcore algorithm's discovered-
 # paths as the routing source) and send A→F. If discovery has done
-# its job, the message still delivers via source routing — proving
+# its job, the message still delivers via source routing - proving
 # the algorithm self-organised the mesh without operator config.
 cmd_prove_meshcore() {
     echo ">>> Wiping route-hints + discovered-peers on every node…"
@@ -391,7 +391,7 @@ PY
 # Drop the route-hints table and the discovered-peer entries on every
 # node, leaving ONLY learned routes as the routing source. Then send
 # A→F again. If passive learning has done its job, the message still
-# delivers — proving that after one round of bidirectional traffic
+# delivers - proving that after one round of bidirectional traffic
 # the network can route without explicit operator config.
 cmd_prove_learning() {
     echo ">>> Wiping route-hints + discovered-peers on every node…"
@@ -417,7 +417,7 @@ PY
     echo "═════════════════════════════════════════════════════════════"
 }
 
-# F2 acceptance — submit a payload several times the default
+# F2 acceptance - submit a payload several times the default
 # fragment threshold (4096 bytes) at A, watch it traverse the 4-hop
 # chain to F as N independent fragment rows, and verify the receiver
 # reassembles into a single inbox row whose bytes match what we sent.
@@ -458,20 +458,20 @@ for row in rows:
     if marker in text:
         matches.append((row, text))
 if len(matches) != 1:
-    print(f"  FAIL — expected exactly 1 row containing marker {marker!r}, got {len(matches)}")
+    print(f"  FAIL - expected exactly 1 row containing marker {marker!r}, got {len(matches)}")
     sys.exit(1)
 row, text = matches[0]
 if len(text) != expected_len:
-    print(f"  FAIL — reassembled length {len(text)} != expected {expected_len}")
+    print(f"  FAIL - reassembled length {len(text)} != expected {expected_len}")
     sys.exit(1)
 if not text.startswith(marker):
-    print(f"  FAIL — reassembled bytes don't start with marker")
+    print(f"  FAIL - reassembled bytes don't start with marker")
     sys.exit(1)
 filler = text[len(marker) + 1:]
 if any(c != "X" for c in filler):
-    print(f"  FAIL — filler corrupted (not all 'X')")
+    print(f"  FAIL - filler corrupted (not all 'X')")
     sys.exit(1)
-print(f"  OK — single row, len={len(text)}, origin={row.get('originatorCallsign')}, prefix={text[:48]!r}…")
+print(f"  OK - single row, len={len(text)}, origin={row.get('originatorCallsign')}, prefix={text[:48]!r}…")
 PY
     then
         echo "!!! F2 acceptance failed"
@@ -483,12 +483,12 @@ PY
     echo "  F2 ACCEPTANCE: a $size-byte payload was split at A into"
     echo "  multiple fragments, each forwarded across the 4-hop chain"
     echo "  A→B→C→E→F, and reassembled at F into a single row whose"
-    echo "  bytes match the original — fragment order, headers, and"
+    echo "  bytes match the original - fragment order, headers, and"
     echo "  transit forwarding all preserved end-to-end."
     echo "═════════════════════════════════════════════════════════════"
 }
 
-# B6.2 acceptance — on-demand solicit on a discovery channel, even
+# B6.2 acceptance - on-demand solicit on a discovery channel, even
 # when scheduled beacons wouldn't have fired in the test window.
 # Stand-in for the HF NVIS use case ("operator triggers a probe
 # rather than waiting for the next propagation window") on a fast
@@ -496,7 +496,7 @@ PY
 #
 # B is the central relay, sitting on both G1 (with A) and G2 (with C).
 # We wipe its discoveredpeers table and fire a solicit on each of B's
-# enabled channels. Replies arrive on the standard beacon path — if
+# enabled channels. Replies arrive on the standard beacon path - if
 # the solicit→reply round-trip works, B's table re-populates with at
 # least A (G1) and C (G2) before the next scheduled beacon could fire
 # (LanMulticast default = 60s; we wait 4s).
@@ -534,7 +534,7 @@ print(" ".join(str(c["id"]) for c in json.load(sys.stdin) if c.get("enabled", Tr
     done
 
     # Soliciting peers reply after a uniform-random delay drawn from
-    # [0, SolicitResponseMaxDelay] — 5s default in DiscoveryService
+    # [0, SolicitResponseMaxDelay] - 5s default in DiscoveryService
     # (politeness back-off so a solicit doesn't trigger a beacon
     # storm). 7s clears the max jitter window with margin for the
     # beacon to actually travel over multicast and land in B's
@@ -552,15 +552,15 @@ rows = list(con.execute("select Callsign, Bearer, ChannelKey from discoveredpeer
 expected = {sys.argv[2], sys.argv[3]}
 seen = {cs for cs, _, _ in rows}
 if not rows:
-    print("  (none — solicit got no replies)")
+    print("  (none - solicit got no replies)")
     sys.exit(1)
 for cs, b, k in rows:
     print(f"  {cs} via {b}/{k}")
 missing = expected - seen
 if missing:
-    print(f"  FAIL — expected to see {sorted(expected)}, missing {sorted(missing)}")
+    print(f"  FAIL - expected to see {sorted(expected)}, missing {sorted(missing)}")
     sys.exit(1)
-print(f"  OK — both {sorted(expected)} replied within the solicit window")
+print(f"  OK - both {sorted(expected)} replied within the solicit window")
 PY
     then
         echo "!!! B6.2 acceptance failed"
@@ -572,18 +572,18 @@ PY
     echo "  B6.2 ACCEPTANCE: discovered-peers on ${CALLSIGN[$n]} was"
     echo "  emptied, then a one-shot solicit on each of its channels"
     echo "  re-populated the table with both ${CALLSIGN[A]} (G1) and"
-    echo "  ${CALLSIGN[C]} (G2) inside 7s — well under the 60s scheduled"
+    echo "  ${CALLSIGN[C]} (G2) inside 7s - well under the 60s scheduled"
     echo "  beacon interval, so the repopulation is solely the"
     echo "  solicit→reply round-trip working as designed."
     echo "═════════════════════════════════════════════════════════════"
 }
 
-# B6.2 follow-up acceptance — scheduled-solicit cadence. Same
+# B6.2 follow-up acceptance - scheduled-solicit cadence. Same
 # topology, but instead of operator-triggering a solicit we set
 # SolicitIntervalSeconds=3 on B's G1+G2 channels and let the
 # DiscoveryService emit the solicit on its own. After wiping B's
 # discoveredpeers, the table should re-populate within one cadence
-# tick + the 5s max reply jitter — all without a single REST POST
+# tick + the 5s max reply jitter - all without a single REST POST
 # /solicit call.
 cmd_prove_scheduled_solicit() {
     local n=B
@@ -637,15 +637,15 @@ rows = list(con.execute("select Callsign, Bearer, ChannelKey from discoveredpeer
 expected = {sys.argv[2], sys.argv[3]}
 seen = {cs for cs, _, _ in rows}
 if not rows:
-    print("  (none — scheduled solicit got no replies)")
+    print("  (none - scheduled solicit got no replies)")
     sys.exit(1)
 for cs, b, k in rows:
     print(f"  {cs} via {b}/{k}")
 missing = expected - seen
 if missing:
-    print(f"  FAIL — expected to see {sorted(expected)}, missing {sorted(missing)}")
+    print(f"  FAIL - expected to see {sorted(expected)}, missing {sorted(missing)}")
     sys.exit(1)
-print(f"  OK — both {sorted(expected)} reached us via the scheduled solicit cadence")
+print(f"  OK - both {sorted(expected)} reached us via the scheduled solicit cadence")
 PY
     then
         echo "!!! B6.2 scheduled-solicit acceptance failed"
@@ -656,14 +656,14 @@ PY
     echo "═════════════════════════════════════════════════════════════"
     echo "  B6.2 SCHEDULED-SOLICIT ACCEPTANCE: with SolicitIntervalSeconds"
     echo "  set on each channel, ${CALLSIGN[$n]}'s discoveredpeers table"
-    echo "  re-populated WITHOUT any operator-triggered REST /solicit —"
+    echo "  re-populated WITHOUT any operator-triggered REST /solicit -"
     echo "  the DiscoveryService cadence loop fired solicits on its own"
     echo "  and the airtime-budget gate let them through (no global cap"
     echo "  configured)."
     echo "═════════════════════════════════════════════════════════════"
 }
 
-# Canned non-trivial exercise — runs several sends across the topology
+# Canned non-trivial exercise - runs several sends across the topology
 # that exercise different path lengths, branching, and parallel flows.
 # After all sends complete, prints each receiver's inbox so F1 origin
 # preservation can be verified at a glance.
@@ -721,7 +721,7 @@ cmd_exercise() {
     echo "  F1 ACCEPTANCE CHECK"
     echo "  Every 'origin=…' above should be the *originator* callsign"
     echo "  (the from-side of the arrow), NOT the link-source/relay."
-    echo "  source=UDP is fine — it's the bearer placeholder for"
+    echo "  source=UDP is fine - it's the bearer placeholder for"
     echo "  datagram-shaped backhauls; the receiver app has dapps-source"
     echo "  via MQTT for the link source separately."
     echo "═════════════════════════════════════════════════════════════"

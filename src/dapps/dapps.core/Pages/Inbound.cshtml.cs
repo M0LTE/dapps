@@ -5,7 +5,7 @@ using Microsoft.Extensions.Options;
 namespace dapps.core.Pages;
 
 /// <summary>
-/// Plan D2 — live SSE-driven inbound-message view. Razor page is a
+/// Plan D2 - live SSE-driven inbound-message view. Razor page is a
 /// thin shell; the work happens in browser JS subscribing to the
 /// existing <c>/Events/inbound</c> stream. Distinct from the
 /// dashboard's "Recent activity" panel because the feed scope is

@@ -7,7 +7,7 @@ namespace dapps.client.Discovery;
 /// DAPPS is an amateur-radio-first project: when a peer is reachable
 /// over RF, that's preferred even if an internet path also exists.
 /// Internet bridges are a fallback to glue isolated RF islands together
-/// — useful, but not the design centre. The cost defaults below put RF
+/// - useful, but not the design centre. The cost defaults below put RF
 /// classes at the cheap end and IP classes at the expensive end so the
 /// resolver picks the in-spirit channel automatically.
 ///
@@ -24,14 +24,14 @@ public enum LinkClass
     /// practice, ~always-on. The default first choice when reachable.</summary>
     VhfUhfFm = 1,
 
-    /// <summary>MeshCore — slow LoRa-style mesh, unacked at the link
+    /// <summary>MeshCore - slow LoRa-style mesh, unacked at the link
     /// layer, fluid topology, "first-delivery-by-flood-then-learn".
     /// Mid-range geographically (kilometres), mid-latency. DAPPS
     /// treats it as a fire-and-forget bearer with reliability layered
     /// on top.</summary>
     MeshCore = 2,
 
-    /// <summary>HF — slow (300 baud typical for AX.25), continental to
+    /// <summary>HF - slow (300 baud typical for AX.25), continental to
     /// inter-continental coverage but heavily dependent on propagation
     /// and time-of-day. Treat as PART-TIME: a peer may be reachable for
     /// a few hours a day on this channel and unreachable the rest. Long
@@ -39,14 +39,14 @@ public enum LinkClass
     /// windows.</summary>
     Hf = 3,
 
-    /// <summary>UDP/IP multicast on a LAN segment — useful for
+    /// <summary>UDP/IP multicast on a LAN segment - useful for
     /// integration testing where multiple instances live on the same
     /// box / bridge domain. Not RF, so the resolver prefers any genuine
     /// RF channel over this. Test ergonomics, not a production-routing
     /// preference.</summary>
     LanMulticast = 4,
 
-    /// <summary>Wired / internet IP — AXIP-UDP between BPQs over the
+    /// <summary>Wired / internet IP - AXIP-UDP between BPQs over the
     /// Internet, anything always-on with kbps+ of headroom. Last-resort
     /// fallback to bridge between RF islands. Cheap to operate, but
     /// designing for it would mean designing a system that works well
@@ -69,10 +69,10 @@ public static class LinkClassDefaults
     /// without crossing class boundaries.</summary>
     public static int CostHint(LinkClass linkClass) => linkClass switch
     {
-        LinkClass.VhfUhfFm => 1,        // RF, line-of-sight, full-time — preferred
+        LinkClass.VhfUhfFm => 1,        // RF, line-of-sight, full-time - preferred
         LinkClass.MeshCore => 3,        // RF mesh, slow but in-spirit
         LinkClass.Hf => 5,              // RF continental, propagation-locked
-        LinkClass.LanMulticast => 8,    // IP, scoped to a bridge domain — testing
+        LinkClass.LanMulticast => 8,    // IP, scoped to a bridge domain - testing
         LinkClass.InternetIp => 10,     // IP, last-resort bridge
         _ => 100,
     };
@@ -101,18 +101,18 @@ public static class LinkClassDefaults
         LinkClass.InternetIp => 900,
         LinkClass.VhfUhfFm => 5400,
         LinkClass.MeshCore => 10800,
-        LinkClass.Hf => 86400,    // 24h — propagation closes overnight
+        LinkClass.Hf => 86400,    // 24h - propagation closes overnight
         _ => 5400,
     };
 
     /// <summary>
-    /// Plan B7 — coarse per-class airtime estimate for a single
+    /// Plan B7 - coarse per-class airtime estimate for a single
     /// discovery-class transmission. Used by the airtime accountant
     /// to decide whether a beacon, solicit, or probe fits inside the
     /// operator's trailing-hour budget. Off by an order of magnitude
     /// in either direction is fine; the budget is an order-of-
     /// magnitude cap, not a precision regulator. Numbers reflect
-    /// "small frame on this kind of link" — beacons are ~300 B in
+    /// "small frame on this kind of link" - beacons are ~300 B in
     /// practice, probe sessions are several hundred bytes of round-
     /// trip across the same link rate.
     /// </summary>
@@ -129,7 +129,7 @@ public static class LinkClassDefaults
         },
         AirtimeKind.Solicit => linkClass switch
         {
-            // Solicit frames are tiny (callsign + version) — ~50 B.
+            // Solicit frames are tiny (callsign + version) - ~50 B.
             // Order of magnitude shorter than a beacon on every class.
             LinkClass.LanMulticast => 0.001,
             LinkClass.InternetIp => 0.005,
@@ -141,7 +141,7 @@ public static class LinkClassDefaults
         AirtimeKind.ProbeSession => linkClass switch
         {
             // Probe = AGW connect + DAPPSv1> banner + peers + disconnect.
-            // Several hundred bytes round-trip — call it 4× a beacon.
+            // Several hundred bytes round-trip - call it 4× a beacon.
             LinkClass.LanMulticast => 0.005,
             LinkClass.InternetIp => 0.05,
             LinkClass.VhfUhfFm => 8.0,

@@ -6,7 +6,7 @@ using ModelContextProtocol.Server;
 namespace dapps.core.Mcp;
 
 /// <summary>
-/// Plan M PR-A — read-only tools covering the "who's out there?"
+/// Plan M PR-A - read-only tools covering the "who's out there?"
 /// surface: configured neighbours, peers heard via discovery, the
 /// discovery-channel configuration. Wraps existing <see cref="Database"/>
 /// reads; same JSON shapes the dashboard already loads.
@@ -16,7 +16,7 @@ public sealed class DappsNetworkTools(Database database)
 {
     [McpServerTool(Name = "list_neighbours")]
     [Description(
-        "Manual neighbour entries — peers the operator has explicitly configured as forwarding partners. " +
+        "Manual neighbour entries - peers the operator has explicitly configured as forwarding partners. " +
         "Each row has Callsign + BpqPort (AGW path) and/or UdpEndpoint (UDP datagram path). Distinct from " +
         "discovered peers (heard via beacons but not yet wired up); see list_discovered_peers for those.")]
     public async Task<IReadOnlyList<DbNeighbour>> ListNeighboursAsync()
@@ -24,10 +24,10 @@ public sealed class DappsNetworkTools(Database database)
 
     [McpServerTool(Name = "list_discovered_peers")]
     [Description(
-        "Peers heard via discovery beacons (B1-B4) — one row per (callsign, bearer, channel) tuple. " +
+        "Peers heard via discovery beacons (B1-B4) - one row per (callsign, bearer, channel) tuple. " +
         "Includes LinkClass, CostHint, observed BPQ port or UDP endpoint, hop count, advertised TTL, last-seen " +
         "timestamp. Stale rows age out automatically per the channel's TTL. A heard peer is not necessarily " +
-        "a configured neighbour — list_neighbours returns the manually-configured set.")]
+        "a configured neighbour - list_neighbours returns the manually-configured set.")]
     public async Task<IReadOnlyList<DbDiscoveredPeer>> ListDiscoveredPeersAsync()
         => await database.GetDiscoveredPeers();
 

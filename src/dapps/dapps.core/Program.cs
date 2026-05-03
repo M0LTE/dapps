@@ -10,11 +10,11 @@ using dapps.core.Updater;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.Extensions.Options;
 using System.Net.Sockets;
-// OpenAPI / Scalar dropped in the .NET 8 rollback — the native
+// OpenAPI / Scalar dropped in the .NET 8 rollback - the native
 // OpenAPI generation (AddOpenApi / MapOpenApi) is a .NET 9+ API.
 // To revisit once we're back on a newer .NET runtime.
 
-// Plan C5.2 — CLI side-doors that don't boot the host.
+// Plan C5.2 - CLI side-doors that don't boot the host.
 // Recognised: --version, --check-update, --apply-update, --rollback.
 // Returning before CreateBuilder runs means these work even when the
 // on-disk dapps.db is incompatible / a port is wedged / the callsign
@@ -23,8 +23,8 @@ if (UpdaterCli.TryHandle(args, out var cliExitCode)) return cliExitCode;
 
 // Seed the systemoptions table BEFORE host build. The
 // SystemOptions Configure callback (just below) fires during eager
-// hosted-service DI graph materialisation — UdpDatagramListener →
-// IBackhaulInbox → IRoutingAlgorithm → IOptionsMonitor.CurrentValue —
+// hosted-service DI graph materialisation - UdpDatagramListener →
+// IBackhaulInbox → IRoutingAlgorithm → IOptionsMonitor.CurrentValue -
 // which would race a hosted-service seeder and lose, since hosted
 // services are CONSTRUCTED in one pass before any of their StartAsync
 // runs.
@@ -35,7 +35,7 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 builder.Services.AddControllers();
 builder.Services.AddRazorPages();
-// Sync — Configure expects an Action, so an `async` lambda would
+// Sync - Configure expects an Action, so an `async` lambda would
 // compile as async-void, fire-and-forget the GetOptions read, and
 // hand callers a SystemOptions instance with un-populated values.
 // Block here so the first resolution is deterministic.
@@ -134,32 +134,32 @@ builder.Services.AddOptions<SystemOptions>().Configure<OptionsRepo, ILogger<Syst
 
 builder.Services.AddHttpClient();
 
-// Plan A polish — single TimeProvider injected everywhere
+// Plan A polish - single TimeProvider injected everywhere
 // cadence-sensitive code reads time. Tests substitute
 // FakeTimeProvider (Microsoft.Extensions.TimeProvider.Testing) so
 // `Advance(30s)` deterministically fast-forwards every service that
 // uses it. Production wires the system clock.
 builder.Services.AddSingleton(TimeProvider.System);
 
-// Plan B7 — single airtime budget shared by every discovery-class
+// Plan B7 - single airtime budget shared by every discovery-class
 // transmission (beacons, solicit replies, probes). OutboundActivity-
 // Tracker is the WhenQuiet probe-strategy oracle; the forwarder
 // pings it on every successful send.
 builder.Services.AddSingleton<AirtimeAccountant>();
 builder.Services.AddSingleton<OutboundActivityTracker>();
 
-// Plan C3 PR-B — operational snapshot composer used by both
+// Plan C3 PR-B - operational snapshot composer used by both
 // /Operational and HeartbeatPublisher. Singleton so the two
 // consumers see consistent state.
 builder.Services.AddSingleton<OperationalSnapshotBuilder>();
 builder.Services.AddHostedService<HeartbeatPublisher>();
 
-// Plan G (MCP) — Model Context Protocol server, exposing operator-
+// Plan G (MCP) - Model Context Protocol server, exposing operator-
 // facing tools to Claude / other MCP clients on /mcp. Bootstrap
 // registers a single tool wrapping the operational snapshot;
 // subsequent PRs add the full read / action / diagnostic toolkits.
 // AdminAuthMiddleware allowlists /mcp the same way it does /Health
-// — these endpoints are designed for clients that don't have the
+// - these endpoints are designed for clients that don't have the
 // admin cookie.
 builder.Services.AddMcpServer()
     .WithHttpTransport()
@@ -176,7 +176,7 @@ builder.Services.AddMcpServer()
 builder.Services.AddSingleton<UpdateChecker>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<UpdateChecker>());
 
-// Plan C5.2 — the unprivileged dapps daemon only writes the request
+// Plan C5.2 - the unprivileged dapps daemon only writes the request
 // marker / reads the status file. The actual update work runs in the
 // privileged dapps-updater.service via `dapps --apply-update`.
 builder.Services.AddSingleton<IUpdaterFileSystem, RealUpdaterFileSystem>();
@@ -193,7 +193,7 @@ builder.Services.AddSingleton<InboundEventBus>();
 builder.Services.AddSingleton<OperationalMetrics>();
 
 // Cookie auth for the dashboard / admin endpoints. Long sliding
-// expiry (90 days) — this is a sysop's home node, the cookie's
+// expiry (90 days) - this is a sysop's home node, the cookie's
 // "remember me indefinitely" by design. /AppApi/* doesn't use this
 // scheme; it has its own bearer-token middleware.
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
@@ -209,7 +209,7 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         options.SlidingExpiration = true;
     });
 builder.Services.AddSingleton<OutboundMessageManager>();
-// B5 routing seam — IRoutingAlgorithm is the strategy, IRoutingContext
+// B5 routing seam - IRoutingAlgorithm is the strategy, IRoutingContext
 // is the slice of node state it reads. Two stacks shipped today;
 // SystemOptions.RoutingAlgorithm picks one at startup. Both wrap
 // StaticRoutingAlgorithm so manual operator overrides always win.
@@ -238,7 +238,7 @@ builder.Services.AddSingleton<IRoutingAlgorithm>(sp =>
         case "passive-flood":
         default:
             // Unknown values fall through to the safe default rather
-            // than failing startup — operators editing the option by
+            // than failing startup - operators editing the option by
             // hand will see a recognisable algorithm running and a
             // log line they can grep for.
             if (!string.Equals(optsValue.RoutingAlgorithm, "passive-flood", StringComparison.OrdinalIgnoreCase))
@@ -280,14 +280,14 @@ builder.Services.AddSingleton<IDappsBackhaul>(sp => new Dappsv1SessionBackhaul(
 builder.Services.AddSingleton<IBackhaulInbox, DatabaseAndMqttInbox>();
 builder.Services.AddHostedService<UdpDatagramListener>();
 
-// B6.1 — connected-mode probe-and-map. NodeProber is stateless and
+// B6.1 - connected-mode probe-and-map. NodeProber is stateless and
 // reuses the singleton AGW transport; the scheduler drives it on a
 // slow cadence when SystemOptions.ProbingEnabled is true.
 builder.Services.AddSingleton<NodeProber>();
 builder.Services.AddSingleton<ProbeSchedulerService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<ProbeSchedulerService>());
 
-// F3b — scheduled poll. NodePoller is stateless, opens a session,
+// F3b - scheduled poll. NodePoller is stateless, opens a session,
 // drains via rev. The scheduler walks neighbours when
 // SystemOptions.ScheduledPollEnabled is true (off by default).
 builder.Services.AddSingleton<NodePoller>();
@@ -320,7 +320,7 @@ app.UseMiddleware<BearerAuthMiddleware>();
 app.UseMiddleware<AdminAuthMiddleware>();
 app.MapControllers();
 app.MapRazorPages();
-// Plan G — mount the MCP endpoint at /mcp. The MCP transport
+// Plan G - mount the MCP endpoint at /mcp. The MCP transport
 // negotiates streamable-HTTP / SSE itself; we just need the route
 // reachable. Allowlisted in AdminAuthMiddleware alongside /Health.
 app.MapMcp("/mcp");
@@ -332,7 +332,7 @@ try
 catch (Exception ex) when (IsFatalConfigError(ex))
 {
     // Operationally-fatal config errors that won't fix themselves on
-    // restart. Exit with code 78 — paired with
+    // restart. Exit with code 78 - paired with
     // RestartPreventExitStatus=78 in the systemd unit (see
     // scripts/dapps.service) so systemd stops the crash-loop and
     // surfaces the actionable journal message instead. The host has
@@ -344,7 +344,7 @@ return 0;
 
 static bool IsFatalConfigError(Exception ex)
 {
-    // Walk the inner-exception chain — the host's RunAsync wraps
+    // Walk the inner-exception chain - the host's RunAsync wraps
     // service-startup exceptions, so the SocketException can be one
     // or two levels deep.
     for (var e = ex; e is not null; e = e.InnerException)

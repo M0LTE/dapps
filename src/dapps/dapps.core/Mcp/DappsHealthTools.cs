@@ -5,7 +5,7 @@ using ModelContextProtocol.Server;
 namespace dapps.core.Mcp;
 
 /// <summary>
-/// Plan G (MCP) bootstrap — first DAPPS tool exposed to MCP clients.
+/// Plan G (MCP) bootstrap - first DAPPS tool exposed to MCP clients.
 /// Wraps <see cref="OperationalSnapshotBuilder"/> so an LLM has the
 /// same picture of the node a sysop gets from
 /// <c>GET /Operational</c>: counters, queue counts, peers, channels,
@@ -26,7 +26,7 @@ public sealed class DappsHealthTools(
 {
     [McpServerTool(Name = "get_operational_snapshot")]
     [Description(
-        "Returns the canonical 'what's going on with this DAPPS node?' snapshot — same shape as GET /Operational. " +
+        "Returns the canonical 'what's going on with this DAPPS node?' snapshot - same shape as GET /Operational. " +
         "Includes liveness (BPQ AGW reachable, MQTT broker up, callsign configured), every counter from the in-memory " +
         "metrics ring (forwards, probes, polls, route learnings, peer age-outs, budget refusals), queue/peer/channel/" +
         "neighbour counts, trailing-hour airtime usage, and the last 20 decision events. Use this as the first tool " +
@@ -39,7 +39,7 @@ public sealed class DappsHealthTools(
         "Returns the in-memory decision-events ring (last 100). Each entry has a kind " +
         "(e.g. forward.ok, forward.fail, probe.ok, probe.fail, poll.ok, poll.fail, route.learned, peer.aged, " +
         "budget.refused, ttl.expired, route.none, agw.reconnect, inbound.connect, hash.mismatch) and a free-form " +
-        "summary. Pass `kindPrefix` (e.g. 'forward.', 'probe.') to filter — case-insensitive prefix match. " +
+        "summary. Pass `kindPrefix` (e.g. 'forward.', 'probe.') to filter - case-insensitive prefix match. " +
         "For events older than ~100 entries, see `journalctl -u dapps -g 'event '` on the host (every event is " +
         "ALSO emitted as a structured log line for retrospective greps).")]
     public IReadOnlyList<OperationalMetrics.OperationalEvent> GetRecentEvents(
@@ -55,7 +55,7 @@ public sealed class DappsHealthTools(
 
     [McpServerTool(Name = "get_system_options")]
     [Description(
-        "Returns the persisted SystemOptions row — every operator-tunable knob: callsign, BPQ AGW host/port, " +
+        "Returns the persisted SystemOptions row - every operator-tunable knob: callsign, BPQ AGW host/port, " +
         "MQTT port, fragmenting threshold, probing/polling/heartbeat enable + cadences, routing algorithm, " +
         "discovery airtime budget, etc. Same shape as GET /Config (which is gated behind admin auth). Read-only.")]
     public async Task<dapps.core.Models.SystemOptions> GetSystemOptionsAsync()

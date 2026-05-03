@@ -98,7 +98,7 @@ public sealed class FloodFallbackAlgorithmTests : IAsyncLifetime
     [Fact]
     public async Task Resolve_InnerHasRoute_UsesIt_NoFlood()
     {
-        // Static manual neighbour matches the destination — inner returns
+        // Static manual neighbour matches the destination - inner returns
         // NextHop, flood doesn't kick in.
         var decision = await algorithm.ResolveAsync(OutboundFor("G0NA"), context, TestContext.Current.CancellationToken);
 
@@ -118,13 +118,13 @@ public sealed class FloodFallbackAlgorithmTests : IAsyncLifetime
         var flood = decision.Should().BeOfType<RouteDecision.FloodToNeighbours>().Subject;
         flood.HopBudget.Should().Be(3);
         flood.Routes.Select(r => r.Callsign).Should().BeEquivalentTo(new[] { "G0NB-1", "G0NC-1" },
-            "the link source must not appear in the re-flood — that would just bounce the message right back");
+            "the link source must not appear in the re-flood - that would just bounce the message right back");
     }
 
     [Fact]
     public async Task Resolve_InFlightFloodAtZeroHops_DoesNotReFlood()
     {
-        // Hop budget exhausted at this node — drop, don't re-flood.
+        // Hop budget exhausted at this node - drop, don't re-flood.
         var msg = OutboundFor("G0XYZ", floodHopsRemaining: 0, sourceCallsign: "G0NA-1");
 
         var decision = await algorithm.ResolveAsync(msg, context, TestContext.Current.CancellationToken);
@@ -137,7 +137,7 @@ public sealed class FloodFallbackAlgorithmTests : IAsyncLifetime
     {
         // A flood for G0NA arrives in flight. G0NA IS in our static
         // neighbours table, but in flood mode the flood mechanism owns
-        // the routing — we re-flood (excluding the link source), not
+        // the routing - we re-flood (excluding the link source), not
         // route to the destination. This pins the "flood-mode messages
         // continue as floods" behaviour: we don't covertly switch
         // floods to direct routing mid-propagation.
@@ -174,7 +174,7 @@ public sealed class FloodFallbackAlgorithmTests : IAsyncLifetime
         await context.RecordFloodSeenAsync(id, fromCall, TestContext.Current.CancellationToken);
 
         (await context.HasSeenFloodAsync(id, fromCall, TestContext.Current.CancellationToken)).Should().BeTrue();
-        // Different upstream — separate dedup row.
+        // Different upstream - separate dedup row.
         (await context.HasSeenFloodAsync(id, "G0NB-1", TestContext.Current.CancellationToken)).Should().BeFalse();
     }
 

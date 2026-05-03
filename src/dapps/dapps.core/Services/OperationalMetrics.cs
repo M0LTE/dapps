@@ -6,17 +6,17 @@ namespace dapps.core.Services;
 
 /// <summary>
 /// In-memory counters and recent-event ring for the dashboard's
-/// observability surface (Plan C3). Cheap, no schema, no IO — every
+/// observability surface (Plan C3). Cheap, no schema, no IO - every
 /// hot path can call into this without worrying about latency.
 ///
 /// Lifetimes: counters are process-lifetime (reset on restart),
 /// recent events bounded at <see cref="MaxRecent"/>. If we eventually
 /// want persistent metrics across restarts, this is the obvious
-/// place to add a periodic flush — but most operational questions
+/// place to add a periodic flush - but most operational questions
 /// ("did anything fail in the last hour?") are answered by the
 /// in-memory copy.
 ///
-/// Plan C3 PR-A — every recorded event is *also* emitted as a
+/// Plan C3 PR-A - every recorded event is *also* emitted as a
 /// structured ILogger.Information line so systemd journal captures
 /// it for retrospective greps. The ring buffer is "what just
 /// happened" (last 100, dashboard panel); the journal is "what
@@ -213,12 +213,12 @@ public sealed class OperationalMetrics(TimeProvider? timeProviderOpt = null, ILo
         {
             _events.TryDequeue(out _);
         }
-        // Plan C3 PR-A — also emit as a structured log line so systemd
+        // Plan C3 PR-A - also emit as a structured log line so systemd
         // journal captures every event. Greppable: the {Kind} placeholder
         // makes `journalctl -u dapps -g 'forward.fail'` find them, the
         // {Summary} carries any message id / callsign / error so the
         // grep can narrow further (`-g 'abc1234'`, `-g 'G0CALL'`).
-        // Information-level — these are decisions, not warnings; every
+        // Information-level - these are decisions, not warnings; every
         // failure has paired counter state for "is this getting worse?".
         logger.LogInformation("event {Kind} {Summary}", kind, summary);
     }

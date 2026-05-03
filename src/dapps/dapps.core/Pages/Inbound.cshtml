@@ -1,7 +1,7 @@
 @page
 @model InboundModel
 @{
-    ViewData["Title"] = $"DAPPS — inbound feed (@{Model.Options.Callsign})";
+    ViewData["Title"] = $"DAPPS - inbound feed (@{Model.Options.Callsign})";
 }
 
 <header class="app-header">
@@ -99,7 +99,7 @@
 
         const fmtAt = (iso) => {
             try { return new Date(iso).toISOString().replace('T', ' ').substring(0, 19); }
-            catch { return iso ?? '—'; }
+            catch { return iso ?? '-'; }
         };
         const escape = (s) => String(s ?? '').replace(/[&<>"']/g, c =>
             ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -156,7 +156,7 @@
                 row.classList.remove('selected');
                 return;
             }
-            // Close any other open preview — at most one expanded row at
+            // Close any other open preview - at most one expanded row at
             // a time keeps the table readable on a busy node.
             tbody.querySelectorAll('tr.payload-row').forEach(r => r.remove());
             tbody.querySelectorAll('tr.inbound-row.selected').forEach(r => r.classList.remove('selected'));
@@ -171,7 +171,7 @@
             try {
                 const res = await fetch('/Events/payload/' + encodeURIComponent(id), { credentials: 'same-origin' });
                 if (res.status === 404) {
-                    tr.innerHTML = `<td colspan="6"><div class="payload-meta">payload for <code>${escape(id)}</code> not found — row may have been swept</div></td>`;
+                    tr.innerHTML = `<td colspan="6"><div class="payload-meta">payload for <code>${escape(id)}</code> not found - row may have been swept</div></td>`;
                     return;
                 }
                 if (!res.ok) {
@@ -180,8 +180,8 @@
                 }
                 const p = await res.json();
                 const meta = `${p.byteLength} byte(s)`
-                    + (p.truncated ? ' — preview truncated' : '')
-                    + (p.textValid ? '' : ' — not valid UTF-8, showing hex')
+                    + (p.truncated ? ' - preview truncated' : '')
+                    + (p.textValid ? '' : ' - not valid UTF-8, showing hex')
                     + ` · src <code>${escape(p.sourceCallsign)}</code>`
                     + ` · dst <code>${escape(p.destination)}</code>`;
                 const showText = p.textValid;
@@ -234,7 +234,7 @@
                     '<td>' + escape(d.sourceCallsign) + '</td>' +
                     '<td>' + escape(d.destination) + '</td>' +
                     '<td class="numeric">' + escape(d.payloadLength) + '</td>' +
-                    '<td class="numeric">' + (d.ttl == null ? '—' : escape(d.ttl)) + '</td>';
+                    '<td class="numeric">' + (d.ttl == null ? '-' : escape(d.ttl)) + '</td>';
                 row.addEventListener('click', () => togglePayload(row));
                 if (!matchesFilter(row)) row.style.display = 'none';
                 tbody.insertBefore(row, tbody.firstChild);

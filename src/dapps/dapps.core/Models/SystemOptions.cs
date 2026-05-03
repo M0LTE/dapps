@@ -10,11 +10,11 @@ public class DbSystemOption
     public string Value { get; set; } = "";
 }
 
-/// <summary>Plan B7 — probe-scheduler strategy. See
+/// <summary>Plan B7 - probe-scheduler strategy. See
 /// <see cref="SystemOptions.ProbeStrategy"/>.</summary>
 public enum ProbeStrategy
 {
-    /// <summary>Pre-B7 behaviour — sweep every
+    /// <summary>Pre-B7 behaviour - sweep every
     /// <see cref="SystemOptions.ProbeIntervalHours"/>.</summary>
     FixedInterval = 0,
     /// <summary>One sweep per local-time day, inside the configured
@@ -59,7 +59,7 @@ public class SystemOptions
     /// When true, app-interface clients (MQTT and REST) must present a
     /// valid token; topic / endpoint scope is also enforced against the
     /// authenticated app. When false, the app interface is open to
-    /// anyone reachable on those ports — fine for single-host loopback,
+    /// anyone reachable on those ports - fine for single-host loopback,
     /// not fine for shared nodes. Plan A4.
     /// </summary>
     public bool AuthRequired { get; set; }
@@ -75,36 +75,36 @@ public class SystemOptions
     public bool UpdateCheckEnabled { get; set; } = true;
 
     /// <summary>
-    /// Plan B6.1 — connected-mode probe-and-map. When true, the
+    /// Plan B6.1 - connected-mode probe-and-map. When true, the
     /// <c>ProbeSchedulerService</c> walks known peers (manual
     /// neighbours + AGW-bearer discovered peers, less opt-outs) on
     /// a slow cadence and records reachability in
-    /// <see cref="dapps.core.Models.DbProbedNode"/>. Off by default —
+    /// <see cref="dapps.core.Models.DbProbedNode"/>. Off by default -
     /// probing uses other operators' airtime, so opt-in.
     /// </summary>
     public bool ProbingEnabled { get; set; } = false;
 
     /// <summary>
     /// Interval between full sweeps when <see cref="ProbingEnabled"/>
-    /// is true. Default 24 hours — once a day is enough to spot a
+    /// is true. Default 24 hours - once a day is enough to spot a
     /// neighbour going dark without saturating slow links.
     /// </summary>
     public int ProbeIntervalHours { get; set; } = 24;
 
     /// <summary>
-    /// Plan F2 — payloads strictly larger than this byte count are
+    /// Plan F2 - payloads strictly larger than this byte count are
     /// fragmented into chunks at submit time. The originator splits
     /// a 50 KB payload into ⌈50 KB / threshold⌉ rows; the receiver
     /// reassembles. End-to-end (intermediate hops forward fragments
     /// as opaque single messages). Bearers do their own framing
-    /// underneath, so this knob is about *resumability* — the unit of
-    /// retransmission after a link drop or crash mid-transfer — not
+    /// underneath, so this knob is about *resumability* - the unit of
+    /// retransmission after a link drop or crash mid-transfer - not
     /// about MTU adaptation. 0 disables fragmentation entirely.
     /// </summary>
     public int FragmentThresholdBytes { get; set; } = 4096;
 
     /// <summary>
-    /// Plan F2 — drop incomplete reassembly buffer rows older than
+    /// Plan F2 - drop incomplete reassembly buffer rows older than
     /// this. Default 7 days because HF / mesh propagation gaps can
     /// cleanly close for multiple days mid-transmission and we'd
     /// rather hold the partial work than throw it away. Operators on
@@ -113,12 +113,12 @@ public class SystemOptions
     public int FragmentReassemblyTimeoutSeconds { get; set; } = 7 * 24 * 3600;
 
     /// <summary>
-    /// Plan F3 — opportunistic poll on every successful push. After
+    /// Plan F3 - opportunistic poll on every successful push. After
     /// <see cref="dapps.client.Backhaul.Dappsv1SessionBackhaul"/>
     /// finishes pushing a message, send <c>rev</c> on the same session
     /// to drain anything the remote has queued for us. Free in
     /// connection-time terms (the link is already up) and turns every
-    /// outbound session into a bidirectional drain — the difference
+    /// outbound session into a bidirectional drain - the difference
     /// between "B has my mail until B can reach me" and "B has my mail
     /// until I push to B." Default true; disable for nodes that want
     /// to push without ever pulling.
@@ -126,10 +126,10 @@ public class SystemOptions
     public bool OpportunisticPollEnabled { get; set; } = true;
 
     /// <summary>
-    /// Plan F3b — scheduled poll. When true, the
+    /// Plan F3b - scheduled poll. When true, the
     /// <c>PollSchedulerService</c> walks every AGW-reachable manual
     /// neighbour on a slow cadence and drains queued mail via
-    /// <c>rev</c>. Off by default — opportunistic poll on every push
+    /// <c>rev</c>. Off by default - opportunistic poll on every push
     /// covers the majority of cases for free; this is for nodes that
     /// don't push often (read-only consumers, scheduled HF stations)
     /// and would otherwise let mail rot at their forwarding partners.
@@ -138,7 +138,7 @@ public class SystemOptions
 
     /// <summary>
     /// Interval between full poll sweeps when
-    /// <see cref="ScheduledPollEnabled"/> is true. Default 6 hours —
+    /// <see cref="ScheduledPollEnabled"/> is true. Default 6 hours -
     /// shorter than the probe scheduler's daily cadence because
     /// polling drains real mail that an operator wants delivered, not
     /// just liveness checks.
@@ -146,13 +146,13 @@ public class SystemOptions
     public int PollIntervalHours { get; set; } = 6;
 
     /// <summary>
-    /// Plan B6.1 Phase 2b — when true, every inbound AGW DAPPS beacon
+    /// Plan B6.1 Phase 2b - when true, every inbound AGW DAPPS beacon
     /// seeds a node-prompt-probe candidate for the BASE callsign of the
     /// beacon's source (e.g. heard <c>M0LTE-9</c> → seed <c>M0LTE</c>).
     /// The probe scheduler then picks them up alongside regular probe
     /// targets, navigates the BPQ node prompt, and runs the standard
     /// peers exchange. Useful for expanding the discoverable graph
-    /// beyond direct DAPPS beacons. Off by default — opt in.
+    /// beyond direct DAPPS beacons. Off by default - opt in.
     /// </summary>
     public bool AutoDiscoverViaNodeCall { get; set; } = false;
 
@@ -165,14 +165,14 @@ public class SystemOptions
     public string NodePromptApplicationCommand { get; set; } = "DAPPS";
 
     /// <summary>
-    /// Plan C3 PR-B — periodic MQTT heartbeat publish. When true, an
+    /// Plan C3 PR-B - periodic MQTT heartbeat publish. When true, an
     /// <see cref="dapps.core.Services.OperationalSnapshot"/> is
     /// serialised and published as a retained message on
     /// <c>dapps/metrics/heartbeat</c> every
     /// <see cref="HeartbeatIntervalSeconds"/> seconds. Lets operator-
     /// side consumers (Home Assistant, simple MQTT subscribers) wire
     /// DAPPS into their dashboards without any new infra. Default on
-    /// — the broker is already running for the app interface, so
+    /// - the broker is already running for the app interface, so
     /// the publish is effectively free.
     /// </summary>
     public bool HeartbeatEnabled { get; set; } = true;
@@ -184,9 +184,9 @@ public class SystemOptions
     public int HeartbeatIntervalSeconds { get; set; } = 60;
 
     /// <summary>
-    /// Plan B7 — single trailing-hour cap on airtime consumed by ALL
+    /// Plan B7 - single trailing-hour cap on airtime consumed by ALL
     /// discovery-class transmissions (beacons, solicit replies,
-    /// probes). 0 = unlimited (default — preserves pre-B7 behaviour).
+    /// probes). 0 = unlimited (default - preserves pre-B7 behaviour).
     /// Set to a positive value to enforce; the airtime accountant
     /// defers transmissions whose estimated cost would push the
     /// last-hour total past the budget. Operators on shared 1200-
@@ -195,7 +195,7 @@ public class SystemOptions
     public int DiscoveryAirtimeBudgetSecondsPerHour { get; set; } = 0;
 
     /// <summary>
-    /// Plan B7 — strategy controlling when probe sweeps fire. Default
+    /// Plan B7 - strategy controlling when probe sweeps fire. Default
     /// <see cref="Models.ProbeStrategy.FixedInterval"/> matches the
     /// pre-B7 behaviour (sweep every <see cref="ProbeIntervalHours"/>).
     /// <see cref="Models.ProbeStrategy.Overnight"/> sweeps once per
@@ -227,11 +227,11 @@ public class SystemOptions
     /// so operator overrides always win.
     ///
     /// <list type="bullet">
-    /// <item><c>passive-flood</c> (default) — AODV-flavoured passive
+    /// <item><c>passive-flood</c> (default) - AODV-flavoured passive
     ///   learning of next-hop routes from F1 src= observations,
     ///   with bounded-flood as cold-start fallback. Stores per-
     ///   destination next-hop only.</item>
-    /// <item><c>meshcore</c> — DSR-style source routing with passive
+    /// <item><c>meshcore</c> - DSR-style source routing with passive
     ///   discovery. Stores the full path in
     ///   <see cref="dapps.core.Models.DbDiscoveredPath"/> so
     ///   subsequent sends embed the route on the wire instead of

@@ -13,7 +13,7 @@ namespace dapps.core.tests;
 /// <see cref="FakeTimeProvider"/> threaded through Database +
 /// TtlSweeperService deterministically drives both the timestamps on
 /// stored rows AND the cadence of the sweeper's <see cref="PeriodicTimer"/>.
-/// Plan A polish — replaces the previous CI-flaky pattern of
+/// Plan A polish - replaces the previous CI-flaky pattern of
 /// <c>Task.Delay</c> + tunable test-only ctors.
 ///
 /// Without TimeProvider injection this test couldn't be written: the
@@ -84,7 +84,7 @@ public sealed class TimeProviderInjectionTests : IAsyncLifetime
     {
         // Row created at T0 with TTL 60s. At T0+30s nothing expires.
         // At T0+90s the row is past its TTL and should be soft-deleted.
-        // Pre-injection this test would have to use Task.Delay(60) — slow
+        // Pre-injection this test would have to use Task.Delay(60) - slow
         // and CI-flaky. Now it's deterministic via Advance().
         await database.SubmitOutboundMessage("hello", "N0DEST", "expires"u8.ToArray(), ttlSeconds: 60);
         var beforeExpiry = (await database.GetRecentMessages(10)).Count;
@@ -101,7 +101,7 @@ public sealed class TimeProviderInjectionTests : IAsyncLifetime
         (await database.GetRecentMessages(10)).Should().BeEmpty(
             "soft-deleted moves the row out of the active messages table");
         (await database.GetRecentDroppedMessages(10)).Should().HaveCount(1,
-            "into the dropped table — keeps an audit trail of TTL expiries");
+            "into the dropped table - keeps an audit trail of TTL expiries");
     }
 
     [Fact]

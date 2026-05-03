@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace dapps.core.Controllers;
 
 /// <summary>
-/// REST surface for the neighbour table — the list of remote DAPPS nodes
+/// REST surface for the neighbour table - the list of remote DAPPS nodes
 /// this instance is willing to forward through. A sysop maintains it by
 /// hand today; the auto-discovery work in Phase B feeds the same table.
 ///

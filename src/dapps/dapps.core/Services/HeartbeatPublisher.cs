@@ -5,7 +5,7 @@ using Microsoft.Extensions.Options;
 namespace dapps.core.Services;
 
 /// <summary>
-/// Plan C3 PR-B — periodic MQTT heartbeat publish. Every
+/// Plan C3 PR-B - periodic MQTT heartbeat publish. Every
 /// <see cref="SystemOptions.HeartbeatIntervalSeconds"/> seconds (default
 /// 60), serialises an <see cref="OperationalSnapshot"/> and publishes
 /// it as a retained message on <c>dapps/metrics/heartbeat</c>.
@@ -15,7 +15,7 @@ namespace dapps.core.Services;
 /// immediately, without waiting up to a full interval for the next
 /// publish. The same JSON shape as <c>GET /Operational</c>.
 ///
-/// Default on (<see cref="SystemOptions.HeartbeatEnabled"/> = true) —
+/// Default on (<see cref="SystemOptions.HeartbeatEnabled"/> = true) -
 /// publishing to a topic on a broker that's already running for the
 /// app interface is essentially free, and operators who don't want
 /// it can flip the toggle.

@@ -8,7 +8,7 @@ namespace dapps.core.tests;
 /// End-to-end multicast loopback. Two bearer instances on the same
 /// loopback interface joined to the same multicast group: one
 /// announces, the other hears. Validates the bearer end-to-end on
-/// real sockets — Linux loopback supports IP multicast natively, so
+/// real sockets - Linux loopback supports IP multicast natively, so
 /// no fixture / docker is needed.
 /// </summary>
 public sealed class UdpMulticastDiscoveryTests
@@ -16,7 +16,7 @@ public sealed class UdpMulticastDiscoveryTests
     [Fact]
     public async Task Loopback_SolicitFromOne_HeardByOtherAsReceivedSolicit()
     {
-        // Plan B6.2 — solicit round-trip over the UDP multicast bearer.
+        // Plan B6.2 - solicit round-trip over the UDP multicast bearer.
         // Sender emits a solicit; receiver yields a ReceivedSolicit (NOT
         // a ReceivedBeacon) carrying the asker's callsign and the same
         // ChannelKey we joined.
@@ -250,7 +250,7 @@ public sealed class UdpMulticastDiscoveryTests
         await sender.AnnounceAsync(new BeaconFrame("M0BBBB", 0, 600, new UdpBearerHint("b")), groupB, cts.Token);
 
         // Wait until both expected beacons land (or the deadline passes
-        // — if leakage is happening, additional duplicate-mismatch rows
+        // - if leakage is happening, additional duplicate-mismatch rows
         // would also appear, which we'd detect below).
         var deadline = DateTime.UtcNow.AddSeconds(3);
         while (DateTime.UtcNow < deadline)
@@ -259,7 +259,7 @@ public sealed class UdpMulticastDiscoveryTests
             await Task.Delay(50, cts.Token);
         }
         // Allow a brief settle so any wrongly-leaked packets have a
-        // chance to land too — otherwise we'd assert too early.
+        // chance to land too - otherwise we'd assert too early.
         await Task.Delay(250, cts.Token);
 
         lock (seen)
@@ -284,7 +284,7 @@ public sealed class UdpMulticastDiscoveryTests
     public async Task BadGroupSpec_LoggedAndSkipped(string badGroup)
     {
         // The bearer logs and skips a malformed channel rather than
-        // throwing — one bad config row shouldn't disable the others.
+        // throwing - one bad config row shouldn't disable the others.
         var goodPort = 45880 + Random.Shared.Next(1000);
         var goodGroup = $"239.42.42.42:{goodPort}";
         var bad = new DiscoveryChannelInfo(1, "udp", badGroup, LinkClass.LanMulticast, 60, 180, 1);

@@ -4,13 +4,13 @@
 
 ## Why RHPv2
 
-AGW is a 1990s protocol — it works fine for what it does, but it has limits that show up under modern use. RHPv2 addresses several of them:
+AGW is a 1990s protocol - it works fine for what it does, but it has limits that show up under modern use. RHPv2 addresses several of them:
 
 - **Better session multiplexing.** AGW assumes one TCP connection per host application; multiple apps on the same machine each maintain their own.
 - **Cleaner inbound dispatch.** AGW's "register a callsign and receive every connect that matches" model has edge cases around shared callsigns and SSIDs that RHPv2 handles more gracefully.
 - **Actually defined error semantics.** AGW's behaviour on TNC reconnect, port up/down events, etc., is empirically discovered; RHPv2 makes it part of the spec.
 
-For DAPPS the day-to-day difference would be modest — the AGW path works well — but the long tail (reconnect storms, multi-app coexistence, shared callsign experiments) gets cleaner.
+For DAPPS the day-to-day difference would be modest - the AGW path works well - but the long tail (reconnect storms, multi-app coexistence, shared callsign experiments) gets cleaner.
 
 ## What integration will look like
 
@@ -26,7 +26,7 @@ When both AGW and RHPv2 are configured, DAPPS would prefer RHPv2 for new session
 
 ## What stays the same
 
-Everything above the bearer seam — the protocol, the app interface, the discovery model, the routing graph, the dashboard — works identically over RHPv2.
+Everything above the bearer seam - the protocol, the app interface, the discovery model, the routing graph, the dashboard - works identically over RHPv2.
 
 ## When?
 

@@ -8,8 +8,8 @@ using ModelContextProtocol.Server;
 namespace dapps.core.Mcp;
 
 /// <summary>
-/// Plan M PR-D — supervised exploration. The LLM can ask "I want to
-/// reach X but can't — what should I try?" and "what does neighbour
+/// Plan M PR-D - supervised exploration. The LLM can ask "I want to
+/// reach X but can't - what should I try?" and "what does neighbour
 /// Y currently know?". Both are composites over PR-A reads + PR-B
 /// actions; the agent proposes, the operator decides whether to act
 /// on the proposal.
@@ -30,7 +30,7 @@ public sealed class DappsExplorationTools(
     [Description(
         "Probe a configured neighbour and return their known peers, annotated for what's NEW (we haven't " +
         "heard them via discovery or configured them ourselves) vs. KNOWN (we already track them). Useful " +
-        "when answering 'this peer is well-connected — what could they teach us?'. Same wire as run_probe " +
+        "when answering 'this peer is well-connected - what could they teach us?'. Same wire as run_probe " +
         "but the response highlights the gap analysis instead of just the raw peer list.")]
     public async Task<NeighbourExploration> ExploreViaNeighbourAsync(
         [Description("Neighbour callsign to probe. Must be a configured manual neighbour with an AGW path (UDP-only neighbours can't run the peers exchange).")]
@@ -49,7 +49,7 @@ public sealed class DappsExplorationTools(
         if (neighbourRow.UdpEndpoint is not null && neighbourRow.BpqPort is null)
         {
             throw new InvalidOperationException(
-                $"{normalized} has only a UDP endpoint — the peers exchange is AGW-session only.");
+                $"{normalized} has only a UDP endpoint - the peers exchange is AGW-session only.");
         }
 
         var port = neighbourRow.BpqPort ?? options.CurrentValue.DefaultBpqPort;
@@ -79,7 +79,7 @@ public sealed class DappsExplorationTools(
         var summary = result.Success
             ? $"{normalized}: probed via AGW port {port}, fetched {annotated.Count} peer(s), " +
               $"{newCount} previously unknown to this node."
-            : $"{normalized}: probe failed — {result.Error}";
+            : $"{normalized}: probe failed - {result.Error}";
 
         return new NeighbourExploration(
             Neighbour: normalized,
@@ -96,7 +96,7 @@ public sealed class DappsExplorationTools(
         "Recommend a route for a target the operator wants to reach. Composes find_path_to (current local " +
         "resolution) with transitive 'via:CALLSIGN' candidates from B6.1 Phase 2 discovery, plus a freshness " +
         "verdict on each option. Returns ranked candidates with rationale + a recommended next action " +
-        "(e.g. 'try run_probe(X) first; if that succeeds, run_probe(target) via X'). The agent proposes — " +
+        "(e.g. 'try run_probe(X) first; if that succeeds, run_probe(target) via X'). The agent proposes - " +
         "the operator runs the recommended action tool to actually act on the suggestion.")]
     public async Task<RouteOpinion> OpinionOnRouteAsync(
         [Description("Destination callsign. The base callsign without SSID is what gets resolved.")]
@@ -106,7 +106,7 @@ public sealed class DappsExplorationTools(
 
         var candidates = new List<RouteCandidate>();
 
-        // Direct surfaces first — these are the same the routing
+        // Direct surfaces first - these are the same the routing
         // algorithm would consult right now.
         var hints = await database.GetRouteHintsAsync();
         var hint = hints.FirstOrDefault(h => string.Equals(h.Destination, destBase, StringComparison.OrdinalIgnoreCase));
@@ -117,7 +117,7 @@ public sealed class DappsExplorationTools(
                 NextHop: hint.NextHop,
                 Confidence: "high",
                 Rationale: $"Manual operator-set route hint to {hint.NextHop}.",
-                RecommendedAction: $"send_test_message would already use this — no extra step needed."));
+                RecommendedAction: $"send_test_message would already use this - no extra step needed."));
         }
 
         var learned = await database.GetLearnedRouteAsync(destBase);
@@ -147,7 +147,7 @@ public sealed class DappsExplorationTools(
                 RecommendedAction: $"send_test_message; the meshcore algorithm will source-route."));
         }
 
-        // Direct discovery — peer heard from us.
+        // Direct discovery - peer heard from us.
         var peers = await database.GetDiscoveredPeers();
         var direct = peers.FirstOrDefault(p =>
             string.Equals(p.Callsign, destBase, StringComparison.OrdinalIgnoreCase)
@@ -196,7 +196,7 @@ public sealed class DappsExplorationTools(
             return new RouteOpinion(
                 Destination: destBase,
                 Candidates: candidates,
-                RecommendedAction: $"send_test_message(app, '{destBase}', '...') — flood fallback is automatic.",
+                RecommendedAction: $"send_test_message(app, '{destBase}', '...') - flood fallback is automatic.",
                 Summary: sb.ToString());
         }
 

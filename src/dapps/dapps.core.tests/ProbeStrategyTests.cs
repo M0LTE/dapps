@@ -10,7 +10,7 @@ using Microsoft.Extensions.Time.Testing;
 namespace dapps.core.tests;
 
 /// <summary>
-/// Plan B7 — probe-strategy dispatcher behaviour. The scheduler asks
+/// Plan B7 - probe-strategy dispatcher behaviour. The scheduler asks
 /// <see cref="ProbeSchedulerService.ShouldRunSweep"/> on each tick;
 /// these tests pin the three strategies' decisions in place so a
 /// future refactor can't silently shift them.
@@ -31,7 +31,7 @@ public sealed class ProbeStrategyTests
         svc.ShouldRunSweep(opts, lastSweepCompletedAt: null)
            .RunNow.Should().BeTrue();
         svc.ShouldRunSweep(opts, lastSweepCompletedAt: DateTime.UtcNow)
-           .RunNow.Should().BeTrue("FixedInterval doesn't gate on last-sweep — that's the post-sweep sleep's job");
+           .RunNow.Should().BeTrue("FixedInterval doesn't gate on last-sweep - that's the post-sweep sleep's job");
     }
 
     [Fact]
@@ -50,7 +50,7 @@ public sealed class ProbeStrategyTests
         };
         var (svc, _) = NewService(opts, clock, TimeZoneInfo.Utc);
 
-        // First check: in window, no prior sweep — fire.
+        // First check: in window, no prior sweep - fire.
         svc.ShouldRunSweep(opts, null).RunNow.Should().BeTrue();
 
         // Just-completed sweep blocks the next tick even though we're
@@ -62,7 +62,7 @@ public sealed class ProbeStrategyTests
     [Fact]
     public void Overnight_OutsideWindow_DoesNotFire()
     {
-        // 13:00 local — well outside 02:00-06:00.
+        // 13:00 local - well outside 02:00-06:00.
         var clock = new FakeTimeProvider(DateTimeOffset.Parse("2026-04-15T13:00:00Z"));
         var opts = new SystemOptions
         {
@@ -162,7 +162,7 @@ public sealed class ProbeStrategyTests
     }
 
     /// <summary>NodeProber needs an IDappsOutboundTransport even though
-    /// these tests don't exercise probing — supply a no-op.</summary>
+    /// these tests don't exercise probing - supply a no-op.</summary>
     private sealed class NoopTransport : IDappsOutboundTransport
     {
         public Task<IDappsConnection> ConnectAsync(string localCallsign, string remoteCallsign, int bpqPortNumber, CancellationToken ct)

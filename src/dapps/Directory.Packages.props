@@ -6,16 +6,16 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Microsoft.Extensions / ASP.NET Core — pinned to .NET 8 LTS. .NET
+    <!-- Microsoft.Extensions / ASP.NET Core - pinned to .NET 8 LTS. .NET
          10's Linux baseline is glibc 2.36 (Debian 12 / Bookworm), which
          excludes Raspberry Pi OS 11 (Bullseye, glibc 2.31) deployments
-         still in the wild. .NET 8 LTS targets glibc 2.23 — broad Pi
+         still in the wild. .NET 8 LTS targets glibc 2.23 - broad Pi
          compatibility, supported through Nov 2026. -->
     <PackageVersion Include="Microsoft.Extensions.Logging" Version="8.0.1" />
     <!-- Logging.Abstractions + System.IO.Pipelines tracked on the
          .NET 10 cadence because the MCP SDK transitively requires
          a 10.x version. Both packages target net8.0 explicitly so
-         they load cleanly on the LTS runtime — the version number
+         they load cleanly on the LTS runtime - the version number
          is just the release train, not the runtime baseline. -->
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.5" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Console" Version="8.0.1" />
@@ -26,7 +26,7 @@
     <PackageVersion Include="sqlite-net-pcl" Version="1.9.172" />
     <PackageVersion Include="MQTTnet" Version="4.3.7.1207" />
 
-    <!-- Testing — xunit.v3 + Microsoft Testing Platform native runner.
+    <!-- Testing - xunit.v3 + Microsoft Testing Platform native runner.
          Replaces xunit + xunit.runner.visualstudio + Microsoft.NET.Test.Sdk. -->
     <PackageVersion Include="xunit.v3" Version="3.2.2" />
     <!-- AwesomeAssertions is a MIT-licensed community fork of FluentAssertions
@@ -37,12 +37,12 @@
          abstraction (System.TimeProvider) ships with .NET 8 itself. -->
     <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="8.10.0" />
     <!-- Testcontainers.NET for the linbpq integration fixtures. Replaces
-         the previous raw `docker run` shell-out (closes #5) — same image
+         the previous raw `docker run` shell-out (closes #5) - same image
          (m0lte/linbpq:latest), generous wait strategy on AGW port
          readiness so BPQ's slow startup bind doesn't trip readiness. -->
     <PackageVersion Include="Testcontainers" Version="4.1.0" />
 
-    <!-- Model Context Protocol C# SDK — exposes operator-facing
+    <!-- Model Context Protocol C# SDK - exposes operator-facing
          tools to Claude / other MCP clients via /mcp on the dapps
          daemon's HTTP listener. ASP.NET Core hosting variant, since
          we're already in-process with Kestrel. Plan G (MCP). -->
@@ -50,7 +50,7 @@
 
     <!-- Playwright + WebApplicationFactory for the dapps.core.uitests
          project. Drives the real Razor pages + JS in headless Chromium
-         against an in-process Kestrel host (real ephemeral port — the
+         against an in-process Kestrel host (real ephemeral port - the
          in-memory TestServer doesn't speak to a browser). Browser
          install happens once via Microsoft.Playwright.Program.Main,
          no out-of-band setup. -->

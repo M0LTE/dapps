@@ -6,11 +6,11 @@ using Microsoft.Extensions.Logging;
 namespace dapps.core.Services;
 
 /// <summary>
-/// Plan B6.1 — connected-mode probe-and-map. Performs a single
+/// Plan B6.1 - connected-mode probe-and-map. Performs a single
 /// reachability probe: open an AGW session to <c>(callsign, port)</c>,
 /// look for a <c>DAPPSv1&gt;</c> banner, then disconnect cleanly. The
 /// scheduler ( <see cref="ProbeSchedulerService"/> ) and the on-demand
-/// REST endpoint both call into this — schedule decisions and result
+/// REST endpoint both call into this - schedule decisions and result
 /// persistence live elsewhere.
 ///
 /// The class is deliberately stateless (per-call Connect → Read prompt
@@ -30,7 +30,7 @@ public sealed class NodeProber(
     /// description on failure (so the dashboard can surface it).
     /// <see cref="DiscoveredPeers"/> is populated when the caller passed
     /// <c>fetchPeers: true</c> and the remote answered the
-    /// <c>peers</c> query — Plan B6.1 Phase 2 transitive discovery.
+    /// <c>peers</c> query - Plan B6.1 Phase 2 transitive discovery.
     /// Empty when peers wasn't requested or the request failed; failure
     /// to fetch peers does not mark the probe itself as failed.</summary>
     public sealed record ProbeResult(
@@ -52,7 +52,7 @@ public sealed class NodeProber(
     /// When <paramref name="fetchPeers"/> is true, a successful probe
     /// continues with a <c>peers</c> query whose result is reported
     /// in <see cref="ProbeResult.DiscoveredPeers"/>. A failed peers
-    /// query is logged but does not flip the probe to failed — the
+    /// query is logged but does not flip the probe to failed - the
     /// remote *did* answer DAPPSv1&gt; and that's still useful state.
     /// </summary>
     public async Task<ProbeResult> ProbeAsync(
@@ -103,7 +103,7 @@ public sealed class NodeProber(
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            // Caller-driven cancellation — re-throw so the scheduler can
+            // Caller-driven cancellation - re-throw so the scheduler can
             // exit cleanly on shutdown.
             throw;
         }
@@ -115,7 +115,7 @@ public sealed class NodeProber(
         catch (Exception ex)
         {
             // Probes are best-effort; a connect failure is the answer,
-            // not an exception to bubble. Log at info — failures are
+            // not an exception to bubble. Log at info - failures are
             // expected and not actionable noise.
             logger.LogInformation("Probe failed: {0} ({1})", remoteCallsign, ex.Message);
             return new ProbeResult(remoteCallsign, bpqPort, false, ex.Message, at, peers);
@@ -123,7 +123,7 @@ public sealed class NodeProber(
     }
 
     /// <summary>
-    /// Plan B6.1 Phase 2b — probe through a BPQ node prompt rather
+    /// Plan B6.1 Phase 2b - probe through a BPQ node prompt rather
     /// than direct to a DAPPS APPLICATION callsign. Connect lands at
     /// the node's command prompt (e.g. <c>READNG:GB7RDG}</c>); we
     /// type <paramref name="applicationCommand"/> + CR (default
@@ -133,7 +133,7 @@ public sealed class NodeProber(
     ///
     /// Banner heuristic: read until the wire goes idle for a short
     /// window (<see cref="DefaultBannerIdle"/>, 500 ms). Works for any
-    /// BPQ-style prompt regardless of the operator's banner text — we
+    /// BPQ-style prompt regardless of the operator's banner text - we
     /// don't pattern-match the prompt, just the silence after it.
     /// </summary>
     public async Task<ProbeResult> ProbeViaNodeCallAsync(
@@ -156,7 +156,7 @@ public sealed class NodeProber(
 
             var stream = connection.Stream;
 
-            // Read the node banner + prompt. We don't parse it — we
+            // Read the node banner + prompt. We don't parse it - we
             // wait for the wire to go quiet, which is a reliable
             // proxy for "the prompt is now waiting for input".
             var banner = await ReadUntilIdleAsync(stream, DefaultBannerTotal, DefaultBannerIdle, ct);
@@ -167,7 +167,7 @@ public sealed class NodeProber(
             }
             logger.LogDebug("Node banner from {0}: {1}", remoteNodeCall, banner.Replace('\n', ' ').Replace('\r', ' '));
 
-            // Send the application command. Plain CR — BPQ's node
+            // Send the application command. Plain CR - BPQ's node
             // accepts both \r and \r\n; CR-only matches what an
             // operator at a packet-radio terminal would send.
             await stream.WriteAsync(Encoding.ASCII.GetBytes(applicationCommand + "\r").AsMemory(), ct);
@@ -224,7 +224,7 @@ public sealed class NodeProber(
     /// arrived for <paramref name="idleWindow"/> (treated as "the
     /// prompt is now idle, waiting for input") or
     /// <paramref name="totalTimeout"/> elapses overall. Returns
-    /// whatever ASCII bytes were collected — empty string when no
+    /// whatever ASCII bytes were collected - empty string when no
     /// data ever arrived (which the caller surfaces as a failure).
     ///
     /// Internal so the unit test can substitute its own fake stream
@@ -244,7 +244,7 @@ public sealed class NodeProber(
             var remaining = totalDeadline - DateTime.UtcNow;
             if (remaining <= TimeSpan.Zero) return sb.ToString();
             // Once we've seen any bytes, switch from the long total
-            // wait to the short idle window — silence after data
+            // wait to the short idle window - silence after data
             // means the prompt has finished writing.
             var perReadTimeout = sb.Length > 0
                 ? (idleWindow < remaining ? idleWindow : remaining)
@@ -258,7 +258,7 @@ public sealed class NodeProber(
             }
             catch (OperationCanceledException) when (!ct.IsCancellationRequested)
             {
-                // Idle / total deadline — return what we have.
+                // Idle / total deadline - return what we have.
                 return sb.ToString();
             }
             if (n == 0) return sb.ToString();   // EOF

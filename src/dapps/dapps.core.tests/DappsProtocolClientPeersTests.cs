@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace dapps.core.tests;
 
 /// <summary>
-/// Plan B6.1 Phase 2 — client-side parser for the new <c>peers</c>
+/// Plan B6.1 Phase 2 - client-side parser for the new <c>peers</c>
 /// response. Drives <see cref="DappsProtocolClient.RequestPeersAsync"/>
 /// against canned receiver bytes covering the wire shape's happy path
 /// and tolerated edge cases.
@@ -17,7 +17,7 @@ public sealed class DappsProtocolClientPeersTests
     public async Task RequestPeers_EmptyList_ReturnsEmpty()
     {
         // A peer with no neighbours / discovered peers replies with
-        // just "end\n" — that's a valid response, not an error.
+        // just "end\n" - that's a valid response, not an error.
         var stream = new FakeDuplexStream("end\n"u8.ToArray());
         var client = new DappsProtocolClient(stream, NullLoggerFactory.Instance);
 
@@ -95,7 +95,7 @@ public sealed class DappsProtocolClientPeersTests
     [Fact]
     public async Task RequestPeers_EofBeforeEnd_ReturnsWhatWeHave()
     {
-        // Connection drop mid-response shouldn't throw — return what we
+        // Connection drop mid-response shouldn't throw - return what we
         // got. NodeProber treats a partial peers list as best-effort
         // anyway, and the probe itself already succeeded.
         var stream = new FakeDuplexStream("peer N0AAA-9 source=n\n"u8.ToArray());

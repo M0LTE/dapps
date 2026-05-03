@@ -4,7 +4,7 @@ namespace dapps.client.Discovery;
 
 /// <summary>
 /// Encodes and parses the solicit wire form. Same KV style as
-/// <see cref="BeaconCodec"/> — both for extensibility and so an
+/// <see cref="BeaconCodec"/> - both for extensibility and so an
 /// operator monitoring AX.25 UI traffic can read it. Distinguished
 /// from a beacon by the literal <c>solicit</c> keyword in the
 /// fixed prefix.
@@ -15,7 +15,7 @@ namespace dapps.client.Discovery;
 /// </code>
 ///
 /// One line, no trailing newline. ASCII-only. The asker's callsign
-/// is stamped on the wire — receivers use it for logging only;
+/// is stamped on the wire - receivers use it for logging only;
 /// replies always go to the channel's broadcast address (the same
 /// place beacons go), not unicast back to the asker.
 /// </summary>
@@ -31,7 +31,7 @@ public static class SolicitCodec
 
     /// <summary>
     /// Parse a solicit. Returns false if the payload doesn't lead
-    /// with the solicit magic — beacons (which lead with the shorter
+    /// with the solicit magic - beacons (which lead with the shorter
     /// <c>"DAPPS v1"</c> magic but have no <c>solicit</c> keyword)
     /// hit this case.
     /// </summary>
@@ -57,7 +57,7 @@ public static class SolicitCodec
             var key = token[..eq];
             var value = token[(eq + 1)..];
             if (key == "callsign") callsign = value;
-            // Unknown keys ignored — forward-compat.
+            // Unknown keys ignored - forward-compat.
         }
 
         if (string.IsNullOrEmpty(callsign)) return false;

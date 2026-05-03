@@ -12,7 +12,7 @@ using SQLite;
 namespace dapps.core.tests;
 
 /// <summary>
-/// Plan F2 — end-to-end multi-part: sender chunks above threshold,
+/// Plan F2 - end-to-end multi-part: sender chunks above threshold,
 /// receiver reassembles. Tests run against the real Database +
 /// DatabaseAndMqttInbox machinery (with a stub MQTT broker) because
 /// the reassembly path's correctness is mostly about data shape
@@ -41,7 +41,7 @@ public sealed class F2FragmentationTests : IAsyncLifetime
         var options = new TestOptionsMonitor<SystemOptions>(new SystemOptions
         {
             Callsign = "N0SELF",
-            FragmentThresholdBytes = 100,                // tiny — easy to test boundary
+            FragmentThresholdBytes = 100,                // tiny - easy to test boundary
             FragmentReassemblyTimeoutSeconds = 7 * 24 * 3600,
         });
         database = new Database(NullLogger<Database>.Instance, options, clock);
@@ -94,7 +94,7 @@ public sealed class F2FragmentationTests : IAsyncLifetime
     [Fact]
     public async Task SubmitOutboundMessage_ExactlyOnThreshold_NoFragmentation()
     {
-        // Threshold is "strictly greater than" — payload of exactly the
+        // Threshold is "strictly greater than" - payload of exactly the
         // threshold size should NOT split. (`payload.Length > threshold`)
         var payload = new byte[100];
         await database.SubmitOutboundMessage("app", "N0DEST", payload);
@@ -217,7 +217,7 @@ public sealed class F2FragmentationTests : IAsyncLifetime
         // If the destination isn't local (transit through this node),
         // the inbox just persists the fragment as a regular DbMessage
         // row for the OutboundMessageManager to pick up. NO reassembly
-        // happens here — that's the destination's job.
+        // happens here - that's the destination's job.
         var inbox = MakeInbox();
         var (fragments, _, masterId) = MakeFragments(
             totalLen: 350, fragSize: 100, destination: "elsewhere@N0OTHER");
@@ -252,7 +252,7 @@ public sealed class F2FragmentationTests : IAsyncLifetime
             optionsMonitor,
             database,
             new AppTokenStore(NullLogger<AppTokenStore>.Instance));
-        // We never call StartAsync — InjectInboundMessage is a no-op
+        // We never call StartAsync - InjectInboundMessage is a no-op
         // when the broker isn't started, which is exactly what these
         // shape tests want (they assert against DbMessage / DbFragment
         // contents, not MQTT delivery).

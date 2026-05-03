@@ -7,7 +7,7 @@ using Microsoft.Extensions.Time.Testing;
 namespace dapps.core.tests;
 
 /// <summary>
-/// Plan B7 — single-counter discovery airtime budget. The accountant
+/// Plan B7 - single-counter discovery airtime budget. The accountant
 /// is the shared resource three subsystems (beacons, solicit replies,
 /// probes) consult before transmitting; if it gets the bookkeeping
 /// wrong, the operator's budget knob silently doesn't work.
@@ -54,7 +54,7 @@ public sealed class AirtimeAccountantTests
         acct.TryReserve(25, "old").Should().BeTrue();
         acct.TryReserve(10, "blocked").Should().BeFalse();
 
-        // Roll past the 60-min window — the old entry drops, freeing budget.
+        // Roll past the 60-min window - the old entry drops, freeing budget.
         clock.Advance(TimeSpan.FromMinutes(61));
         acct.TryReserve(10, "after-rollover").Should().BeTrue();
         acct.ConsumedSecondsLastHour.Should().BeApproximately(10, 0.001);
@@ -97,7 +97,7 @@ public sealed class AirtimeAccountantTests
     public void TryReserve_PerChannelBudget_EnforcedSeparatelyFromGlobal()
     {
         // Global budget = 100 s/h; channel "udp/A" budget = 20 s/h.
-        // Five 5-s reservations on channel A fit (25? — no wait, 4 of 5
+        // Five 5-s reservations on channel A fit (25? - no wait, 4 of 5
         // = 20 fits, 5th would push to 25). Then the 6th gets refused on
         // the channel cap; meanwhile a transmission on a different
         // channel still fits because IT has no per-channel cap.
@@ -111,7 +111,7 @@ public sealed class AirtimeAccountantTests
         acct.TryReserve(5, "a-5", channelKey: "udp/A", channelBudgetSecondsPerHour: 20)
             .Should().BeFalse("would push channel total to 25 over the 20s/h channel cap");
 
-        // Different channel with no per-channel cap — still has 80 s of
+        // Different channel with no per-channel cap - still has 80 s of
         // global budget left (100 - 20).
         acct.TryReserve(50, "b-1", channelKey: "udp/B", channelBudgetSecondsPerHour: 0)
             .Should().BeTrue();
@@ -120,7 +120,7 @@ public sealed class AirtimeAccountantTests
     [Fact]
     public void TryReserve_GlobalCapBlocksEvenIfChannelHasRoom()
     {
-        // Channel cap loose, global cap tight — a single big reservation
+        // Channel cap loose, global cap tight - a single big reservation
         // gets refused on the global cap regardless of room in the
         // per-channel bucket.
         var (acct, _) = NewAccountant(budget: 30);
