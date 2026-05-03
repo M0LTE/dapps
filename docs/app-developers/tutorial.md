@@ -1,16 +1,16 @@
 # Tutorial: hello-world DAPPS app in Python
 
-In this tutorial you'll build a tiny DAPPS app called `hello`. It does one thing: when someone sends it a name, it replies with `hello, <name>!`. By the end you'll have:
+Build a tiny DAPPS app called `hello`. It does one thing: when someone sends it a name, it replies with `hello, <name>!`. By the end you'll have:
 
-- A working Python script that connects to your local DAPPS instance over MQTT.
+- A working Python script that talks to your local DAPPS instance over MQTT.
 - A clear understanding of how submit, deliver, and ack flow through the queue.
 - An idempotent message handler — the reflex you'll reach for in every DAPPS app.
 
-If you haven't yet, read [concepts.md](concepts.md) first. It's short and explains *why* the app looks the way it does.
+If you haven't yet, read [Concepts](concepts.md) first.
 
 ## Prerequisites
 
-- A DAPPS instance running on `127.0.0.1:1883` (the default MQTT port). The [README](../README.md#getting-started) walks through bringing one up.
+- A DAPPS instance running on `127.0.0.1:1883` (the default MQTT port). [Getting started](../getting-started.md) walks through bringing one up.
 - Python 3.11+.
 - `paho-mqtt` 2.x: `pip install paho-mqtt`.
 - `mosquitto-clients` (for `mosquitto_pub`) on the side, so we can poke the app from the command line. On Debian/Ubuntu: `apt install mosquitto-clients`. macOS: `brew install mosquitto`.
@@ -19,7 +19,7 @@ We'll use MQTT in this tutorial. The same flow works against the REST endpoints 
 
 ## The full script
 
-The complete script is at [`examples/hello.py`](examples/hello.py). Drop it into a directory, run it, and skip ahead to [Try it out](#try-it-out) if you'd rather see it working before reading the explanation. Otherwise, read on — the next sections walk through it piece by piece.
+The complete script lives in the repo at [`docs/examples/hello.py`](https://github.com/M0LTE/dapps/blob/master/docs/examples/hello.py). Drop it into a directory, run it, and skip ahead to [Try it out](#try-it-out) if you'd rather see it working before reading the explanation. Otherwise, read on — the next sections walk through it piece by piece.
 
 ## Step 1: connect to the broker
 
@@ -58,11 +58,11 @@ The moment you subscribe, DAPPS replays any **already-pending messages** for `he
 
 Each delivery carries three MQTT 5 user properties:
 
-| Property | Meaning |
-|---|---|
-| `dapps-id` | The 7-char message id. Use this to detect duplicates. |
-| `dapps-source` | The callsign that handed us this message — usually the original sender, but might be a relay node. Use it as the destination if you want to reply. |
-| `dapps-ttl` | (Optional) Residual lifetime in seconds. Present only if the sender set a TTL. |
+| Property        | Meaning                                                                                                |
+|-----------------|--------------------------------------------------------------------------------------------------------|
+| `dapps-id`      | The 7-char message id. Use this to detect duplicates.                                                  |
+| `dapps-source`  | The originating callsign. Use it as the destination if you want to reply.                              |
+| `dapps-ttl`     | (Optional) Residual lifetime in seconds. Present only if the sender set a TTL.                         |
 
 Paho exposes user properties as a list of `(key, value)` tuples on `msg.properties.UserProperty`. The script has a small helper:
 
@@ -139,7 +139,7 @@ Run the script:
 python hello.py
 ```
 
-In another terminal, send a message to `hello` at your own callsign (replace `<your-callsign>` with whatever your DAPPS is configured with — check `/Config` in the dashboard if unsure):
+In another terminal, send a message to `hello` at your own callsign (replace `<your-callsign>` with whatever your DAPPS is configured with):
 
 ```bash
 mosquitto_pub -h 127.0.0.1 -V mqttv5 \
@@ -153,7 +153,7 @@ You should see, in the script's terminal:
 -> reply sent to <your-callsign>
 ```
 
-The script published a reply, and because the destination was your own callsign, your DAPPS forwarded it straight back into `dapps/in/hello`. The script ignored the reply (it doesn't match a `seen` entry, but neither does our payload `hello, world!` mean anything to the script — it just replies again, and *that* would loop). To watch it round-trip without the loop, send to a different callsign on the same DAPPS, or subscribe with mosquitto_sub to watch the inbox externally:
+The script published a reply, and because the destination was your own callsign, your DAPPS forwarded it straight back into `dapps/in/hello`. To watch it round-trip without re-triggering your handler, subscribe with `mosquitto_sub` in a separate terminal:
 
 ```bash
 mosquitto_sub -h 127.0.0.1 -V mqttv5 -t 'dapps/in/hello' -F '%P\n%p'
@@ -191,7 +191,7 @@ Ack:
 curl -X POST http://127.0.0.1:5000/AppApi/inbound/hello/abc1234/ack
 ```
 
-Both surfaces share the same queue. An app written against MQTT and an `apt-get` cron job hitting REST can run side by side and won't see each other's traffic — they're both authenticated as `hello` in the queue's view, but the queue handles concurrency for them.
+Both surfaces share the same queue. An app written against MQTT and a cron job hitting REST can run side by side and won't see each other's traffic — they're both authenticated as `hello` in the queue's view, but the queue handles concurrency for them.
 
 ## Where to go next
 
@@ -200,5 +200,4 @@ Both surfaces share the same queue. An app written against MQTT and an `apt-get`
 - **Persist `seen` to disk.** SQLite (`sqlite3` stdlib) is easiest. Insert the id under `INSERT OR IGNORE` and use the `changes()` count to decide whether to reply.
 - **Handle malformed payloads.** `decode("utf-8", errors="replace")` keeps the demo from crashing on a binary blob, but a real app should validate input and ack-without-replying on garbage rather than ignoring it (otherwise garbage piles up in your queue).
 - **Set sensible TTLs.** "How fresh does this still need to be?" is a useful design question. Match the value to what your app does.
-- **Authenticate.** When `AuthRequired` is on (see the README), the MQTT CONNECT needs `username=hello` + a token, and REST needs an `Authorization: Bearer …` header. Mint tokens via `/AppTokens` in the dashboard.
-- **Look at the [protocol section of the README](../README.md#on-air-protocol)** if you want to understand what's happening on the wire between two DAPPS nodes.
+- **Authenticate.** When the operator turns on `auth-required`, the MQTT CONNECT needs `username=hello` + a per-app token, and REST needs an `Authorization: Bearer ...` header. Tokens are minted from the dashboard's `/AppTokens` page.

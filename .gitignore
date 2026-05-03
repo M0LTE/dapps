@@ -374,3 +374,7 @@ dapps/dapps.sqlite
 # UI test screenshots — regenerated on every uitests run; CI uploads
 # them as a build artifact (workflow `ui-test` → `ui-screenshots`).
 tests/screenshots/
+
+# MkDocs build output. CI builds + deploys to gh-pages branch.
+site/
+.venv-docs/
