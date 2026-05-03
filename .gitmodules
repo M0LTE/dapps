@@ -1,0 +1,3 @@
+[submodule "lib/rhp2lib-net"]
+	path = lib/rhp2lib-net
+	url = https://github.com/M0LTE/rhp2lib-net.git
