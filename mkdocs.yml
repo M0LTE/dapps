@@ -1,0 +1,113 @@
+site_name: DAPPS
+site_description: >
+  Distributed Asynchronous Packet Pub-Sub — operator and developer
+  manual for running and building against a DAPPS node.
+site_url: https://m0lte.github.io/dapps/
+repo_url: https://github.com/M0LTE/dapps
+repo_name: M0LTE/dapps
+edit_uri: edit/master/docs/
+
+theme:
+  name: material
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - navigation.indexes
+    - toc.follow
+    - content.code.copy
+    - content.action.edit
+    - search.suggest
+    - search.highlight
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  font:
+    text: Inter
+    code: JetBrains Mono
+  icon:
+    repo: fontawesome/brands/github
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/M0LTE/dapps
+
+# Files we deliberately don't surface in the site:
+# - examples/ contains executable Python sample apps the App
+#   developers section links to via GitHub URLs.
+# - meshcore-backhaul-routing.md and routing-prior-art.md are
+#   engineering design notes that pre-date the docs site; the
+#   Connect/MeshCore page links to them via GitHub URLs rather than
+#   migrating them in (they're deeper-dive than the operator manual
+#   should be).
+# - requirements.txt is the docs-build dep file; not a docs page.
+exclude_docs: |
+  examples/
+  meshcore-backhaul-routing.md
+  routing-prior-art.md
+  requirements.txt
+
+nav:
+  - Home: index.md
+  - Getting started: getting-started.md
+  - Install:
+      - install/index.md
+      - Linux (systemd): install/linux.md
+      - Docker: install/docker.md
+      - Windows: install/windows.md
+      - macOS: install/macos.md
+  - Configure: configure.md
+  - Connect a node:
+      - connect/index.md
+      - BPQ (AGW): connect/bpq.md
+      - MeshCore: connect/meshcore.md
+      - RHPv2: connect/rhp.md
+  - Run: run.md
+  - Tune: tune.md
+  - Discovery & routing: discovery-and-routing.md
+  - Operate: operate.md
+  - Update: update.md
+  - MCP for assistants: mcp.md
+  - App developers:
+      - app-developers/index.md
+      - Concepts: app-developers/concepts.md
+      - Tutorial — hello world: app-developers/tutorial.md
+      - Reference: app-developers/reference.md
+      - Sample gallery: app-developers/gallery.md
+  - Troubleshooting: troubleshooting.md
+  - Glossary: glossary.md
