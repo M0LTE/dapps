@@ -97,6 +97,59 @@ jobs:
             echo "Will publish $tag."
           fi
 
+  # UI tests live in dapps.core.uitests — they boot dapps.core as a
+  # subprocess and drive Razor pages with headless Chromium via
+  # Playwright. Separate job rather than rolled into `test` because:
+  # (1) Chromium install + browser deps are a noticeable slowdown the
+  # unit suite shouldn't pay; (2) UI tests run as their own subprocess
+  # so docker / port collisions are isolated; (3) keeping them
+  # non-blocking on the release decision means a flaky browser
+  # interaction can't strand a release on the runway.
+  ui-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore + build dapps.core.uitests
+        run: |
+          dotnet restore src/dapps/dapps.core.uitests/dapps.core.uitests.csproj
+          dotnet build src/dapps/dapps.core.uitests/dapps.core.uitests.csproj --no-restore --configuration Release
+
+      - name: Install Chromium + system deps
+        # `--with-deps` apt-installs the libs Chromium needs (libnss3,
+        # libxss1, etc.). Without this the browser launches but
+        # immediately crashes on a missing-shared-library error.
+        run: pwsh src/dapps/dapps.core.uitests/bin/Release/net8.0/playwright.ps1 install --with-deps chromium
+
+      - name: Pre-build dapps.core
+        # WebAppFixture launches the already-built dll if present.
+        # Pre-building here removes a race where the first test
+        # triggers a build that takes longer than the 60s "Now
+        # listening on" wait window. Configuration matches the test
+        # build so LocateDappsBinary finds the dll on the first try.
+        run: dotnet build src/dapps/dapps.core/dapps.core.csproj --configuration Release
+
+      - name: Run UI tests
+        run: dotnet test src/dapps/dapps.core.uitests/dapps.core.uitests.csproj --no-build --configuration Release -- --output detailed
+
+      - name: Upload screenshots
+        # Always upload — screenshots are useful both for failure
+        # triage AND as a reference for "what does the UI look like
+        # right now after this PR".
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: ui-screenshots
+          path: tests/screenshots/
+          if-no-files-found: ignore
+          retention-days: 14
+
   # .NET 8 LTS targets glibc 2.23 — older than any modern distro — so
   # building on ubuntu-latest produces binaries that load on Raspberry
   # Pi OS 11 (Bullseye) and newer without further plumbing.

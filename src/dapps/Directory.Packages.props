@@ -47,6 +47,14 @@
          daemon's HTTP listener. ASP.NET Core hosting variant, since
          we're already in-process with Kestrel. Plan G (MCP). -->
     <PackageVersion Include="ModelContextProtocol.AspNetCore" Version="1.2.0" />
+
+    <!-- Playwright + WebApplicationFactory for the dapps.core.uitests
+         project. Drives the real Razor pages + JS in headless Chromium
+         against an in-process Kestrel host (real ephemeral port — the
+         in-memory TestServer doesn't speak to a browser). Browser
+         install happens once via Microsoft.Playwright.Program.Main,
+         no out-of-band setup. -->
+    <PackageVersion Include="Microsoft.Playwright" Version="1.50.0" />
   </ItemGroup>
 
 </Project>
