@@ -209,8 +209,8 @@
     <div class="card">
         <div class="label">Action</div>
         <div class="value">
-            <button id="upd-apply-btn" type="button" onclick="dappsApplyUpdate()" disabled>Apply update</button>
-            <button id="upd-check-btn" type="button" onclick="dappsCheckNow()">Check now</button>
+            <button id="upd-apply-btn" class="btn" type="button" onclick="dappsApplyUpdate()" disabled>Apply update</button>
+            <button id="upd-check-btn" class="btn" type="button" onclick="dappsCheckNow()">Check now</button>
         </div>
         <div class="caption" id="upd-apply-caption">Need an available release to apply</div>
     </div>
@@ -250,7 +250,10 @@
 
                 const lr = s.lastRun;
                 if (!lr) {
-                    last.textContent = 'never';
+                    // No prior apply on record. If we just clicked Apply
+                    // and the marker file is in place, surface that
+                    // immediately rather than leaving "never" up.
+                    last.textContent = s.requestPending ? 'waiting...' : 'never';
                     lastErr.textContent = '';
                     phase.className = 'pill';
                     phase.textContent = '-';
@@ -262,7 +265,18 @@
                     const prettyPhase =
                         lr.phase === 'RolledBack' ? 'rolled back'
                         : (typeof lr.phase === 'string' ? lr.phase.toLowerCase() : '?');
-                    last.textContent = `${prettyPhase} · ${fmtAgo(lr.updated_at)}`;
+                    // After the operator clicks Apply, the marker file is
+                    // written immediately but the privileged updater
+                    // service only ticks once a minute. Until that tick,
+                    // lastRun still describes the *previous* apply (or
+                    // "never"). Surfacing "waiting..." in that interval
+                    // confirms the click was received and tells the
+                    // operator why nothing's happening yet.
+                    if (s.requestPending && !inProgress(lr.phase)) {
+                        last.textContent = 'waiting...';
+                    } else {
+                        last.textContent = `${prettyPhase} · ${fmtAgo(lr.updated_at)}`;
+                    }
                     lastErr.textContent = lr.error ? `error: ${escape(lr.error)}` : '';
                     if (lr.phase === 'Success') { phase.className = 'pill ok'; phase.textContent = 'success'; }
                     else if (lr.phase === 'RolledBack') { phase.className = 'pill warn'; phase.textContent = 'rolled back'; }
@@ -286,6 +300,12 @@
         }
         async function dappsApplyUpdateFn() {
             if (!confirm('Apply the latest available update? Dapps will restart; if it fails to come up the previous binary is restored automatically.')) return;
+            // Flip Last apply to "waiting..." optimistically so the click
+            // gets immediate feedback rather than waiting up to 5s for the
+            // next poll. The poll itself (driven by `s.requestPending`)
+            // will keep it on "waiting..." until the updater service ticks.
+            last.textContent = 'waiting...';
+            lastErr.textContent = '';
             const res = await fetch('/Update/apply', { method: 'POST' });
             if (!res.ok && res.status !== 202 && res.status !== 204) {
                 const text = await res.text();
@@ -776,7 +796,7 @@ else
 <h2>Probed nodes <span id="probes-state" class="pill @(Model.Options.ProbingEnabled ? "ok" : "")">@(Model.Options.ProbingEnabled ? $"every {Model.Options.ProbeIntervalHours}h" : "off")</span></h2>
 <p class="muted-inline">Plan B6.1 - connected-mode probe-and-map. Walks known peers (manual neighbours + AGW-bearer discovered peers) and confirms <code>DAPPSv1&gt;</code> is reachable. <span class="muted">Off by default; enable in <em>Edit configuration</em>. Auto-refreshes every 30s.</span></p>
 <div class="probes-toolbar">
-    <button type="button" onclick="dappsRunSweep()">Probe all now</button>
+    <button class="btn" type="button" onclick="dappsRunSweep()">Probe all now</button>
 </div>
 <table id="probes-table">
     <thead>
@@ -849,8 +869,8 @@ else
                         `<td class="muted">${escape(r.lastError || '-')}</td>` +
                         `<td><input type="checkbox" ${r.optOut ? 'checked' : ''} onchange="dappsSetOptOut('${callQs}', this.checked)" /></td>` +
                         `<td>` +
-                        `<button type="button" onclick="dappsProbeOne('${callQs}')">Probe</button> ` +
-                        `<button type="button" onclick="dappsForgetProbe('${callQs}')">Forget</button>` +
+                        `<button class="btn" type="button" onclick="dappsProbeOne('${callQs}')">Probe</button> ` +
+                        `<button class="btn" type="button" onclick="dappsForgetProbe('${callQs}')">Forget</button>` +
                         `</td>` +
                         `</tr>`;
                 }).join('');
@@ -866,7 +886,7 @@ else
 <h2>Polled nodes <span id="polls-state" class="pill @(Model.Options.ScheduledPollEnabled ? "ok" : "")">@(Model.Options.ScheduledPollEnabled ? $"every {Model.Options.PollIntervalHours}h" : "off")</span></h2>
 <p class="muted-inline">Plan F3b - scheduled poll. Walks AGW-reachable manual neighbours, sends <code>rev</code>, drains queued mail. Off by default; opportunistic poll on every push (<code>OpportunisticPollEnabled</code>) covers most cases for free. Enable in <em>Edit configuration</em> for nodes that don't push often. <span class="muted">Auto-refreshes every 30s.</span></p>
 <div class="probes-toolbar">
-    <button type="button" onclick="dappsRunPollSweep()">Poll all now</button>
+    <button class="btn" type="button" onclick="dappsRunPollSweep()">Poll all now</button>
 </div>
 <table id="polls-table">
     <thead>
@@ -927,8 +947,8 @@ else
                         `<td class="muted">${escape(r.lastError || '-')}</td>` +
                         `<td><input type="checkbox" ${r.optOut ? 'checked' : ''} onchange="dappsSetPollOptOut('${callQs}', this.checked)" /></td>` +
                         `<td>` +
-                        `<button type="button" onclick="dappsPollOne('${callQs}')">Poll</button> ` +
-                        `<button type="button" onclick="dappsForgetPoll('${callQs}')">Forget</button>` +
+                        `<button class="btn" type="button" onclick="dappsPollOne('${callQs}')">Poll</button> ` +
+                        `<button class="btn" type="button" onclick="dappsForgetPoll('${callQs}')">Forget</button>` +
                         `</td>` +
                         `</tr>`;
                 }).join('');
