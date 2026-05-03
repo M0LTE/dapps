@@ -223,7 +223,7 @@ B1-B4 are passive discovery (beacon, listen). B5 is the routing graph on top. B6
 
 Two sub-mechanisms, distinct because they target different propagation realities:
 
-#### B6.1 — Connected-mode probe-and-map *(Phase 1 + Phase 2 done; Phase 2b primitive landed, auto-discovery wiring queued)*
+#### B6.1 — Connected-mode probe-and-map *(done — Phase 1 + Phase 2 + Phase 2b primitive + auto-discovery wiring)*
 
 Phase 1 of B6.1 ships a **direct-connect liveness probe** for every callsign DAPPS already knows about. Sources: manual `DbNeighbour` rows (skipping UDP-routed ones) and AGW-bearer `DbDiscoveredPeer` rows, deduped by callsign with neighbour port winning over peer port. The probe AGW-connects to the target callsign on the chosen port, looks for the `DAPPSv1>` banner (reusing `DappsProtocolClient.ReadInitialPromptAsync`), and disconnects. The result lands in a new `DbProbedNode` row keyed by callsign — `LastProbedAt`, `LastSuccessAt`, `LastError`, `ConsecutiveFailures`, `SuccessCount`, plus an operator `OptOut` flag.
 
@@ -233,7 +233,8 @@ Phase 2 adds a new **`peers` command on the DAPPSv1 protocol** (`who` aliased) a
 
 **Phase 2b — node-prompt-then-`DAPPS` discovery primitive:** `NodeProber.ProbeViaNodeCallAsync` connects to a BPQ NODECALL (not a DAPPS APPLICATION callsign), reads the node banner using a generic "data-then-idle" heuristic (no banner-text pattern-matching — wait until the wire is silent for 500 ms after at least one byte arrived, treat that as "prompt waiting for input"), sends `{applicationCommand}\r` (default `DAPPS`), then runs the regular DAPPSv1 handshake + peers query. Banner-text-agnostic so it works against any BPQ-style prompt regardless of the operator's banner config. MCP tool `probe_via_nodecall(nodeCall, bpqPort, applicationCommand?)` for operator-triggered probing. Three new unit tests pin the idle-detection contract (empty stream → empty result; data + EOF → return data; data + delay + more data → return first batch only).
 
-**Still queued:** auto-discovery wiring — when `SystemOptions.AutoDiscoverViaNodeCall` is on, derive base callsigns from inbound DAPPS beacons and seed them as node-prompt-probe candidates so the scheduler picks them up automatically. Plus: feeding probe results into B5's learned-route graph (currently they live in `DbProbedNode` only).
+**Phase 2b auto-discovery wiring:** `SystemOptions.AutoDiscoverViaNodeCall` (off by default) and `NodePromptApplicationCommand` (default `DAPPS`). When the toggle is on, every inbound AGW DAPPS beacon causes `DiscoveryService.UpsertAsync` to derive the BASE callsign of the source (e.g. heard `M0LTE-9` → seed `M0LTE`) and insert a `DbProbedNode` row with `Source = node-prompt:<source-callsign>` and the BPQ port hint from the beacon. The scheduler picks these up alongside regular probes; `ProbeAndRecordVerboseAsync` looks up the existing row first and dispatches to `ProbeViaNodeCallAsync` when the source flag matches, falling back to the standard DAPPS-callsign path otherwise. Self-callsign filter prevents seeding our own NODECALL. Existing probe rows are never clobbered — auto-seed only fires when no row exists. Both knobs surfaced via `update_config` MCP and the `/Config` form. UDP beacons are skipped (UDP isn't AGW-routable).
+**Still queued:** feeding probe results into B5's learned-route graph (currently they live in `DbProbedNode` only).
 
 **Convention:** "DAPPS lives here" = an `APPLICATION` line whose alias is `DAPPS` (typing `DAPPS` at the node prompt connects to the local DAPPSv1 instance). Already what we recommend; documented in the install README. Phase 2b leans on this.
 

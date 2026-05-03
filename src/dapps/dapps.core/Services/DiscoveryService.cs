@@ -458,5 +458,46 @@ public sealed class DiscoveryService(
             LastSeen = timeProvider.GetUtcNow().UtcDateTime,
         };
         await database.UpsertDiscoveredPeer(row);
+
+        // Plan B6.1 Phase 2b — auto-seed node-prompt candidates from
+        // AGW beacons. Derive the BASE callsign of the beacon source
+        // (the bit before the SSID hyphen) and register it as a probe
+        // target whose Source flag tells the scheduler to use the
+        // node-prompt navigation path. UDP beacons are skipped — we
+        // can't reach the NODECALL via UDP, only via AGW.
+        if (options.CurrentValue.AutoDiscoverViaNodeCall
+            && beacon.Bearer is AgwBearerHint agw)
+        {
+            await SeedNodePromptCandidateAsync(beacon.Callsign, agw.BpqPort);
+        }
+    }
+
+    private async Task SeedNodePromptCandidateAsync(string sourceCallsign, int bpqPort)
+    {
+        var baseCallsign = sourceCallsign.Split('-')[0].ToUpperInvariant();
+        var ourBase = options.CurrentValue.Callsign.Split('-')[0];
+        if (string.Equals(baseCallsign, ourBase, StringComparison.OrdinalIgnoreCase))
+        {
+            // Don't seed candidates for ourselves — we'd be probing
+            // our own NODECALL, which doesn't loop through L2.
+            return;
+        }
+
+        // Skip if we already track ANY probe state for this base callsign
+        // — direct, transitive, or a previous node-prompt seed. The
+        // existing row's Source is more authoritative than an
+        // auto-seeded one, so don't clobber.
+        var existing = await database.GetProbedNode(baseCallsign);
+        if (existing is not null) return;
+
+        await database.UpsertProbedNode(new DbProbedNode
+        {
+            Callsign = baseCallsign,
+            LastBpqPort = bpqPort,
+            Source = $"node-prompt:{sourceCallsign}",
+        });
+        logger.LogInformation(
+            "Auto-discovered node-prompt candidate: {0} (derived from beacon {1} on AGW port {2})",
+            baseCallsign, sourceCallsign, bpqPort);
     }
 }

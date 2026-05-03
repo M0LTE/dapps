@@ -93,6 +93,8 @@ public static class DbStartup
         InsertIfNotPresent(db, options, "ProbeQuietWindowSeconds", "300", logger);
         InsertIfNotPresent(db, options, "HeartbeatEnabled", "true", logger);
         InsertIfNotPresent(db, options, "HeartbeatIntervalSeconds", "60", logger);
+        InsertIfNotPresent(db, options, "AutoDiscoverViaNodeCall", "false", logger);
+        InsertIfNotPresent(db, options, "NodePromptApplicationCommand", "DAPPS", logger);
 
         ValidateRequiredConfig(db, logger);
 

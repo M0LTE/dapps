@@ -249,12 +249,29 @@ public sealed class ProbeSchedulerService(
     /// <summary>Same as <see cref="ProbeAndRecordAsync"/> but also
     /// returns the underlying <see cref="NodeProber.ProbeResult"/> so
     /// callers (Plan M PR-D — exploration tools) can reason about the
-    /// raw peers exchange. Persistence happens identically.</summary>
+    /// raw peers exchange. Persistence happens identically.
+    ///
+    /// Plan B6.1 Phase 2b — dispatches to the node-prompt path when the
+    /// existing <see cref="DbProbedNode"/> row's <see cref="DbProbedNode.Source"/>
+    /// starts with <c>node-prompt:</c>. That marker is set by
+    /// <see cref="DiscoveryService"/>'s auto-discovery seeder (or by an
+    /// operator who manually inserted the row). Direct callers
+    /// (operator-triggered <c>run_probe</c>, regular sweeps) hit the
+    /// standard DAPPS-callsign path automatically when no such marker
+    /// is present.</summary>
     public async Task<(DbProbedNode Row, NodeProber.ProbeResult Result)> ProbeAndRecordVerboseAsync(
         string localCallsign, string remoteCallsign, int bpqPort, CancellationToken ct,
         bool fetchPeers = true)
     {
-        var result = await prober.ProbeAsync(localCallsign, remoteCallsign, bpqPort, ct, fetchPeers);
+        var existing = await database.GetProbedNode(remoteCallsign);
+        var useNodePrompt = existing is not null
+            && existing.Source.StartsWith("node-prompt:", StringComparison.OrdinalIgnoreCase);
+
+        var result = useNodePrompt
+            ? await prober.ProbeViaNodeCallAsync(localCallsign, remoteCallsign, bpqPort, ct,
+                applicationCommand: options.CurrentValue.NodePromptApplicationCommand,
+                fetchPeers: fetchPeers)
+            : await prober.ProbeAsync(localCallsign, remoteCallsign, bpqPort, ct, fetchPeers);
         var row = await RecordResultAsync(result);
         if (result.Success && result.DiscoveredPeers.Count > 0)
         {

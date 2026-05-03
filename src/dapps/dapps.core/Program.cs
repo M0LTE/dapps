@@ -114,6 +114,12 @@ builder.Services.AddOptions<SystemOptions>().Configure<OptionsRepo, ILogger<Syst
         && hbInt >= 10
         ? hbInt
         : 60;
+    o.AutoDiscoverViaNodeCall = bool.TryParse(
+        options.SingleOrDefault(opt => opt.Option == "AutoDiscoverViaNodeCall")?.Value, out var advnc) && advnc;
+    o.NodePromptApplicationCommand = options.SingleOrDefault(opt => opt.Option == "NodePromptApplicationCommand")?.Value
+        is { Length: > 0 } npac
+        ? npac
+        : "DAPPS";
 
     logger.LogInformation($"Callsign: {o.Callsign}");
     logger.LogInformation($"BPQ AGW: {o.NodeHost}:{o.AgwPort} (default port byte {o.DefaultBpqPort})");
