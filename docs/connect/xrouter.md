@@ -48,7 +48,7 @@ Restart XRouter to pick up `ACCESS.SYS` changes.
 
 ## Step 4: tell DAPPS where XRouter is
 
-In DAPPS's environment (systemd unit, docker compose, shell):
+In DAPPS's environment (systemd unit, shell, etc.):
 
 ```
 DAPPS_CALLSIGN=M0LTE-7
@@ -61,7 +61,7 @@ DAPPS_DEFAULT_BPQ_PORT=0
 
 `DAPPS_AGW_PORT` matches the `AGWPORT` you set in step 1.
 
-`DAPPS_DEFAULT_BPQ_PORT` is named for historical reasons - it's the byte AGW uses to identify which radio port to originate sessions on. The XRouter mapping is the order ports appear in `XROUTER.CFG`'s `PORT=N` blocks (port 1 -> byte 0, port 2 -> byte 1, etc.). Pick the port you want DAPPS's outbound sessions to go over.
+`DAPPS_DEFAULT_BPQ_PORT` is the byte AGW uses to identify which radio port to originate sessions on. With XRouter, the byte numbering is 0-indexed against the order ports appear in `XROUTER.CFG`'s `PORT=N` blocks: `PORT=1` -> byte 0, `PORT=2` -> byte 1, etc. Pick the port you want DAPPS's outbound sessions to go over.
 
 ## Step 5: start DAPPS, watch for AGW registration
 
@@ -81,7 +81,7 @@ nc -vz <xrouter-host> 8000
 
 ## Step 6: prove the inbound side
 
-From another packet node (or another XRouter / BPQ on the same air):
+From any other node on the same air:
 
 ```
 c <your-DAPPS-callsign>
