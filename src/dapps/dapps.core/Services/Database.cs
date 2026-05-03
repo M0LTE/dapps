@@ -685,6 +685,8 @@ public class Database(
         await Upsert(connection, options, systemOptions.ProbeQuietWindowSeconds.ToString(), nameof(systemOptions.ProbeQuietWindowSeconds));
         await Upsert(connection, options, systemOptions.HeartbeatEnabled.ToString(), nameof(systemOptions.HeartbeatEnabled));
         await Upsert(connection, options, systemOptions.HeartbeatIntervalSeconds.ToString(), nameof(systemOptions.HeartbeatIntervalSeconds));
+        await Upsert(connection, options, systemOptions.AutoDiscoverViaNodeCall.ToString(), nameof(systemOptions.AutoDiscoverViaNodeCall));
+        await Upsert(connection, options, systemOptions.NodePromptApplicationCommand, nameof(systemOptions.NodePromptApplicationCommand));
     }
 
     private static async Task Upsert(SQLiteAsyncConnection connection, List<DbSystemOption> options, string value, string field)
@@ -763,6 +765,12 @@ public class Database(
                 && int.TryParse(hbi, out var hbiParsed) && hbiParsed >= 10
                 ? hbiParsed
                 : 60,
+            AutoDiscoverViaNodeCall = options.TryGetValue(nameof(SystemOptions.AutoDiscoverViaNodeCall), out var advnc)
+                && bool.TryParse(advnc, out var advncParsed) && advncParsed,
+            NodePromptApplicationCommand = options.TryGetValue(nameof(SystemOptions.NodePromptApplicationCommand), out var npac)
+                && !string.IsNullOrEmpty(npac)
+                ? npac
+                : "DAPPS",
         };
     }
 

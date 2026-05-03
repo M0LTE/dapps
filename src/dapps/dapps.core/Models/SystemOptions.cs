@@ -146,6 +146,25 @@ public class SystemOptions
     public int PollIntervalHours { get; set; } = 6;
 
     /// <summary>
+    /// Plan B6.1 Phase 2b — when true, every inbound AGW DAPPS beacon
+    /// seeds a node-prompt-probe candidate for the BASE callsign of the
+    /// beacon's source (e.g. heard <c>M0LTE-9</c> → seed <c>M0LTE</c>).
+    /// The probe scheduler then picks them up alongside regular probe
+    /// targets, navigates the BPQ node prompt, and runs the standard
+    /// peers exchange. Useful for expanding the discoverable graph
+    /// beyond direct DAPPS beacons. Off by default — opt in.
+    /// </summary>
+    public bool AutoDiscoverViaNodeCall { get; set; } = false;
+
+    /// <summary>
+    /// Application command typed at the BPQ node prompt to enter the
+    /// DAPPS APPLICATION slot. Default <c>DAPPS</c> matches the
+    /// recommended convention. Operators with a different
+    /// <c>APPLICATIONS=</c> name override here.
+    /// </summary>
+    public string NodePromptApplicationCommand { get; set; } = "DAPPS";
+
+    /// <summary>
     /// Plan C3 PR-B — periodic MQTT heartbeat publish. When true, an
     /// <see cref="dapps.core.Services.OperationalSnapshot"/> is
     /// serialised and published as a retained message on
