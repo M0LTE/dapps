@@ -76,14 +76,18 @@ declare -A AXUDP_PORT=( [A]=11001 [B]=11002 [C]=11003 [D]=11004 )
 declare -A TELNET_PORT=( [A]=28011 [C]=28013 )
 
 # Container's own NODECALL (the packet node's AX.25 callsign).
-declare -A NODECALL=( [A]=G0HUB1   [B]=G0SPK2-1 [C]=G0HUB3   [D]=G0SPK4-1 )
+# XRouter's callsign validator enforces standard amateur format
+# (prefix letters+digit, suffix letters only) - no embedded digits in
+# the suffix. So we use 5-char shapes like G0NDA-1, not G0SPK2-1.
+declare -A NODECALL=( [A]=G0NDA-1 [B]=G0NDB-1 [C]=G0NDC-1 [D]=G0NDD-1 )
 
 # Container's NODEALIAS (no SSID, max 6 chars).
-declare -A NODEALIAS=( [A]=HUB1 [B]=SPK2 [C]=HUB3 [D]=SPK4 )
+declare -A NODEALIAS=( [A]=NDA [B]=NDB [C]=NDC [D]=NDD )
 
 # DAPPS daemon callsign attached to this container (must NOT collide
-# with NODECALL / CONSOLECALL / CHATCALL on the same container).
-declare -A DAPPS_CALL=( [A]=G0DAPA-1 [B]=G0DAPB-1 [C]=G0DAPC-1 [D]=G0DAPD-1 )
+# with NODECALL / CONSOLECALL / CHATCALL on the same container, and
+# must satisfy XR's callsign validator on XR containers).
+declare -A DAPPS_CALL=( [A]=G0DPA-1 [B]=G0DPB-1 [C]=G0DPC-1 [D]=G0DPD-1 )
 
 # DAPPS daemon HTTP / MQTT ports.
 declare -A HTTP_PORT=( [A]=17001 [B]=17002 [C]=17003 [D]=17004 )
@@ -154,6 +158,14 @@ render_bpq_config() {
     for p in ${PARTNERS[$n]}; do
         routes+="${NODECALL[$p]},200,2"$'\n'
     done
+    # BPQ APPLICATIONS line for the locally-attached DAPPS callsign.
+    # Without this, BPQ refuses inbound L2 connects to the DAPPS
+    # callsign with RETRYOUT - the APPLICATION declaration is what
+    # tells BPQ "accept connects to this call and dispatch them via
+    # AGW to whichever client registered it." XR has the opposite
+    # rule (no APPL block, just X-frame registration); BPQ requires
+    # the explicit declaration.
+    local dapps_call=${DAPPS_CALL[$n]}
     cat <<EOF
 SIMPLE=1
 NODECALL=$nodecall
@@ -163,6 +175,9 @@ NODESINTERVAL=1
 AGWPORT=$agw
 AGWSESSIONS=20
 AGWMASK=1
+APPLICATIONS=DAPPS
+APPL1CALL=$dapps_call
+APPL1ALIAS=DAPPS
 
 PORT
  ID=Telnet
@@ -263,29 +278,54 @@ EOF
 # ── container start / stop ────────────────────────────────────────────
 ctr_dir() { echo "$SIM_DIR/$1"; }
 
+# All four containers share node A's netns (pattern lifted from
+# TwoInstanceLinbpqFixture). A publishes every port we want exposed to
+# the WSL2 / host side; B/C/D run with --network=container:<A's-id>.
+# Loopback (127.0.0.1) reaches all four containers' listeners. The
+# BPQ AXUDP MAP entries can address partners as 127.0.0.1:<UDPLOCAL>
+# without container-IP discovery, and AGW ports are reachable from
+# the host-side DAPPS daemons.
+#
+# --network=host fails on WSL2 / Docker Desktop because Docker
+# Desktop's "host" is its own Linux VM, not WSL2 userspace. The
+# shared-netns pattern works under both Docker Desktop and native
+# Linux Docker, so it's the portable choice.
 start_container() {
     local n=$1
     local kind=${KIND[$n]} ctr=${CTR[$n]}
     local d; d="$(ctr_dir "$n")"
-    rm -rf "$d"; mkdir -p "$d"
+    if [ -d "$d" ]; then
+        docker run --rm -v "$d:/wipe" alpine sh -c 'rm -rf /wipe/* /wipe/.[!.]* 2>/dev/null' 2>/dev/null || true
+    fi
+    mkdir -p "$d"
+
+    # Network-mode arg: A creates a fresh netns + publishes every port
+    # any container in the topology will bind. B/C/D join A's netns.
+    local netflags=()
+    if [ "$n" = "A" ]; then
+        netflags+=( -p "127.0.0.1:${AGW_PORT[A]}:${AGW_PORT[A]}" )
+        netflags+=( -p "127.0.0.1:${AGW_PORT[B]}:${AGW_PORT[B]}" )
+        netflags+=( -p "127.0.0.1:${AGW_PORT[C]}:${AGW_PORT[C]}" )
+        netflags+=( -p "127.0.0.1:${AGW_PORT[D]}:${AGW_PORT[D]}" )
+        netflags+=( -p "127.0.0.1:${TELNET_PORT[A]}:${TELNET_PORT[A]}" )
+        netflags+=( -p "127.0.0.1:${TELNET_PORT[C]}:${TELNET_PORT[C]}" )
+    else
+        netflags+=( --network "container:${CTR[A]}" )
+    fi
 
     if [ "$kind" = "bpq" ]; then
         render_bpq_config "$n" > "$d/bpq32.cfg"
-        echo ">>> Starting BPQ container $ctr (AGW :$((AGW_PORT[$n])), telnet :$((TELNET_PORT[$n])), AXUDP :$((AXUDP_PORT[$n])))"
-        docker run -d --name "$ctr" --network host \
+        echo ">>> Starting BPQ container $ctr (AGW :${AGW_PORT[$n]}, telnet :${TELNET_PORT[$n]:-(none)}, AXUDP :${AXUDP_PORT[$n]})"
+        docker run -d --name "$ctr" "${netflags[@]}" \
             -v "$d:/data" "$BPQ_IMAGE" >/dev/null
     elif [ "$kind" = "xr" ]; then
         render_xr_config "$n" > "$d/XROUTER.CFG"
-        # Pre-seed ACCESS.SYS via docker cp once the container is up;
-        # the entrypoint creates /data/ACCESS.SYS on first run if
-        # missing, which would be after our config check, so it's
-        # easier to write our version after the container exists.
-        echo ">>> Starting XRouter container $ctr (AGW :$((AGW_PORT[$n])), AXUDP :$((AXUDP_PORT[$n])))"
-        docker run -d --name "$ctr" --network host \
+        echo ">>> Starting XRouter container $ctr (AGW :${AGW_PORT[$n]}, AXUDP :${AXUDP_PORT[$n]})"
+        docker run -d --name "$ctr" "${netflags[@]}" \
             -v "$d:/data" "$XR_IMAGE" >/dev/null
-        # Wait briefly for the entrypoint to copy skel files in,
-        # then write our ACCESS.SYS over the default and restart.
-        sleep 2
+        # ACCESS.SYS for permissive loopback AGW. Entrypoint seeds the
+        # skel ACCESS.SYS on first run; we overwrite then restart.
+        sleep 3
         render_xr_access_sys | docker cp - "$ctr:/data/ACCESS.SYS" 2>/dev/null \
             || echo "    (warning: ACCESS.SYS write failed; loopback should still work)"
         docker restart "$ctr" >/dev/null
@@ -297,14 +337,18 @@ start_container() {
 wait_for_agw() {
     local n=$1
     local port=${AGW_PORT[$n]}
-    for _ in $(seq 1 60); do
+    # 90 seconds. BPQ on a non-standard AGW port can take a bit longer
+    # than 8000 to bind, and XRouter does an entrypoint config-file
+    # seed on first run that adds a few seconds.
+    for _ in $(seq 1 180); do
         if (echo > "/dev/tcp/127.0.0.1/$port") 2>/dev/null; then
             return 0
         fi
         sleep 0.5
     done
     echo "!!! AGW on $n did not come up on :$port" >&2
-    docker logs "${CTR[$n]}" 2>&1 | tail -20
+    docker ps -a --filter "name=${CTR[$n]}" >&2
+    docker logs "${CTR[$n]}" 2>&1 | tail -30 >&2
     return 1
 }
 
@@ -329,7 +373,7 @@ start_dapps() {
             DAPPS_CALLSIGN="${DAPPS_CALL[$n]}" \
             DAPPS_NODE_HOST=127.0.0.1 \
             DAPPS_AGW_PORT="${AGW_PORT[$n]}" \
-            DAPPS_DEFAULT_BPQ_PORT=1 \
+            DAPPS_DEFAULT_BPQ_PORT="$([ "${KIND[$n]}" = "xr" ] && echo 0 || echo 1)" \
             DAPPS_MQTT_PORT="${MQTT_PORT[$n]}" \
             DAPPS_UDP_LISTEN_PORT=0 \
             DAPPS_AUTH_REQUIRED=false \
@@ -382,12 +426,16 @@ configure_dapps() {
     curl -fsS -o /dev/null -c "$cookie" -X POST "$base/Login" \
         --data-urlencode "Password=$SIM_PWD"
 
-    # Add neighbours: each direct partner's DAPPS callsign with BPQ
-    # port byte 1 (AGW port 1 = AXUDP, since port 0 is Telnet).
+    # Add neighbours: each direct partner's DAPPS callsign with the
+    # right AGW port byte for the local container kind. BPQ has
+    # Telnet (byte 0) + AXUDP (byte 1) so DAPPS uses byte 1. XR has
+    # only the AXUDP port so DAPPS uses byte 0.
+    local port_byte=1
+    if [ "${KIND[$n]}" = "xr" ]; then port_byte=0; fi
     for nb in ${NEIGHBOURS[$n]}; do
         curl -fsS -o /dev/null -b "$cookie" -X POST "$base/Neighbours" \
             -H 'content-type: application/json' \
-            -d "{\"Callsign\":\"${DAPPS_CALL[$nb]}\",\"BpqPort\":1,\"UdpEndpoint\":null}"
+            -d "{\"Callsign\":\"${DAPPS_CALL[$nb]}\",\"BpqPort\":$port_byte,\"UdpEndpoint\":null}"
     done
 
     # Static route hints so multi-hop paths are deterministic. Format
@@ -464,11 +512,22 @@ cmd_send() {
 
 cmd_exercise() {
     echo "=== Mixed-bearer exercise ==="
+    echo ""
+    echo "Working paths (BPQ-side originated):"
     cmd_send A B "1-hop-BPQ-to-XR"
     cmd_send A C "1-hop-BPQ-to-BPQ"
     cmd_send A D "2-hop-BPQ-BPQ-XR"
+    echo ""
+    echo "XR-side originated paths:"
+    echo "  *** Known broken pending the RHPv2 bearer (see plan.md).        ***"
+    echo "  *** XRouter scopes AGW callsign authorisation per-TCP-connection ***"
+    echo "  *** so DAPPS's per-send-fresh-connection pattern collides with  ***"
+    echo "  *** AgwInboundService's standing registration. The fix is the   ***"
+    echo "  *** RHPv2 bearer rather than refactoring AGW; XR ships RHPv2    ***"
+    echo "  *** natively and the rhp2lib-net client library is available.   ***"
     cmd_send B C "2-hop-XR-BPQ-BPQ"
     cmd_send B D "3-hop-XR-BPQ-BPQ-XR-mixed"
+    echo ""
     echo "=== Final inboxes ==="
     cmd_verify
 }

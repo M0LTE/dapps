@@ -40,15 +40,38 @@ public sealed class AgwOutboundTransport(string host, int port, ILoggerFactory l
             // field - the remote ignores them and we time out with
             // RETRYOUT. (linbpq's own AGW two-instance test does this for
             // the same reason.)
+            //
+            // Reply payload semantics differ slightly between AGW hosts:
+            //   BPQ:     0x01 on success.
+            //   XRouter: 0x01 if the callsign was free and is now ours,
+            //            0x00 if it's already in use - including by our
+            //            own AgwInboundService on a separate AGW
+            //            connection (XR scopes registration per-TCP-
+            //            connection, BPQ tolerates duplicate registers
+            //            from anyone).
+            // For DAPPS specifically, "already registered" is the normal
+            // state when AgwInboundService is up. Treat both replies as
+            // OK and proceed to the C-frame; if the host actually
+            // rejects the connect on the source field, we'll see a 'd'
+            // failure on the connect-confirm read instead.
             logger.LogDebug("AGW: registering {local}", localCallsign);
             await framing.WriteFrameAsync(
                 new AgwFrame(0, 'X', 0, localCallsign, "", []),
                 stoppingToken);
             var registerReply = await framing.ReadFrameAsync(stoppingToken);
-            if (registerReply.Kind != 'X' || registerReply.Payload.Length != 1 || registerReply.Payload[0] != 0x01)
+            if (registerReply.Kind != 'X' || registerReply.Payload.Length != 1)
             {
                 throw new IOException(
-                    $"AGW register {localCallsign} failed (kind '{registerReply.Kind}', payload [{string.Join(',', registerReply.Payload)}])");
+                    $"AGW register {localCallsign} unexpected reply (kind '{registerReply.Kind}', payload [{string.Join(',', registerReply.Payload)}])");
+            }
+            if (registerReply.Payload[0] != 0x01 && registerReply.Payload[0] != 0x00)
+            {
+                throw new IOException(
+                    $"AGW register {localCallsign} failed (kind 'X', payload [{registerReply.Payload[0]}])");
+            }
+            if (registerReply.Payload[0] == 0x00)
+            {
+                logger.LogDebug("AGW: {local} already registered on this host (e.g. by AgwInboundService); proceeding", localCallsign);
             }
 
             logger.LogInformation("AGW: requesting {local}->{remote} on port {p}", localCallsign, remoteCallsign, portByte);
