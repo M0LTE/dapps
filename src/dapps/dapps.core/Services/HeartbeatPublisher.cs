@@ -24,6 +24,7 @@ public sealed class HeartbeatPublisher(
     IOptionsMonitor<SystemOptions> options,
     OperationalSnapshotBuilder snapshotBuilder,
     MqttBrokerService mqtt,
+    TransmissionAuditService transmissionAudit,
     TimeProvider timeProvider,
     ILogger<HeartbeatPublisher> logger) : BackgroundService
 {
@@ -59,11 +60,17 @@ public sealed class HeartbeatPublisher(
                 continue;
             }
 
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            var success = false;
+            var bytes = 0;
+            string errorTag = "";
             try
             {
                 var snapshot = await snapshotBuilder.BuildAsync(stoppingToken);
                 var payload = JsonSerializer.SerializeToUtf8Bytes(snapshot, JsonOptions);
-                await mqtt.PublishRetainedAsync(Topic, payload, stoppingToken);
+                bytes = payload.Length;
+                success = await mqtt.PublishRetainedAsync(Topic, payload, stoppingToken);
+                if (!success) errorTag = "broker-not-ready";
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -72,6 +79,19 @@ public sealed class HeartbeatPublisher(
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "Heartbeat publish failed");
+                errorTag = ex.GetType().Name;
+            }
+            finally
+            {
+                sw.Stop();
+                await transmissionAudit.RecordAsync(
+                    kind: "heartbeat",
+                    bearer: "mqtt",
+                    reason: "periodic heartbeat publish",
+                    success: success,
+                    bytes: bytes,
+                    durationMs: (int)sw.ElapsedMilliseconds,
+                    errorTag: errorTag);
             }
 
             var interval = TimeSpan.FromSeconds(Math.Max(10, opts.HeartbeatIntervalSeconds));

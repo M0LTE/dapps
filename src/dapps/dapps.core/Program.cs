@@ -171,7 +171,8 @@ builder.Services.AddMcpServer()
     .WithTools<dapps.core.Mcp.DappsConfigTools>()
     .WithTools<dapps.core.Mcp.DappsDiagnosticTools>()
     .WithTools<dapps.core.Mcp.DappsExplorationTools>()
-    .WithTools<dapps.core.Mcp.DappsUpdateTools>();
+    .WithTools<dapps.core.Mcp.DappsUpdateTools>()
+    .WithTools<dapps.core.Mcp.DappsAuditTools>();
 
 builder.Services.AddSingleton<UpdateChecker>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<UpdateChecker>());
@@ -191,6 +192,7 @@ builder.Services.AddSingleton<AppTokenStore>();
 builder.Services.AddSingleton<AdminPasswordStore>();
 builder.Services.AddSingleton<InboundEventBus>();
 builder.Services.AddSingleton<OperationalMetrics>();
+builder.Services.AddSingleton<TransmissionAuditService>();
 
 // Cookie auth for the dashboard / admin endpoints. Long sliding
 // expiry (90 days) - this is a sysop's home node, the cookie's

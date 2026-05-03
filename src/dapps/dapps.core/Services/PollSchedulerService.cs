@@ -24,7 +24,8 @@ public sealed class PollSchedulerService(
     IOptionsMonitor<SystemOptions> options,
     TimeProvider timeProvider,
     ILogger<PollSchedulerService> logger,
-    OperationalMetrics? metrics = null) : BackgroundService
+    OperationalMetrics? metrics = null,
+    TransmissionAuditService? transmissionAudit = null) : BackgroundService
 {
     /// <summary>Delay before the first sweep after startup. Long enough
     /// for AGW reconnect, MQTT broker init to settle. Tunable for
@@ -98,10 +99,28 @@ public sealed class PollSchedulerService(
     /// <see cref="DbPolledNode"/>. Used by the scheduler and the
     /// on-demand REST endpoint.</summary>
     public async Task<DbPolledNode> PollAndRecordAsync(
-        string localCallsign, string remoteCallsign, int bpqPort, CancellationToken ct)
+        string localCallsign, string remoteCallsign, int bpqPort, CancellationToken ct,
+        string reason = "scheduled poll sweep")
     {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         var result = await poller.PollAsync(localCallsign, remoteCallsign, bpqPort, ct);
-        return await RecordResultAsync(result);
+        sw.Stop();
+        var row = await RecordResultAsync(result);
+        if (transmissionAudit is { } ta)
+        {
+            await ta.RecordAsync(
+                kind: "poll",
+                bearer: "agw",
+                channelKey: bpqPort.ToString(),
+                targetCallsign: remoteCallsign,
+                reason: result.Success
+                    ? $"{reason} (drained {result.MessagesDrained})"
+                    : reason,
+                success: result.Success,
+                durationMs: (int)sw.ElapsedMilliseconds,
+                errorTag: result.Success ? "" : (result.Error ?? "unknown"));
+        }
+        return row;
     }
 
     /// <summary>Apply a result to the persisted row. Preserves

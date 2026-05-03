@@ -12,6 +12,7 @@
 - [**Tune**](tune.md) - airtime budgets, probe strategies, fragment thresholds, routing algorithm.
 - [**Discovery & routing**](discovery-and-routing.md) - channels, beacons, probes, neighbours, route hints.
 - [**Operate**](operate.md) - dashboard, `/Health` and `/Operational`, MQTT heartbeat.
+- [**Audit log**](audit.md) - persistent record of every transmission, with the reason for it.
 - [**Update**](update.md) - banner, one-click apply, MCP-driven, rollback.
 - [**MCP for assistants**](mcp.md) - let an AI assistant drive the operator surface.
 - [**App developers**](app-developers/index.md) - concepts, tutorial, reference, sample gallery.

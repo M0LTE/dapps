@@ -30,7 +30,8 @@ public sealed class DiscoveryService(
     ILoggerFactory loggerFactory,
     ILogger<DiscoveryService> logger,
     AirtimeAccountant? airtime = null,
-    OperationalMetrics? metrics = null) : BackgroundService
+    OperationalMetrics? metrics = null,
+    TransmissionAuditService? transmissionAudit = null) : BackgroundService
 {
     private static readonly TimeSpan SweepInterval = TimeSpan.FromMinutes(1);
 
@@ -201,15 +202,35 @@ public sealed class DiscoveryService(
                         Bearer: kv.Key == "udp"
                             ? new UdpBearerHint(ch.ChannelKey)
                             : new AgwBearerHint(0));
+                    var beaconSw = System.Diagnostics.Stopwatch.StartNew();
+                    var beaconOk = false;
+                    string beaconErr = "";
                     try
                     {
                         await bearer.AnnounceAsync(beacon, ch.ChannelKey, stoppingToken);
+                        beaconOk = true;
                     }
                     catch (Exception ex)
                     {
                         logger.LogWarning(ex,
                             "DiscoveryService: announce on {0}/{1} failed",
                             kv.Key, ch.ChannelKey);
+                        beaconErr = ex.GetType().Name;
+                    }
+                    finally
+                    {
+                        beaconSw.Stop();
+                        if (transmissionAudit is { } ta1)
+                        {
+                            await ta1.RecordAsync(
+                                kind: "beacon",
+                                bearer: kv.Key,
+                                channelKey: ch.ChannelKey,
+                                reason: "scheduled beacon emit",
+                                success: beaconOk,
+                                durationMs: (int)beaconSw.ElapsedMilliseconds,
+                                errorTag: beaconErr);
+                        }
                     }
                     nextEmit[key] = now.AddSeconds(Math.Max(5, ch.BeaconIntervalSeconds));
                 }
@@ -237,9 +258,13 @@ public sealed class DiscoveryService(
                     }
 
                     var solicit = new SolicitFrame(options.CurrentValue.Callsign);
+                    var solSw = System.Diagnostics.Stopwatch.StartNew();
+                    var solOk = false;
+                    string solErr = "";
                     try
                     {
                         await bearer.SolicitAsync(solicit, ch.ChannelKey, stoppingToken);
+                        solOk = true;
                         logger.LogInformation(
                             "DiscoveryService: scheduled solicit on {0}/{1}",
                             kv.Key, ch.ChannelKey);
@@ -249,6 +274,22 @@ public sealed class DiscoveryService(
                         logger.LogWarning(ex,
                             "DiscoveryService: scheduled solicit on {0}/{1} failed",
                             kv.Key, ch.ChannelKey);
+                        solErr = ex.GetType().Name;
+                    }
+                    finally
+                    {
+                        solSw.Stop();
+                        if (transmissionAudit is { } ta2)
+                        {
+                            await ta2.RecordAsync(
+                                kind: "solicit",
+                                bearer: kv.Key,
+                                channelKey: ch.ChannelKey,
+                                reason: "scheduled solicit cadence",
+                                success: solOk,
+                                durationMs: (int)solSw.ElapsedMilliseconds,
+                                errorTag: solErr);
+                        }
                     }
                     nextSolicit[key] = now.AddSeconds(Math.Max(15, ch.SolicitIntervalSeconds));
                 }
@@ -389,10 +430,38 @@ public sealed class DiscoveryService(
                 Bearer: bearer.Name == "udp"
                     ? new UdpBearerHint(ch.ChannelKey)
                     : new AgwBearerHint(0));
-            await bearer.AnnounceAsync(beacon, ch.ChannelKey, ct);
-            logger.LogInformation(
-                "DiscoveryService: replied to solicit from {0} on {1}/{2} after {3}ms",
-                rs.Solicit.Callsign, bearer.Name, rs.ChannelKey, delayMs);
+            var rsw = System.Diagnostics.Stopwatch.StartNew();
+            var rok = false;
+            string rerr = "";
+            try
+            {
+                await bearer.AnnounceAsync(beacon, ch.ChannelKey, ct);
+                rok = true;
+                logger.LogInformation(
+                    "DiscoveryService: replied to solicit from {0} on {1}/{2} after {3}ms",
+                    rs.Solicit.Callsign, bearer.Name, rs.ChannelKey, delayMs);
+            }
+            catch (Exception inner) when (inner is not OperationCanceledException)
+            {
+                rerr = inner.GetType().Name;
+                throw;
+            }
+            finally
+            {
+                rsw.Stop();
+                if (transmissionAudit is { } ta3)
+                {
+                    await ta3.RecordAsync(
+                        kind: "solicit-reply",
+                        bearer: bearer.Name,
+                        channelKey: rs.ChannelKey,
+                        targetCallsign: rs.Solicit.Callsign,
+                        reason: $"solicit-reply to {rs.Solicit.Callsign}",
+                        success: rok,
+                        durationMs: (int)rsw.ElapsedMilliseconds,
+                        errorTag: rerr);
+                }
+            }
         }
         catch (OperationCanceledException) { /* shutdown */ }
         catch (Exception ex)
@@ -421,9 +490,36 @@ public sealed class DiscoveryService(
                 $"No active discovery bearer named '{bearerName}'");
         }
         var solicit = new SolicitFrame(options.CurrentValue.Callsign);
-        await bearer.SolicitAsync(solicit, channelKey, ct);
-        logger.LogInformation(
-            "DiscoveryService: emitted solicit on {0}/{1}", bearerName, channelKey);
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var ok = false;
+        string err = "";
+        try
+        {
+            await bearer.SolicitAsync(solicit, channelKey, ct);
+            ok = true;
+            logger.LogInformation(
+                "DiscoveryService: emitted solicit on {0}/{1}", bearerName, channelKey);
+        }
+        catch (Exception ex)
+        {
+            err = ex.GetType().Name;
+            throw;
+        }
+        finally
+        {
+            sw.Stop();
+            if (transmissionAudit is { } ta)
+            {
+                await ta.RecordAsync(
+                    kind: "solicit",
+                    bearer: bearerName,
+                    channelKey: channelKey,
+                    reason: "operator-triggered solicit",
+                    success: ok,
+                    durationMs: (int)sw.ElapsedMilliseconds,
+                    errorTag: err);
+            }
+        }
     }
 
     /// <summary>Bearers currently running; populated in

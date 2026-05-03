@@ -30,7 +30,8 @@ public sealed class ProbeSchedulerService(
     ILogger<ProbeSchedulerService> logger,
     AirtimeAccountant? airtime = null,
     OutboundActivityTracker? activityTracker = null,
-    OperationalMetrics? metrics = null) : BackgroundService
+    OperationalMetrics? metrics = null,
+    TransmissionAuditService? transmissionAudit = null) : BackgroundService
 {
     /// <summary>
     /// Plan B7 - clock the strategy dispatcher consults for "what time
@@ -240,9 +241,10 @@ public sealed class ProbeSchedulerService(
     /// </summary>
     public async Task<DbProbedNode> ProbeAndRecordAsync(
         string localCallsign, string remoteCallsign, int bpqPort, CancellationToken ct,
-        bool fetchPeers = true)
+        bool fetchPeers = true,
+        string reason = "scheduled probe sweep")
     {
-        var (row, _) = await ProbeAndRecordVerboseAsync(localCallsign, remoteCallsign, bpqPort, ct, fetchPeers);
+        var (row, _) = await ProbeAndRecordVerboseAsync(localCallsign, remoteCallsign, bpqPort, ct, fetchPeers, reason);
         return row;
     }
 
@@ -261,21 +263,36 @@ public sealed class ProbeSchedulerService(
     /// is present.</summary>
     public async Task<(DbProbedNode Row, NodeProber.ProbeResult Result)> ProbeAndRecordVerboseAsync(
         string localCallsign, string remoteCallsign, int bpqPort, CancellationToken ct,
-        bool fetchPeers = true)
+        bool fetchPeers = true,
+        string reason = "scheduled probe sweep")
     {
         var existing = await database.GetProbedNode(remoteCallsign);
         var useNodePrompt = existing is not null
             && existing.Source.StartsWith("node-prompt:", StringComparison.OrdinalIgnoreCase);
 
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         var result = useNodePrompt
             ? await prober.ProbeViaNodeCallAsync(localCallsign, remoteCallsign, bpqPort, ct,
                 applicationCommand: options.CurrentValue.NodePromptApplicationCommand,
                 fetchPeers: fetchPeers)
             : await prober.ProbeAsync(localCallsign, remoteCallsign, bpqPort, ct, fetchPeers);
+        sw.Stop();
         var row = await RecordResultAsync(result);
         if (result.Success && result.DiscoveredPeers.Count > 0)
         {
             await PersistTransitiveDiscoveriesAsync(result);
+        }
+        if (transmissionAudit is { } ta)
+        {
+            await ta.RecordAsync(
+                kind: useNodePrompt ? "probe-nodeprompt" : "probe",
+                bearer: "agw",
+                channelKey: bpqPort.ToString(),
+                targetCallsign: remoteCallsign,
+                reason: reason,
+                success: result.Success,
+                durationMs: (int)sw.ElapsedMilliseconds,
+                errorTag: result.Success ? "" : (result.Error ?? "unknown"));
         }
         return (row, result);
     }

@@ -13,6 +13,7 @@ public class TtlSweeperService(
     Database database,
     TimeProvider timeProvider,
     Microsoft.Extensions.Options.IOptionsMonitor<dapps.core.Models.SystemOptions> options,
+    TransmissionAuditService transmissionAudit,
     ILogger<TtlSweeperService> logger) : BackgroundService
 {
     public TimeSpan SweepInterval { get; init; } = TimeSpan.FromMinutes(1);
@@ -76,6 +77,23 @@ public class TtlSweeperService(
         catch (Exception ex)
         {
             logger.LogError(ex, "Fragment sweep threw");
+        }
+
+        // Transmission audit retention. Default 90 days; 0 disables.
+        // Ride this sweeper's tick rather than spawning yet another
+        // BG service - the workload is just a delete-where, fine to
+        // run minutely alongside TTL.
+        try
+        {
+            var deleted = await transmissionAudit.SweepOldRowsAsync();
+            if (deleted > 0)
+            {
+                logger.LogInformation("transmission audit sweeper deleted {0} old row(s)", deleted);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "transmission audit sweep threw");
         }
     }
 }
