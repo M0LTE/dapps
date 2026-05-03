@@ -1,8 +1,8 @@
 name: docs
 
-# Build the MkDocs site on every push to master and deploy it to the
-# gh-pages branch. PRs build the site too (no deploy) so a docs PR
-# fails CI if mkdocs strict-mode catches a broken link.
+# Build the MkDocs site on every PR (strict-mode build catches
+# broken internal links). On push to master, build + deploy to
+# GitHub Pages via the official Pages workflow path.
 
 on:
   push:
@@ -19,7 +19,9 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write   # `mkdocs gh-deploy` force-pushes the gh-pages branch
+  contents: read
+  pages: write
+  id-token: write
 
 concurrency:
   group: docs-${{ github.ref }}
@@ -31,9 +33,6 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v6
-        with:
-          # `mkdocs gh-deploy` needs full history to push to gh-pages.
-          fetch-depth: 0
 
       - uses: actions/setup-python@v6
         with:
@@ -48,11 +47,20 @@ jobs:
         # missing nav entries, etc. Catches them before they ship.
         run: mkdocs build --strict
 
-      - name: Deploy to gh-pages
+      - name: Upload Pages artifact
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-        env:
-          GIT_AUTHOR_NAME: github-actions[bot]
-          GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
-          GIT_COMMITTER_NAME: github-actions[bot]
-          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
-        run: mkdocs gh-deploy --force --no-history
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/
+
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
