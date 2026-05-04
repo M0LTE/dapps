@@ -62,12 +62,18 @@ public sealed class AdminAuthMiddleware(RequestDelegate next)
         if (ctx.User.Identity?.IsAuthenticated == true)
         {
             // Setup-required state: admin password configured, callsign
-            // still the placeholder. Bounce back to /Setup so the
-            // wizard's bearer step picks up. Existing operators (real
-            // callsign) skip this branch entirely.
+            // still the placeholder. Bounce navigational HTML requests
+            // to /Setup so the wizard's bearer step picks up. Existing
+            // operators (real callsign) skip this branch entirely.
+            //
+            // API endpoints (/Config/detect-bearer, /Neighbours, etc.)
+            // pass through even in setup-required state - the wizard's
+            // own JS calls /Config/detect-bearer and would die JSON-
+            // parsing the redirected /Setup HTML otherwise.
             var callsign = options.CurrentValue.Callsign;
-            if (string.IsNullOrWhiteSpace(callsign)
-                || string.Equals(callsign, DbStartup.PlaceholderCallsign, StringComparison.OrdinalIgnoreCase))
+            var isSetupRequired = string.IsNullOrWhiteSpace(callsign)
+                || string.Equals(callsign, DbStartup.PlaceholderCallsign, StringComparison.OrdinalIgnoreCase);
+            if (isSetupRequired && LooksLikeNavigation(ctx.Request))
             {
                 ctx.Response.Redirect("/Setup");
                 return;
@@ -79,6 +85,17 @@ public sealed class AdminAuthMiddleware(RequestDelegate next)
 
         // Trigger the cookie scheme's challenge → 302 to LoginPath.
         await ctx.ChallengeAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+    }
+
+    /// <summary>True when the request looks like a browser navigation
+    /// (GET + Accept includes text/html). API calls from JS (which use
+    /// fetch with Accept: */* or application/json) return false; redirecting
+    /// those to /Setup would hand back HTML that the JS can't parse.</summary>
+    private static bool LooksLikeNavigation(HttpRequest request)
+    {
+        if (!HttpMethods.IsGet(request.Method)) return false;
+        var accept = request.Headers.Accept.ToString();
+        return accept.Contains("text/html", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsPassThrough(string path)

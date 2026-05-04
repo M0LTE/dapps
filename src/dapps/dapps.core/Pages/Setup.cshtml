@@ -179,14 +179,13 @@
         {
             <h1>Connect your packet node</h1>
             <p class="intro">
-                DAPPS rides on top of a packet node (BPQ, XRouter, or
-                similar). Tell it your callsign and which bearer the node
-                speaks. The <em>Detect</em> button probes localhost for
-                AGW (TCP 8000) and RHPv2 (TCP 9000) and pre-fills the
-                choice.
+                DAPPS rides on top of a packet node. Tell it the callsign
+                DAPPS will identify itself with on-air, and which bearer
+                the node speaks. <em>Detect</em> looks for a running
+                <code>linbpq</code> or <code>xrouter</code> on this host.
             </p>
             <form method="post" asp-page-handler="Bearer" id="bearerForm">
-                <label for="callsign">Your callsign with SSID <span class="normal">e.g. M0LTE-1</span></label>
+                <label for="callsign">DAPPS callsign <span class="normal">with SSID, e.g. M0LTE-7 - the call+SSID DAPPS will use on the air</span></label>
                 <input id="callsign" name="callsign" type="text" autofocus required
                     pattern="[A-Za-z0-9\-]{3,15}" value="@Model.Callsign" />
 
@@ -200,20 +199,12 @@
 
                 <label for="nodeBearer">Bearer</label>
                 <select id="nodeBearer" name="nodeBearer">
-                    <option value="agw" selected="@(Model.NodeBearer == "agw")">AGW (BPQ, Direwolf, AGWPE, ...)</option>
+                    <option value="agw" selected="@(Model.NodeBearer == "agw")">AGW (BPQ)</option>
                     <option value="rhpv2" selected="@(Model.NodeBearer == "rhpv2")">RHPv2 (XRouter)</option>
                 </select>
 
-                <div class="row">
-                    <div>
-                        <label for="agwPort">AGW port</label>
-                        <input id="agwPort" name="agwPort" type="number" min="1" max="65535" value="@Model.AgwPort" required />
-                    </div>
-                    <div>
-                        <label for="rhpPort">RHPv2 port</label>
-                        <input id="rhpPort" name="rhpPort" type="number" min="1" max="65535" value="@Model.RhpPort" required />
-                    </div>
-                </div>
+                <label for="port" id="portLabel">@(Model.NodeBearer == "rhpv2" ? "RHPv2 port" : "AGW port")</label>
+                <input id="port" name="port" type="number" min="1" max="65535" value="@Model.Port" required />
 
                 <div id="rhpAuthFields" class="bearer-fields @(Model.NodeBearer == "rhpv2" ? "show" : "")">
                     <label for="rhpUser">RHPv2 user <span class="normal">leave blank if your XRouter doesn't require RHPv2 auth</span></label>
@@ -241,34 +232,53 @@
                     const detectResult = document.getElementById("detectResult");
                     const nodeHost = document.getElementById("nodeHost");
                     const nodeBearer = document.getElementById("nodeBearer");
+                    const portInput = document.getElementById("port");
+                    const portLabel = document.getElementById("portLabel");
                     const rhpAuth = document.getElementById("rhpAuthFields");
 
-                    function updateRhpVisibility() {
-                        rhpAuth.classList.toggle("show", nodeBearer.value === "rhpv2");
+                    // Pre-rendered defaults so the single port input
+                    // can swap when the operator flips the bearer
+                    // dropdown. Keys map onto the dropdown's option values.
+                    const ports = {
+                        "agw": @Model.AgwPortDefault,
+                        "rhpv2": @Model.RhpPortDefault,
+                    };
+                    let currentBearer = nodeBearer.value;
+
+                    function updateForBearer() {
+                        // Remember whatever the operator typed for the
+                        // outgoing bearer before we swap.
+                        const typed = parseInt(portInput.value, 10);
+                        if (typed > 0) ports[currentBearer] = typed;
+
+                        currentBearer = nodeBearer.value;
+                        portInput.value = ports[currentBearer];
+                        portLabel.textContent = currentBearer === "rhpv2" ? "RHPv2 port" : "AGW port";
+                        rhpAuth.classList.toggle("show", currentBearer === "rhpv2");
                     }
-                    nodeBearer.addEventListener("change", updateRhpVisibility);
+                    nodeBearer.addEventListener("change", updateForBearer);
 
                     detectBtn.addEventListener("click", async () => {
                         detectResult.className = "detect-result";
                         detectResult.textContent = "probing...";
                         try {
                             const url = "/Config/detect-bearer?host=" + encodeURIComponent(nodeHost.value || "localhost");
-                            const r = await fetch(url, { credentials: "same-origin" });
+                            const r = await fetch(url, {
+                                credentials: "same-origin",
+                                headers: { "Accept": "application/json" },
+                            });
                             if (!r.ok) throw new Error("HTTP " + r.status);
                             const j = await r.json();
-                            const parts = [];
-                            if (j.agw) parts.push("AGW :8000");
-                            if (j.rhpv2) parts.push("RHPv2 :9000");
-                            if (parts.length === 0) {
+                            if (!j.agw && !j.rhpv2) {
                                 detectResult.className = "detect-result err";
-                                detectResult.textContent = "neither AGW :8000 nor RHPv2 :9000 responded";
+                                detectResult.textContent = "no packet-node process or listener found on " + (nodeHost.value || "localhost");
                                 return;
                             }
                             detectResult.className = "detect-result ok";
-                            detectResult.textContent = parts.join(" + ") + " responded";
+                            detectResult.textContent = j.notes || ((j.agw ? "AGW" : "") + (j.rhpv2 ? " RHPv2" : "") + " detected");
                             if (j.suggested === "agw" || j.suggested === "rhpv2") {
                                 nodeBearer.value = j.suggested;
-                                updateRhpVisibility();
+                                updateForBearer();
                             }
                         } catch (err) {
                             detectResult.className = "detect-result err";
