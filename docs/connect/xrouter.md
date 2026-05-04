@@ -42,32 +42,23 @@ Restart XRouter to pick up `ACCESS.SYS` changes.
 
 ## Step 4: tell DAPPS where XRouter is
 
-In DAPPS's environment (systemd unit, shell, etc.):
+In the dashboard's `/Setup` wizard (first run) or under **Edit configuration** on the dashboard (later):
 
-```
-DAPPS_CALLSIGN=M0LTE-7
-DAPPS_NODE_BEARER=rhpv2
-DAPPS_NODE_HOST=<xrouter-host>
-DAPPS_RHP_PORT=9000
-DAPPS_DEFAULT_BEARER_PORT=0
-```
+| Field         | Value                                                      |
+|---------------|------------------------------------------------------------|
+| Callsign      | your callsign with SSID, e.g. `M0LTE-7`                    |
+| Node host     | `<xrouter-host>` (`localhost` if same host as DAPPS)       |
+| Node bearer   | **RHPv2**                                                  |
+| RHPv2 port    | `9000` (matches `RHPPORT=` in `XROUTER.CFG`)               |
+| RHPv2 user    | leave blank if XRouter doesn't require RHPv2 auth          |
+| RHPv2 password | matching credential, otherwise blank                       |
+| Default bearer port | the radio port DAPPS uses for outbound, 0-indexed against the order `PORT=N` blocks appear in `XROUTER.CFG` (so `PORT=1` -> byte 0, `PORT=2` -> byte 1, etc). DAPPS adds 1 internally to derive RHPv2's 1-indexed port name. |
 
-`DAPPS_NODE_BEARER=rhpv2` flips DAPPS from its default AGW bearer to RHPv2.
+The wizard's **Detect packet node** button probes localhost:9000 and pre-selects RHPv2 automatically when XRouter is on the same host.
 
-`DAPPS_NODE_HOST` is `localhost` (or `127.0.0.1`) if DAPPS shares a host with XRouter, otherwise the host XRouter runs on.
+Saved settings hot-reload - the daemon binds the listener on the new callsign within a few seconds, no restart needed.
 
-`DAPPS_RHP_PORT` matches the `RHPPORT` you set in step 1.
-
-`DAPPS_DEFAULT_BEARER_PORT` is the byte DAPPS uses to identify which radio port to originate sessions on. With XRouter, the byte numbering is 0-indexed against the order ports appear in `XROUTER.CFG`'s `PORT=N` blocks: `PORT=1` -> byte 0, `PORT=2` -> byte 1, etc. DAPPS adds 1 internally to derive RHPv2's 1-indexed port name. Pick the port you want DAPPS's outbound sessions to go over.
-
-If your XRouter requires authentication on RHPv2, also set:
-
-```
-DAPPS_RHP_USER=<user>
-DAPPS_RHP_PASS=<pass>
-```
-
-These are skipped if `DAPPS_RHP_USER` is empty.
+(The `DAPPS_CALLSIGN`, `DAPPS_NODE_BEARER`, `DAPPS_NODE_HOST`, `DAPPS_RHP_PORT`, `DAPPS_RHP_USER`, `DAPPS_RHP_PASS`, `DAPPS_DEFAULT_BEARER_PORT` env vars still work as **first-run seeds** for automated deployments - set them before the daemon's first start and they populate the equivalent rows. After first start, the persisted values win and env vars stop mattering.)
 
 ## Step 5: start DAPPS, watch for the listener bind
 

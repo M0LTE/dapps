@@ -1,6 +1,14 @@
 # Install
 
-DAPPS ships as a single self-contained binary per platform - no .NET runtime install, no shared library dance. Drop it on disk, make it executable (Linux/macOS), and you're done.
+On Linux+systemd, the install is one line:
+
+```bash
+curl -sSL https://m0lte.github.io/dapps/install.sh | sudo bash
+```
+
+Detects arch, downloads the right binary, drops the systemd units, enables and starts. Configuration lives in the dashboard's `/Setup` wizard. See [Linux (systemd)](linux.md) for what the script does and the manual equivalent.
+
+DAPPS ships as a single self-contained binary per platform - no .NET runtime install, no shared library dance.
 
 The release matrix:
 
@@ -16,7 +24,7 @@ The release matrix:
 
 ## Pick a platform
 
-- [**Linux (systemd)**](linux.md) - recommended; long-running daemon with the supervised-update story baked in.
+- [**Linux (systemd)**](linux.md) - recommended; the one-liner installer + supervised-update story.
 - [**Docker**](docker.md) - published image; useful if you already orchestrate with compose / a homelab stack.
 - [**Windows**](windows.md) - runs as a console app today; service install is manual.
 - [**macOS**](macos.md) - same shape as Windows; `launchd` plist optional.

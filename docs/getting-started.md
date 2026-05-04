@@ -1,6 +1,14 @@
 # Getting started
 
-This page gives you the shortest path from "I've heard of DAPPS" to "my node is forwarding messages." The other sections of this manual are deep dives; this is the tour.
+The shortest path from "I've heard of DAPPS" to "my node is forwarding messages":
+
+```bash
+curl -sSL https://m0lte.github.io/dapps/install.sh | sudo bash
+```
+
+Then open `http://<your-host>:5000/` in a browser. The setup wizard asks for an admin password, then your callsign and which packet-node bearer to use - everything else is editable from the dashboard. No env vars, no config files to hand-edit.
+
+The rest of this page explains what just happened and walks the loop end-to-end.
 
 ## What DAPPS is
 
@@ -18,62 +26,55 @@ The wire protocol is small and human-readable on the line: a peer connects, gets
 - **Not a routing protocol replacement for the AX.25 layer.** DAPPS routes its own messages over whichever bearer is available, but it doesn't replace what your packet node does for connecting users.
 - **Not BPQ-specific.** BPQ is one supported packet node; XRouter is another (via RHPv2). Anything that speaks AGW or RHPv2 works the same; MeshCore is in flight.
 
-## 10-minute tour
-
-Assuming you already have a packet node up (BPQ, most likely), here's the shortest install-to-message path. Each step has a more detailed page elsewhere; treat this section as the bird's-eye view.
+## The journey
 
 ### 1. Install
 
-Pick a binary for your platform from the [latest release](https://github.com/M0LTE/dapps/releases/latest), drop it on disk, make it executable. On Linux there's a one-liner systemd recipe in the [Linux install page](install/linux.md); on Windows or macOS it runs the same way as a console app.
+The one-liner above does this on Linux+systemd:
 
-```bash
-curl -L https://github.com/M0LTE/dapps/releases/latest/download/dapps-linux-x64 -o /opt/dapps/dapps
-chmod +x /opt/dapps/dapps
-```
+- Detects your architecture (`x86_64` / `aarch64` / `armv7l`).
+- Downloads the matching binary from [the latest GitHub Release](https://github.com/M0LTE/dapps/releases/latest) to `/opt/dapps/dapps`.
+- Creates a system user `dapps` and a state directory `/var/lib/dapps` (where the SQLite DB lives).
+- Drops two systemd units: `dapps.service` (the daemon) and `dapps-updater.service` + `.timer` (the supervised in-place updater that powers the dashboard's "Apply update" button).
+- Enables and starts both.
 
-### 2. Tell your packet node to talk to it
+No env vars, no callsign yet, no bearer choice. Those all happen in step 2.
 
-For **BPQ**, add an `APPLICATION` line to your `bpq32.cfg` so BPQ dispatches DAPPS-bound sessions over AGW to the DAPPS daemon. The full recipe is on the [BPQ connect page](connect/bpq.md); the line itself is:
+For Docker, Windows, or non-systemd Linux, see the [install pages](install/index.md).
+
+### 2. Open the dashboard
+
+`http://<your-host>:5000/`. On a fresh install the first request lands on `/Setup`, a two-step wizard:
+
+1. **Admin password.** One password for the whole node - there are no user accounts. Used to gate the admin endpoints (`/Config`, `/Neighbours`, etc.) behind a cookie.
+2. **Callsign + packet node.** Type your callsign with SSID (e.g. `M0LTE-1`) and pick a bearer. Click **Detect packet node** and the dashboard probes `localhost:8000` (AGW) and `localhost:9000` (RHPv2) and pre-fills the choice.
+
+Submit; the daemon picks up the new callsign and bearer within a few seconds (no restart). The dashboard appears.
+
+### 3. Tell your packet node about DAPPS
+
+The DAPPS side is now configured; your packet node needs to know to dispatch sessions to DAPPS. This is the part that depends on your node software.
+
+**For BPQ**, add an `APPLICATION` line to `bpq32.cfg`:
 
 ```
 APPLICATION 1,DAPPS,,,,, 0
 ```
 
-This advertises a `DAPPS` command at the BPQ node prompt and routes inbound L2 connects over AGW.
+This advertises a `DAPPS` command at the BPQ node prompt and routes inbound L2 connects over AGW. Restart BPQ to pick it up. The [BPQ connect page](connect/bpq.md) has the full recipe.
 
-For **XRouter**, add `RHPPORT=9000` to `XROUTER.CFG` and DAPPS will use RHPv2 (XRouter's AGW emulator is not usable as a DAPPS bearer). The full recipe is on the [XRouter connect page](connect/xrouter.md); set `DAPPS_NODE_BEARER=rhpv2` in step 3.
+**For XRouter**, add `RHPPORT=9000` to `XROUTER.CFG` and restart XRouter. No `APPL` block is needed - DAPPS binds the callsign over RHPv2 dynamically. The [XRouter connect page](connect/xrouter.md) has the details.
 
-### 3. Configure DAPPS
+### 4. Add a neighbour
 
-DAPPS reads its config from the SQLite database it owns. The first time you run it, it seeds defaults; environment variables override those defaults at first start.
+DAPPS knows nothing about other DAPPS nodes until you tell it about one. From the dashboard's **Neighbours** panel, enter:
 
-The minimum you must set is your callsign:
+- A peer's callsign with SSID.
+- The bearer port your link goes out on (the AGW port byte for BPQ, or the 0-indexed `PORT=N - 1` for XRouter).
 
-```bash
-DAPPS_CALLSIGN=M0LTE-1 /opt/dapps/dapps
-```
+There's a REST API and a [discovery system](discovery-and-routing.md) that auto-finds peers if you turn on beaconing - but a single manual neighbour gets you to "first message" fastest.
 
-DAPPS refuses to start with the placeholder `N0CALL` - that's the safety net.
-
-The full list of knobs is on the [Configure](configure.md) page.
-
-### 4. Run it
-
-Run the binary directly (it logs to stdout) or wire up the [systemd unit](install/linux.md#3-install-the-systemd-units). On a successful start you'll see lines like:
-
-```
-DB: /var/lib/dapps/dapps.db
-MQTT broker listening on :1883
-HTTP listener: http://0.0.0.0:5000
-```
-
-Open `http://<node>:5000/` in a browser. The first request lands on `/Setup` to set an admin password (one-time), then the dashboard.
-
-### 5. Add a neighbour
-
-DAPPS knows nothing about other DAPPS nodes until you tell it about one. The simplest way is the dashboard's **Neighbours** panel - enter the remote callsign and the bearer port your link goes out on (the AGW port byte for BPQ, or the 0-indexed `PORT=N - 1` for XRouter). There's a REST API and a [discovery system](discovery-and-routing.md) that auto-finds peers if you turn on beaconing, but a single manual neighbour gets you to "first message" fastest.
-
-### 6. Send a test message
+### 5. Send a test message
 
 Use the dashboard's **Send a test message** form, or the `/IHave` page for a hand-crafted submit, or just publish to MQTT:
 

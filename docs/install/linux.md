@@ -1,8 +1,24 @@
 # Install on Linux (systemd)
 
-The recommended deployment. Two systemd units: one runs DAPPS itself; a second, privileged one applies in-place updates so the dashboard's "Apply update" button can swap the binary without any SSH dance.
+The recommended deployment.
 
-## 1. Drop the binary
+## One-liner install
+
+```bash
+curl -sSL https://m0lte.github.io/dapps/install.sh | sudo bash
+```
+
+Detects your architecture (`x86_64` / `aarch64` / `armv7l`), downloads the matching binary from the [latest GitHub Release](https://github.com/M0LTE/dapps/releases/latest), creates the `dapps` system user and `/var/lib/dapps` state directory, drops two systemd units (`dapps.service` and the privileged `dapps-updater.service` + `.timer`), and enables both. No env vars, no callsign yet - configuration happens in the dashboard once the daemon is up.
+
+When it's done it prints the URL to open in a browser. The first request lands on `/Setup` - a two-step wizard for the admin password and your callsign + bearer. See [Getting started](../getting-started.md) for the full walk-through.
+
+Re-run the installer to upgrade the binary in place. (Operators with the dashboard up should usually use the in-app **Apply update** button instead, which goes through the supervised updater.)
+
+## Manual install
+
+If you'd rather see what's happening, or if your distro has something unusual about its systemd setup, here's what the installer does step by step.
+
+### 1. Drop the binary
 
 Pick the right binary for your architecture from the [latest release](https://github.com/M0LTE/dapps/releases/latest):
 
@@ -16,7 +32,7 @@ sudo chmod +x /opt/dapps/dapps
 
 Substitute `dapps-linux-arm64` (Pi 4/5, Apple Silicon Linux) or `dapps-linux-arm` (Pi Zero, Cubie) as needed.
 
-## 2. Set up the runtime user
+### 2. Set up the runtime user
 
 DAPPS runs as a non-privileged user. The updater service runs as root because it needs to swap a binary that's currently executing - but the daemon itself does not.
 
@@ -25,11 +41,11 @@ sudo useradd --system --home /var/lib/dapps --shell /usr/sbin/nologin dapps
 sudo chown -R dapps:dapps /var/lib/dapps
 ```
 
-## 3. Install the systemd units
+### 3. Install the systemd units
 
-There are two: `dapps.service` (the daemon) and `dapps-updater.service` plus `dapps-updater.timer` (the privileged updater). The repository ships both under `scripts/`; if you've cloned the repo, copy them in. If not, here's the contents:
+There are two: `dapps.service` (the daemon) and `dapps-updater.service` plus `dapps-updater.timer` (the privileged updater).
 
-### dapps.service
+#### dapps.service
 
 ```ini
 [Unit]
@@ -44,7 +60,6 @@ Group=dapps
 WorkingDirectory=/var/lib/dapps
 ExecStart=/opt/dapps/dapps
 Environment=ASPNETCORE_URLS=http://0.0.0.0:5000
-Environment=DAPPS_CALLSIGN=N0CALL
 Restart=on-failure
 RestartSec=5s
 # Exit code 78 = fatal config error - don't restart in a tight
@@ -55,7 +70,7 @@ RestartPreventExitStatus=78
 WantedBy=multi-user.target
 ```
 
-Edit the `DAPPS_CALLSIGN` line to your real callsign with SSID, e.g. `M0LTE-1`. DAPPS will refuse to start with the placeholder.
+Note: **no `DAPPS_CALLSIGN` env var.** The daemon starts with the placeholder callsign and the dashboard's `/Setup` wizard configures the real one. (If you'd rather pre-set it for an automated deployment, `Environment=DAPPS_CALLSIGN=M0LTE-1` still works as a first-run seed - just include it before the unit starts the first time.)
 
 If you bind to a port below 1024 (e.g. you want the dashboard on `:80`), either run as root (not recommended) or grant the binary `CAP_NET_BIND_SERVICE`:
 
@@ -63,7 +78,7 @@ If you bind to a port below 1024 (e.g. you want the dashboard on `:80`), either 
 sudo setcap 'cap_net_bind_service=+ep' /opt/dapps/dapps
 ```
 
-### dapps-updater.service + .timer
+#### dapps-updater.service + .timer
 
 Privileged. Polls a marker file (`/var/lib/dapps/update-requested`) every 60 seconds; when present, runs `dapps --apply-update`, which downloads the latest release for this architecture, swaps `/opt/dapps/dapps`, restarts `dapps.service`, verifies the new daemon stays up for 60 seconds, and rolls back to `/opt/dapps/dapps.previous` on any failure.
 
@@ -94,7 +109,7 @@ WantedBy=timers.target
 
 The timer fires the service every minute; the service does nothing if no marker file exists, so the steady state is a no-op heartbeat.
 
-## 4. Enable and start
+### 4. Enable and start
 
 ```bash
 sudo systemctl daemon-reload
@@ -109,11 +124,11 @@ You should see `Active: active (running)` and a journal line `Now listening on: 
 sudo journalctl -u dapps.service -f
 ```
 
-## 5. First-use setup
+### 5. Open the dashboard
 
-Open the dashboard in a browser at `http://<node>:5000/`. The first request lands on `/Setup` to set an admin password (cookie-based; one password for the whole node). After that, the dashboard.
+`http://<node>:5000/`. The first request lands on `/Setup` - a two-step wizard for the admin password and your callsign + bearer. See [Getting started](../getting-started.md) for the walk-through.
 
-The `/Health` and `/Operational` endpoints are intentionally not behind that cookie - they're designed to be scraped by watchdogs and your own monitoring. The MCP endpoint at `/mcp` is also open for the same reason.
+The `/Health` and `/Operational` endpoints are intentionally not behind the cookie - they're designed to be scraped by watchdogs and your own monitoring. The MCP endpoint at `/mcp` is also open for the same reason.
 
 ## Operator customisations
 
@@ -128,7 +143,6 @@ That opens an editor on `/etc/systemd/system/dapps.service.d/override.conf`. Add
 ```ini
 [Service]
 Environment=ASPNETCORE_URLS=http://127.0.0.1:5000
-Environment=DAPPS_MQTT_PORT=1884
 ```
 
 `systemctl daemon-reload && systemctl restart dapps.service` to pick up changes.

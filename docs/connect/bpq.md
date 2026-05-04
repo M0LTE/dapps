@@ -19,7 +19,7 @@ APPLICATION 1,DAPPS,,,,, 0
 Field-by-field:
 
 - `1` - application slot number. Bump this if slot 1 is already in use; the value doesn't matter beyond uniqueness.
-- `DAPPS` - the command operators type at the BPQ node prompt to enter the DAPPS slot. If you'd rather use a different name (`MSG`, `APPS`, whatever), put it here, then set `DAPPS_NODE_PROMPT_APPLICATION_COMMAND` in the daemon's environment to match.
+- `DAPPS` - the command operators type at the BPQ node prompt to enter the DAPPS slot. If you'd rather use a different name (`MSG`, `APPS`, whatever), put it here and update **Node-prompt application command** under the dashboard's **Edit configuration** to match.
 - `,,,,,` - empty CMD field on purpose. Older recipes used `C N HOST K TRANS S` here; for DAPPS, leave it empty so BPQ doesn't run any node command on inbound - it just dispatches the L2 'C' frame to the registered AGW client.
 - `0` - application alias / number flag.
 
@@ -38,20 +38,23 @@ Should connect immediately. If not, check BPQ's AGW listener is enabled (`AGWPOR
 
 ## Step 3: tell DAPPS where BPQ is
 
-Set these in DAPPS's environment (in the systemd unit, the docker compose, or wherever):
+In the dashboard's `/Setup` wizard (first run) or under **Edit configuration** on the dashboard (later):
 
-```
-DAPPS_CALLSIGN=M0LTE-1
-DAPPS_NODE_HOST=<bpq-host>
-DAPPS_AGW_PORT=8000
-DAPPS_DEFAULT_BEARER_PORT=0
-```
+| Field         | Value                                          |
+|---------------|------------------------------------------------|
+| Callsign      | your callsign with SSID, e.g. `M0LTE-1`        |
+| Node host     | `<bpq-host>` (usually `localhost`)             |
+| Node bearer   | **AGW**                                        |
+| AGW port      | `8000`                                         |
+| Default bearer port | `0` (the bearer port used for outbound when a neighbour has no per-row override; 0-indexed in the order they appear in `bpq32.cfg`'s `PORTNUM` lines) |
 
-`DAPPS_CALLSIGN` is the callsign DAPPS registers with AGW for inbound dispatch. SSID matters: BPQ dispatches based on the full call+SSID, so `M0LTE-1` is different from `M0LTE-2`.
+The wizard's **Detect packet node** button probes localhost:8000 and pre-selects AGW automatically when BPQ is on the same host. SSID matters: BPQ dispatches based on the full call+SSID, so `M0LTE-1` is different from `M0LTE-2`.
 
-`DAPPS_DEFAULT_BEARER_PORT` is the bearer port (0-indexed; the order they appear in `bpq32.cfg`'s `PORTNUM` lines) used when originating an outbound session if a per-neighbour override isn't set. Leave it `0` unless you have multiple ports and you want to default to a specific one.
+Saved settings hot-reload - the daemon picks up the new callsign and bearer port within a few seconds, no restart needed.
 
-## Step 4: start DAPPS, watch for AGW registration
+(The `DAPPS_CALLSIGN`, `DAPPS_NODE_HOST`, `DAPPS_AGW_PORT`, `DAPPS_DEFAULT_BEARER_PORT` env vars still work as **first-run seeds** for automated deployments - set them before the daemon's first start and they populate the equivalent rows. After first start, the persisted values win and env vars stop mattering.)
+
+## Step 4: watch for AGW registration
 
 A successful start logs:
 
