@@ -1,3 +1,8 @@
 mkdocs==1.6.1
 mkdocs-material==9.5.50
-pymdown-extensions==10.14
+# pymdown-extensions 10.14 silently regresses with newer Markdown
+# (>=3.7): pymdownx.superfences leaves fenced code blocks as inline
+# `<code>` rather than `<pre><code>`, which shows up on the live site
+# as flattened code blocks (issue #114). Pinning to a version known
+# to work with current Markdown.
+pymdown-extensions>=10.21,<11
