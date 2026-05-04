@@ -186,11 +186,6 @@ DAPPS is running.
 
   Open  http://$host:$port/  in a browser.
 
-The first request lands on /Setup - a two-step wizard that asks for
-an admin password, then your callsign and which packet-node bearer
-(BPQ AGW or XRouter RHPv2) to use. The daemon picks up your config
-without a restart.
-
   Logs:    journalctl -u dapps.service -f
   Update:  click "Apply update" on the dashboard, or wait for the
            dapps-updater.timer to pick up future releases.

@@ -53,10 +53,14 @@ public sealed class SetupModel(
     [BindProperty] public string Callsign { get; set; } = "";
     [BindProperty] public string NodeHost { get; set; } = "localhost";
     [BindProperty] public string NodeBearer { get; set; } = "agw";
-    [BindProperty] public int AgwPort { get; set; } = 8000;
-    [BindProperty] public int RhpPort { get; set; } = 9000;
+    [BindProperty] public int Port { get; set; }
     [BindProperty] public string RhpUser { get; set; } = "";
     [BindProperty] public string RhpPass { get; set; } = "";
+
+    // Pre-rendered into the page as JS literals so the port input can
+    // swap its value when the operator flips the bearer dropdown.
+    public int AgwPortDefault { get; set; } = 8000;
+    public int RhpPortDefault { get; set; } = 9000;
 
     public string? Error { get; private set; }
 
@@ -78,8 +82,9 @@ public sealed class SetupModel(
             Callsign = "";
             NodeHost = string.IsNullOrWhiteSpace(opts.NodeHost) ? "localhost" : opts.NodeHost;
             NodeBearer = string.Equals(opts.NodeBearer, "rhpv2", StringComparison.OrdinalIgnoreCase) ? "rhpv2" : "agw";
-            AgwPort = opts.AgwPort > 0 ? opts.AgwPort : 8000;
-            RhpPort = opts.RhpPort > 0 ? opts.RhpPort : 9000;
+            AgwPortDefault = opts.AgwPort > 0 ? opts.AgwPort : 8000;
+            RhpPortDefault = opts.RhpPort > 0 ? opts.RhpPort : 9000;
+            Port = NodeBearer == "rhpv2" ? RhpPortDefault : AgwPortDefault;
             RhpUser = opts.RhpUser ?? "";
             RhpPass = opts.RhpPass ?? "";
             return Page();
@@ -160,8 +165,15 @@ public sealed class SetupModel(
         opts.Callsign = trimmedCall;
         opts.NodeHost = string.IsNullOrWhiteSpace(NodeHost) ? "localhost" : NodeHost.Trim();
         opts.NodeBearer = string.Equals(NodeBearer, "rhpv2", StringComparison.OrdinalIgnoreCase) ? "rhpv2" : "agw";
-        if (AgwPort is > 0 and <= 65535) opts.AgwPort = AgwPort;
-        if (RhpPort is > 0 and <= 65535) opts.RhpPort = RhpPort;
+        // Single port input - whichever bearer the operator picked,
+        // that's the port we update. Leave the other one untouched
+        // (keeps its current persisted / default value, so flipping
+        // bearers later via /Config doesn't lose it).
+        if (Port is > 0 and <= 65535)
+        {
+            if (opts.NodeBearer == "rhpv2") opts.RhpPort = Port;
+            else opts.AgwPort = Port;
+        }
         opts.RhpUser = RhpUser ?? "";
         opts.RhpPass = RhpPass ?? "";
 
