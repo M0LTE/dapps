@@ -32,7 +32,7 @@ Standard log levels apply (`info` by default). Most operational events are at `i
 
 ### Dashboard
 
-`http://<node>:5000/` after first-use setup. The home page is a single dense view: callsign + version, BPQ AGW reachability, MQTT broker / UDP listener status, queue depths, neighbours, recent messages, recent dropped, recent activity (the decision-events ring), and the Live inbound feed.
+`http://<node>:5000/` after first-use setup. The home page is a single dense view: callsign + version, packet-node reachability (probes the configured bearer port - AGW or RHPv2), MQTT broker / UDP listener status, queue depths, neighbours, recent messages, recent dropped, recent activity (the decision-events ring), and the Live inbound feed.
 
 The dashboard auto-refreshes the queue snapshot panels every 5 seconds without a full page reload.
 

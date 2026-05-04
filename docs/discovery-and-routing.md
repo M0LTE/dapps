@@ -61,7 +61,7 @@ The actual forwarding partners. Two ways a row lands here:
 - **Operator-added** via the dashboard's Neighbours panel or the `/Neighbours` REST endpoint.
 - **Auto-promoted** from a successful probe (when configured).
 
-Each neighbour row carries: callsign, bearer port (for AGW), UDP endpoint (for the datagram bearer), and an optional cost override.
+Each neighbour row carries: callsign, bearer port (for AGW or RHPv2), UDP endpoint (for the datagram bearer), and an optional cost override.
 
 ## The two routing algorithms
 

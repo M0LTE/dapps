@@ -4,7 +4,7 @@ Terms used throughout this manual.
 
 **ack** - Acknowledgement. In DAPPS, the protocol-level confirmation that a complete message was received and its content hash matched the offer.
 
-**AGW** - A long-standing TCP host protocol for talking to a packet node / TNC, originating with AGWPE in the 1990s. The current bearer DAPPS uses to dispatch sessions in and out of BPQ (and other AGW-aware hosts).
+**AGW** - A long-standing TCP host protocol for talking to a packet node / TNC, originating with AGWPE in the 1990s. One of the two bearers DAPPS speaks to packet nodes (the other is RHPv2). DAPPS uses AGW to dispatch sessions in and out of BPQ (and other AGW-aware hosts).
 
 **airtime budget** - Trailing-hour cap on discovery-class transmissions (beacons + solicits + probes), set with `DAPPS_DISCOVERY_AIRTIME_BUDGET_SECONDS_PER_HOUR`. Both global (one cap for all channels) and per-channel knobs exist.
 
@@ -18,15 +18,15 @@ Terms used throughout this manual.
 
 **asynchronous** - Messages are queued; delivery happens when the network allows. Real-time connectivity is not a goal.
 
-**backhaul** - The bearer-side communication between two DAPPS nodes (as distinct from the app interface, which is local). AGW today; MeshCore + RHPv2 in flight.
+**backhaul** - The bearer-side communication between two DAPPS nodes (as distinct from the app interface, which is local). AGW and RHPv2 today; MeshCore in flight.
 
-**bearer** - The underlying medium DAPPS hands off to: AGW (via BPQ or another AGW host), MeshCore Companion / KISS, RHPv2, UDP datagram. The bearer-agnostic seam means apps and routing don't care which.
+**bearer** - The underlying medium DAPPS hands off to: AGW (via BPQ or another AGW host), RHPv2 (via XRouter or another RHPv2 host), MeshCore Companion / KISS (planned), UDP datagram (test stand-in). The bearer-agnostic seam means apps and routing don't care which.
 
 **beacon** - A small periodic transmission on a discovery channel advertising "I am here, I am callsign X, I'm reachable on this bearer at this cost." Stateless, no session.
 
 **BPQ** - A long-running packet-radio multi-protocol stack, the most common AGW host in service. DAPPS supports BPQ as the production backhaul. Not a hard dependency - anything with an AGW interface should work.
 
-**bearer port** - A 0-indexed identifier for which bearer port (= which physical radio, in `bpq32.cfg`'s `PORTS` layout) DAPPS should use for outbound. Per-neighbour or default.
+**bearer port** - A 0-indexed identifier for which port on the bearer DAPPS should use for outbound (= which physical radio in `bpq32.cfg`'s `PORTNUM` layout for AGW, or which `PORT=N` block for RHPv2 / XRouter, with DAPPS handling the +1 conversion internally). Per-neighbour or default (`DAPPS_DEFAULT_BEARER_PORT`).
 
 **callsign** - Your radio licence callsign, optionally with an SSID (`-1`, `-7`, etc). DAPPS treats the full call+SSID as a unique identifier for routing; the base callsign without SSID is used for some discovery features.
 
@@ -90,7 +90,7 @@ Terms used throughout this manual.
 
 **REST** - DAPPS's HTTP-based app interface, alongside MQTT. Same submit shape; different protocol.
 
-**RHPv2** - Radio Host Protocol v2 - a more modern host-to-node protocol than AGW. Planned bearer; awaiting BPQ support.
+**RHPv2** - Remote Host Protocol v2 - a more modern host-to-node protocol than AGW. Required for DAPPS-on-XRouter (AGW outbound on XRouter is structurally broken for DAPPS); selectable with `DAPPS_NODE_BEARER=rhpv2`. Mainline BPQ does not yet ship RHPv2; will work with no DAPPS-side changes when it does.
 
 **route hint** - A manual override that says "for messages destined for X, always try Y first." Stored in the route-hints table.
 

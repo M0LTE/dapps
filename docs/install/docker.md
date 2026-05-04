@@ -24,6 +24,8 @@ docker run -d \
   m0lte/dapps:latest
 ```
 
+For XRouter (RHPv2 instead of AGW), substitute `-e DAPPS_NODE_BEARER=rhpv2 -e DAPPS_RHP_PORT=9000` for `-e DAPPS_AGW_PORT=8000`. See [Connect via XRouter](../connect/xrouter.md).
+
 Then `http://localhost:5000/` for the dashboard. First request goes to `/Setup` to set an admin password.
 
 ## docker compose

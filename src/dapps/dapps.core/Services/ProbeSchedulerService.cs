@@ -312,7 +312,7 @@ public sealed class ProbeSchedulerService(
         {
             await ta.RecordAsync(
                 kind: useNodePrompt ? "probe-nodeprompt" : "probe",
-                bearer: "agw",
+                bearer: BearerLabel(options.CurrentValue),
                 channelKey: bearerPort.ToString(),
                 targetCallsign: remoteCallsign,
                 reason: reason,
@@ -467,6 +467,13 @@ public sealed class ProbeSchedulerService(
         var hi = (int)Math.Max(lo + 1, max.TotalMilliseconds);
         return Random.Shared.Next(lo, hi);
     }
+
+    /// <summary>Bearer label used in transmission-audit rows. Reflects the
+    /// configured <see cref="SystemOptions.NodeBearer"/> so XR-side
+    /// daemons audit as <c>rhpv2</c> rather than the historical <c>agw</c>
+    /// hardcode.</summary>
+    private static string BearerLabel(SystemOptions opts) =>
+        string.Equals(opts.NodeBearer, "rhpv2", StringComparison.OrdinalIgnoreCase) ? "rhpv2" : "agw";
 
     public sealed record ProbeTarget(string Callsign, int BearerPort);
 }

@@ -17,6 +17,8 @@ $env:DAPPS_AGW_PORT = "8000"
 & "C:\Program Files\dapps\dapps.exe"
 ```
 
+For XRouter (RHPv2 instead of AGW), set `$env:DAPPS_NODE_BEARER = "rhpv2"` and `$env:DAPPS_RHP_PORT = "9000"` instead of `DAPPS_AGW_PORT`. See [Connect via XRouter](../connect/xrouter.md).
+
 You should see `Now listening on: http://0.0.0.0:5000` and the rest of the start-up lines. Open `http://localhost:5000/` in a browser, set an admin password on `/Setup`, and you're in.
 
 `Ctrl+C` to stop.

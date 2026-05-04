@@ -110,7 +110,7 @@ public sealed class PollSchedulerService(
         {
             await ta.RecordAsync(
                 kind: "poll",
-                bearer: "agw",
+                bearer: string.Equals(options.CurrentValue.NodeBearer, "rhpv2", StringComparison.OrdinalIgnoreCase) ? "rhpv2" : "agw",
                 channelKey: bearerPort.ToString(),
                 targetCallsign: remoteCallsign,
                 reason: result.Success

@@ -10,7 +10,7 @@ Sections, top to bottom:
 
 ### Node card
 
-Callsign, version, BPQ AGW reachability indicator, MQTT broker / UDP listener status, default outbound port. Quick "is this node alive and configured" glance.
+Callsign, version, packet-node reachability indicator (probes the configured bearer port - AGW or RHPv2), MQTT broker / UDP listener status, default outbound port. Quick "is this node alive and configured" glance.
 
 ### Update card
 
