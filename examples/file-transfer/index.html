@@ -1,0 +1,441 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DAPPS file transfer</title>
+<!-- mqtt.js v5. Vendor it next to this file (see README) for offline use. -->
+<script src="https://unpkg.com/mqtt@5/dist/mqtt.min.js"></script>
+<style>
+  :root {
+    --bg: #1c1f24;
+    --panel: #25292f;
+    --border: #353a42;
+    --fg: #d8dbe1;
+    --muted: #8a8f99;
+    --accent: #5fb3ff;
+    --ok: #6cc070;
+    --warn: #d97c4e;
+    --err: #e25b5b;
+    --mono: ui-monospace, "Cascadia Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--fg);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.45;
+    padding: 1.5rem;
+  }
+  h1 { font-size: 1.4rem; margin: 0 0 1rem 0; font-weight: 600; }
+  h2 { font-size: 1.05rem; margin: 0 0 0.6rem 0; font-weight: 600; }
+  .muted { color: var(--muted); }
+  .mono { font-family: var(--mono); font-size: 0.9rem; }
+
+  .topbar {
+    display: flex; gap: 0.6rem; align-items: end; flex-wrap: wrap;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
+    padding: 0.8rem 1rem; margin-bottom: 1rem;
+  }
+  .topbar label { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.85rem; }
+  .topbar label span { color: var(--muted); }
+  .topbar input { width: 240px; }
+  .topbar input.token { width: 320px; }
+  .topbar .status { margin-left: auto; align-self: center; font-size: 0.85rem; }
+  .dot {
+    display: inline-block; width: 0.7rem; height: 0.7rem; border-radius: 50%;
+    background: var(--border); margin-right: 0.3rem; vertical-align: -1px;
+  }
+  .dot.ok { background: var(--ok); }
+  .dot.warn { background: var(--warn); }
+  .dot.err { background: var(--err); }
+
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  @media (max-width: 900px) { .panels { grid-template-columns: 1fr; } }
+  .panel {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
+    padding: 1rem;
+  }
+  .panel form { display: flex; flex-direction: column; gap: 0.6rem; }
+  .panel label { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.85rem; }
+  .panel label span { color: var(--muted); }
+  input, button {
+    background: #1a1d21; color: var(--fg); border: 1px solid var(--border); border-radius: 4px;
+    padding: 0.4rem 0.6rem; font: inherit;
+  }
+  input[type="file"] { padding: 0.3rem; }
+  button {
+    cursor: pointer; background: var(--accent); color: #0c1014; border-color: var(--accent);
+    font-weight: 600;
+  }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  button.secondary { background: var(--panel); color: var(--fg); border-color: var(--border); font-weight: 400; }
+
+  .log {
+    margin-top: 0.8rem;
+    max-height: 220px; overflow-y: auto;
+    border-top: 1px solid var(--border); padding-top: 0.6rem;
+    font-family: var(--mono); font-size: 0.82rem;
+  }
+  .log .row { padding: 0.15rem 0; }
+  .log .row.err { color: var(--err); }
+  .log .row.ok { color: var(--ok); }
+
+  .gallery { display: flex; flex-direction: column; gap: 0.7rem; margin-top: 0.8rem; }
+  .gallery .empty { color: var(--muted); font-style: italic; }
+  .item {
+    border: 1px solid var(--border); border-radius: 4px; padding: 0.7rem;
+    display: grid; grid-template-columns: auto 1fr; gap: 0.7rem; align-items: start;
+  }
+  .item .preview { max-width: 200px; max-height: 200px; border-radius: 3px; }
+  .item .preview-fallback {
+    width: 200px; height: 100px;
+    background: var(--bg); border: 1px dashed var(--border); border-radius: 3px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--muted); font-family: var(--mono); font-size: 0.8rem;
+  }
+  .item .meta { font-size: 0.85rem; }
+  .item .meta strong { color: var(--accent); }
+  .item .meta .small { color: var(--muted); font-size: 0.78rem; margin-top: 0.2rem; }
+  .item .download {
+    display: inline-block; margin-top: 0.4rem;
+    padding: 0.3rem 0.6rem; background: var(--accent); color: #0c1014;
+    border-radius: 3px; text-decoration: none; font-size: 0.85rem; font-weight: 600;
+  }
+</style>
+</head>
+<body>
+
+<h1>DAPPS file transfer <span class="muted" style="font-weight: 400; font-size: 0.85rem;">(MQTT-over-WebSocket browser example)</span></h1>
+
+<div class="topbar">
+  <label>
+    <span>Dashboard URL</span>
+    <input id="dashboardUrl" type="text" value="http://localhost:5000" />
+  </label>
+  <label>
+    <span>Token <span class="muted">(only if AuthRequired is on)</span></span>
+    <input id="token" class="token" type="password" placeholder="(leave blank if auth is off)" />
+  </label>
+  <div class="status">
+    <span class="dot" id="connStatusDot"></span>
+    <span id="connStatus">Not connected</span>
+    <button id="connectBtn" class="secondary" style="margin-left: 0.6rem;">Connect</button>
+    <button id="disconnectBtn" class="secondary" disabled>Disconnect</button>
+  </div>
+</div>
+
+<div class="panels">
+
+  <section class="panel">
+    <h2>Send</h2>
+    <form id="sendForm">
+      <label>
+        <span>Destination callsign (e.g. <code class="mono">M0LTE-1</code>)</span>
+        <input id="destCallsign" type="text" required pattern="[A-Za-z0-9\-]{3,15}" placeholder="M0LTE-1" />
+      </label>
+      <label>
+        <span>File</span>
+        <input id="file" type="file" required />
+      </label>
+      <button id="sendBtn" type="submit" disabled>Send</button>
+    </form>
+    <div class="log" id="sendLog">
+      <div class="row muted">Not connected. Click <em>Connect</em> at the top.</div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Receive</h2>
+    <p class="muted" style="margin: 0 0 0.6rem 0; font-size: 0.85rem;">
+      Files arriving for <code class="mono">files@&lt;this node&gt;</code>. Browser-friendly MIME types preview inline; everything else gets a download link.
+    </p>
+    <div class="gallery" id="gallery">
+      <div class="empty">Nothing received yet.</div>
+    </div>
+  </section>
+
+</div>
+
+<script>
+"use strict";
+
+// App slug. Match anything else this example talks to (sender + receiver
+// share this slug; a different example would pick a different one).
+const APP = "files";
+// Outbound TTL in seconds. 24h is "useful for a while" for file transfer
+// - longer than chat (1h), shorter than indefinite. Operator-tuneable
+// per-message; this is just the example's default.
+const TTL_SECONDS = 86400;
+
+// ── DOM handles ────────────────────────────────────────────────────────
+const $ = (id) => document.getElementById(id);
+const dashboardUrl = $("dashboardUrl");
+const tokenInput = $("token");
+const connStatus = $("connStatus");
+const connStatusDot = $("connStatusDot");
+const connectBtn = $("connectBtn");
+const disconnectBtn = $("disconnectBtn");
+const sendForm = $("sendForm");
+const sendBtn = $("sendBtn");
+const sendLog = $("sendLog");
+const destCallsignInput = $("destCallsign");
+const fileInput = $("file");
+const gallery = $("gallery");
+
+// ── State ──────────────────────────────────────────────────────────────
+let client = null;
+const seenIds = new Set();   // dedup against broker-side replay on reconnect
+
+// ── Connection lifecycle ───────────────────────────────────────────────
+function deriveWsUri(httpUrl) {
+  const u = new URL(httpUrl);
+  const proto = u.protocol === "https:" ? "wss:" : "ws:";
+  return `${proto}//${u.host}/mqtt`;
+}
+
+function setStatus(text, dot) {
+  connStatus.textContent = text;
+  connStatusDot.className = "dot" + (dot ? " " + dot : "");
+}
+
+connectBtn.addEventListener("click", () => {
+  if (client) return;
+  const wsUri = deriveWsUri(dashboardUrl.value.trim());
+  const token = tokenInput.value.trim();
+  setStatus("Connecting…", "warn");
+  connectBtn.disabled = true;
+
+  const opts = {
+    protocolVersion: 5,
+    clientId: `file-transfer-${crypto.randomUUID()}`,
+    reconnectPeriod: 0,    // we let the user reconnect explicitly
+    properties: {},
+  };
+  if (token) {
+    opts.username = APP;
+    opts.password = token;
+  }
+  client = mqtt.connect(wsUri, opts);
+
+  client.on("connect", () => {
+    setStatus(`Connected to ${wsUri}`, "ok");
+    disconnectBtn.disabled = false;
+    sendBtn.disabled = false;
+    logSend(`connected to ${wsUri}`, "ok");
+    client.subscribe(`dapps/in/${APP}`, { qos: 1 }, (err) => {
+      if (err) {
+        logSend(`subscribe failed: ${err.message}`, "err");
+      } else {
+        logSend(`subscribed to dapps/in/${APP}`, "ok");
+      }
+    });
+  });
+
+  client.on("message", (topic, payload, packet) => {
+    handleInbound(packet);
+  });
+
+  client.on("error", (err) => {
+    logSend(`mqtt error: ${err.message}`, "err");
+  });
+
+  client.on("close", () => {
+    setStatus("Disconnected", null);
+    connectBtn.disabled = false;
+    disconnectBtn.disabled = true;
+    sendBtn.disabled = true;
+    client = null;
+  });
+});
+
+disconnectBtn.addEventListener("click", () => {
+  if (client) client.end(true);
+});
+
+// ── Send ───────────────────────────────────────────────────────────────
+sendForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (!client || !client.connected) {
+    logSend("not connected", "err");
+    return;
+  }
+  const file = fileInput.files[0];
+  const dest = destCallsignInput.value.trim().toUpperCase();
+  if (!file || !dest) return;
+
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const envelope = JSON.stringify({
+    name: file.name,
+    mime: file.type || "application/octet-stream",
+    size: bytes.length,
+  });
+  const envBytes = new TextEncoder().encode(envelope + "\n");
+  const payload = new Uint8Array(envBytes.length + bytes.length);
+  payload.set(envBytes, 0);
+  payload.set(bytes, envBytes.length);
+
+  const topic = `dapps/out/${APP}/${dest}`;
+  client.publish(topic, payload, {
+    qos: 1,
+    properties: {
+      userProperties: { "dapps-ttl": String(TTL_SECONDS) },
+    },
+  }, (err) => {
+    if (err) {
+      logSend(`publish failed: ${err.message}`, "err");
+    } else {
+      logSend(`sent ${file.name} (${formatSize(bytes.length)}) to ${dest}`, "ok");
+    }
+  });
+});
+
+function logSend(text, cls) {
+  // First entry replaces the "not connected" placeholder.
+  if (sendLog.querySelector(".muted") && sendLog.children.length === 1) {
+    sendLog.innerHTML = "";
+  }
+  const row = document.createElement("div");
+  row.className = "row" + (cls ? " " + cls : "");
+  const t = new Date().toLocaleTimeString();
+  row.textContent = `${t}  ${text}`;
+  sendLog.appendChild(row);
+  sendLog.scrollTop = sendLog.scrollHeight;
+}
+
+// ── Receive ────────────────────────────────────────────────────────────
+function handleInbound(packet) {
+  // User properties carry DAPPS metadata. mqtt.js exposes them as a
+  // record { key: value } where each value is either a string (single)
+  // or an array of strings (multiple). DAPPS sets each at most once.
+  const userProps = (packet && packet.properties && packet.properties.userProperties) || {};
+  const dappsId = oneOf(userProps["dapps-id"]) || "?";
+  const source = oneOf(userProps["dapps-source"]) || "?";
+  const origin = oneOf(userProps["dapps-origin"]);
+  const ttl = oneOf(userProps["dapps-ttl"]);
+
+  if (seenIds.has(dappsId)) {
+    // Broker replay: we already rendered this; just ack again.
+    ackTo(dappsId);
+    return;
+  }
+  seenIds.add(dappsId);
+
+  // Split the payload at the first newline. The envelope JSON is
+  // before; the file bytes after.
+  const buf = packet.payload instanceof Uint8Array
+    ? packet.payload
+    : new Uint8Array(packet.payload);
+  const nl = buf.indexOf(0x0A);
+  if (nl < 0) {
+    renderError(dappsId, source, "no envelope separator (\\n) in payload");
+    ackTo(dappsId);
+    return;
+  }
+  let envelope;
+  try {
+    envelope = JSON.parse(new TextDecoder().decode(buf.slice(0, nl)));
+  } catch (err) {
+    renderError(dappsId, source, `envelope JSON parse failed: ${err.message}`);
+    ackTo(dappsId);
+    return;
+  }
+  const fileBytes = buf.slice(nl + 1);
+
+  renderReceived(dappsId, source, origin, ttl, envelope, fileBytes);
+  ackTo(dappsId);
+}
+
+function oneOf(v) {
+  if (v === undefined || v === null) return null;
+  return Array.isArray(v) ? v[0] : v;
+}
+
+function ackTo(id) {
+  if (!client || !client.connected) return;
+  client.publish(`dapps/ack/${APP}`, id, { qos: 1 });
+}
+
+function renderReceived(id, source, origin, ttl, envelope, fileBytes) {
+  // First arrival: clear the "Nothing received yet" placeholder.
+  const empty = gallery.querySelector(".empty");
+  if (empty) empty.remove();
+
+  const item = document.createElement("div");
+  item.className = "item";
+
+  const mime = (envelope.mime || "application/octet-stream").toLowerCase();
+  const blob = new Blob([fileBytes], { type: mime });
+  const url = URL.createObjectURL(blob);
+
+  let preview;
+  if (mime.startsWith("image/")) {
+    preview = document.createElement("img");
+    preview.className = "preview";
+    preview.src = url;
+    preview.alt = envelope.name || "(unnamed)";
+  } else {
+    preview = document.createElement("div");
+    preview.className = "preview-fallback";
+    preview.textContent = mime;
+  }
+
+  const meta = document.createElement("div");
+  meta.className = "meta";
+  meta.innerHTML =
+    `<div><strong>${escape(envelope.name || "(unnamed)")}</strong> ` +
+    `<span class="muted">${escape(formatSize(fileBytes.length))} · ${escape(mime)}</span></div>` +
+    `<div class="small">id <code>${escape(id)}</code> · from <code>${escape(source)}</code>` +
+    (origin && origin !== source ? ` · originated <code>${escape(origin)}</code>` : "") +
+    (ttl ? ` · TTL <code>${escape(ttl)}</code>s` : "") +
+    `</div>`;
+
+  const dl = document.createElement("a");
+  dl.className = "download";
+  dl.href = url;
+  dl.download = envelope.name || "file";
+  dl.textContent = "Download";
+  meta.appendChild(dl);
+
+  item.appendChild(preview);
+  item.appendChild(meta);
+  gallery.prepend(item);   // newest at the top
+}
+
+function renderError(id, source, msg) {
+  const empty = gallery.querySelector(".empty");
+  if (empty) empty.remove();
+  const item = document.createElement("div");
+  item.className = "item";
+  const meta = document.createElement("div");
+  meta.className = "meta";
+  meta.innerHTML =
+    `<div><strong style="color: var(--err);">malformed message ${escape(id)}</strong></div>` +
+    `<div class="small">from <code>${escape(source)}</code> · ${escape(msg)}</div>`;
+  const fallback = document.createElement("div");
+  fallback.className = "preview-fallback";
+  fallback.textContent = "error";
+  item.appendChild(fallback);
+  item.appendChild(meta);
+  gallery.prepend(item);
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────
+function formatSize(n) {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KiB`;
+  return `${(n / 1024 / 1024).toFixed(2)} MiB`;
+}
+
+function escape(s) {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+</script>
+
+</body>
+</html>
