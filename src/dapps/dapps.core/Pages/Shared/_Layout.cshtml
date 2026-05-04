@@ -264,14 +264,28 @@
             margin: 0.3rem 0 0.5rem; line-height: 1.45;
         }
         .btn, form.inline button, form.edit-form button {
-            display: inline-flex; align-items: center; gap: 0.4rem;
-            padding: 0.5rem 1rem; border: 1px solid var(--accent);
+            display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem;
+            padding: 0.45rem 0.9rem; border: 1px solid var(--accent);
             background: var(--accent); color: white;
-            border-radius: var(--radius-sm); cursor: pointer; font: inherit;
-            font-weight: 500; transition: background 120ms;
+            border-radius: var(--radius-sm); cursor: pointer;
+            font-family: inherit; font-size: 0.875rem; line-height: 1.25;
+            font-weight: 500; white-space: nowrap;
+            transition: background 120ms, border-color 120ms, color 120ms;
         }
         .btn:hover, form.inline button:hover, form.edit-form button:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+        .btn:disabled, .btn[disabled] { opacity: 0.55; cursor: not-allowed; }
+        .btn.secondary {
+            background: var(--surface); color: var(--accent);
+            border-color: var(--border-strong);
+        }
+        .btn.secondary:hover {
+            background: var(--surface-2); color: var(--accent-hover);
+            border-color: var(--accent);
+        }
         form.inline button { margin-top: 0.85rem; }
+        .card-actions {
+            display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.4rem;
+        }
 
         /* ── Edit blocks (collapsible sections) ────────────────── */
         details.edit-block {
@@ -303,32 +317,42 @@
             font-size: 0.8rem; padding-bottom: 0.4rem; padding-top: 0.85rem;
         }
         form.edit-form {
-            display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 0.6rem 0.9rem; margin-top: 0.4rem;
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 0.85rem 0.9rem; margin-top: 0.5rem;
+            align-items: end;
         }
-        form.edit-form label {
-            display: block; font-size: 0.72rem;
-            color: var(--text-muted); font-weight: 600;
-            text-transform: uppercase; letter-spacing: 0.05em;
+        form.edit-form > label {
+            display: flex; flex-direction: column; gap: 0.3rem;
+            font-size: 0.8rem; line-height: 1.35;
+            color: var(--text-muted); font-weight: 500;
         }
-        form.edit-form label.checkbox-label {
-            text-transform: none; letter-spacing: 0; font-weight: 500;
-            color: var(--text); font-size: 0.85rem;
-            display: flex; align-items: center; gap: 0.5rem;
+        form.edit-form > label.checkbox-label {
+            flex-direction: row; align-items: flex-start; gap: 0.5rem;
+            font-weight: 400; color: var(--text); font-size: 0.85rem;
+            padding: 0.45rem 0;
         }
-        form.edit-form input[type=text], form.edit-form input[type=password],
-        form.edit-form input[type=number], form.edit-form select {
-            width: 100%; margin-top: 0.25rem;
-            padding: 0.4rem 0.55rem;
+        form.edit-form > label.checkbox-label input[type=checkbox] {
+            margin: 0.15rem 0 0; flex-shrink: 0;
+            width: 0.95rem; height: 0.95rem;
+            accent-color: var(--accent);
+        }
+        form.edit-form > label > input[type=text],
+        form.edit-form > label > input[type=password],
+        form.edit-form > label > input[type=number],
+        form.edit-form > label > select {
+            width: 100%; margin: 0;
+            padding: 0.45rem 0.6rem;
             border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
-            font: inherit; box-sizing: border-box;
+            font-family: inherit; font-size: 0.875rem;
             background: var(--surface); color: var(--text);
+            box-sizing: border-box;
         }
+        form.edit-form > label > input[type=number] { max-width: 7rem; }
         form.edit-form input:focus, form.edit-form select:focus {
             outline: 2px solid var(--accent); outline-offset: -1px; border-color: var(--accent);
         }
-        form.edit-form button {
-            grid-column: 1 / -1; justify-self: start; margin-top: 0.5rem;
+        form.edit-form > button {
+            grid-column: 1 / -1; justify-self: end; margin-top: 0.4rem;
         }
 
         /* ── Inline link buttons (the "remove" actions) ────────── */
