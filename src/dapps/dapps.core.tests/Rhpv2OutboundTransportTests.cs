@@ -36,7 +36,7 @@ public sealed class Rhpv2OutboundTransportTests
         await using var conn = await transport.ConnectAsync(
             localCallsign: "G0DPA-1",
             remoteCallsign: "G0DPB-1",
-            bpqPortNumber: 0,
+            bearerPort: 0,
             ct);
 
         var open = WaitForFrame<OpenMessage>(server, TimeSpan.FromSeconds(2));
@@ -64,7 +64,7 @@ public sealed class Rhpv2OutboundTransportTests
         await using var conn = await transport.ConnectAsync(
             localCallsign: "G0DPA-1",
             remoteCallsign: "G0DPB-1",
-            bpqPortNumber: 1,
+            bearerPort: 1,
             ct);
 
         var open = WaitForFrame<OpenMessage>(server, TimeSpan.FromSeconds(2));
@@ -91,7 +91,7 @@ public sealed class Rhpv2OutboundTransportTests
         await using var conn = await transport.ConnectAsync(
             localCallsign: "G0DPA-1",
             remoteCallsign: "G0DPB-1",
-            bpqPortNumber: 0,
+            bearerPort: 0,
             ct);
 
         var ordered = WaitForFrames(server, count: 2, TimeSpan.FromSeconds(2));
@@ -117,7 +117,7 @@ public sealed class Rhpv2OutboundTransportTests
         var ct = TestContext.Current.CancellationToken;
         await using var conn = await transport.ConnectAsync(
             localCallsign: "G0DPA-1", remoteCallsign: "G0DPB-1",
-            bpqPortNumber: 0, ct);
+            bearerPort: 0, ct);
 
         WaitForFrame<OpenMessage>(server, TimeSpan.FromSeconds(2));
         server.ReceivedFrames.Should().NotContain(f => f is AuthMessage,

@@ -116,7 +116,7 @@ public sealed class AgwInboundDeliveryTests(TwoInstanceLinbpqFixture fixture) : 
         var bearer = new Dappsv1SessionBackhaul(transport, NullLoggerFactory.Instance);
         var route = new BackhaulRoute(
             Callsign: fixture.ApplCallB,
-            BpqPort: fixture.AxipPortIndex);
+            BearerPort: fixture.AxipPortIndex);
 
         var sendResult = await bearer.SendAsync(bearerMsg, route, fixture.ApplCallA, ct);
         sendResult.Accepted.Should().BeTrue(

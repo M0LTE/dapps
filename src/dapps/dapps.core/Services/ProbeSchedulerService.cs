@@ -220,7 +220,7 @@ public sealed class ProbeSchedulerService(
                 return;
             }
 
-            await ProbeAndRecordAsync(opts.Callsign, t.Callsign, t.BpqPort, ct);
+            await ProbeAndRecordAsync(opts.Callsign, t.Callsign, t.BearerPort, ct);
             if (i < targets.Count - 1)
             {
                 var jitter = RandomDelayMs(MinInterProbeDelay, MaxInterProbeDelay);
@@ -240,11 +240,11 @@ public sealed class ProbeSchedulerService(
     /// passing false (e.g. in unit tests that don't model the response).
     /// </summary>
     public async Task<DbProbedNode> ProbeAndRecordAsync(
-        string localCallsign, string remoteCallsign, int bpqPort, CancellationToken ct,
+        string localCallsign, string remoteCallsign, int bearerPort, CancellationToken ct,
         bool fetchPeers = true,
         string reason = "scheduled probe sweep")
     {
-        var (row, _) = await ProbeAndRecordVerboseAsync(localCallsign, remoteCallsign, bpqPort, ct, fetchPeers, reason);
+        var (row, _) = await ProbeAndRecordVerboseAsync(localCallsign, remoteCallsign, bearerPort, ct, fetchPeers, reason);
         return row;
     }
 
@@ -262,7 +262,7 @@ public sealed class ProbeSchedulerService(
     /// standard DAPPS-callsign path automatically when no such marker
     /// is present.</summary>
     public async Task<(DbProbedNode Row, NodeProber.ProbeResult Result)> ProbeAndRecordVerboseAsync(
-        string localCallsign, string remoteCallsign, int bpqPort, CancellationToken ct,
+        string localCallsign, string remoteCallsign, int bearerPort, CancellationToken ct,
         bool fetchPeers = true,
         string reason = "scheduled probe sweep")
     {
@@ -272,10 +272,10 @@ public sealed class ProbeSchedulerService(
 
         var sw = System.Diagnostics.Stopwatch.StartNew();
         var result = useNodePrompt
-            ? await prober.ProbeViaNodeCallAsync(localCallsign, remoteCallsign, bpqPort, ct,
+            ? await prober.ProbeViaNodeCallAsync(localCallsign, remoteCallsign, bearerPort, ct,
                 applicationCommand: options.CurrentValue.NodePromptApplicationCommand,
                 fetchPeers: fetchPeers)
-            : await prober.ProbeAsync(localCallsign, remoteCallsign, bpqPort, ct, fetchPeers);
+            : await prober.ProbeAsync(localCallsign, remoteCallsign, bearerPort, ct, fetchPeers);
         sw.Stop();
         var row = await RecordResultAsync(result);
         if (result.Success && result.DiscoveredPeers.Count > 0)
@@ -287,7 +287,7 @@ public sealed class ProbeSchedulerService(
             await ta.RecordAsync(
                 kind: useNodePrompt ? "probe-nodeprompt" : "probe",
                 bearer: "agw",
-                channelKey: bpqPort.ToString(),
+                channelKey: bearerPort.ToString(),
                 targetCallsign: remoteCallsign,
                 reason: reason,
                 success: result.Success,
@@ -316,7 +316,7 @@ public sealed class ProbeSchedulerService(
             // before the first probe runs (see PersistTransitiveDiscoveriesAsync).
             Source = "neighbour",
         };
-        row.LastBpqPort = result.BpqPort;
+        row.LastBearerPort = result.BearerPort;
         row.LastProbedAt = result.At;
         if (result.Success)
         {
@@ -362,14 +362,14 @@ public sealed class ProbeSchedulerService(
             await database.UpsertProbedNode(new DbProbedNode
             {
                 Callsign = p.Callsign.ToUpperInvariant(),
-                LastBpqPort = p.BpqPort ?? result.BpqPort,
+                LastBearerPort = p.BearerPort ?? result.BearerPort,
                 Source = $"via:{result.Callsign}",
                 // No probe attempt yet - leave LastProbedAt / LastSuccessAt
                 // null; the scheduler picks it up on the next sweep.
             });
             logger.LogInformation(
                 "Transitive discovery: {0} via {1} (port {2})",
-                p.Callsign, result.Callsign, p.BpqPort ?? result.BpqPort);
+                p.Callsign, result.Callsign, p.BearerPort ?? result.BearerPort);
         }
     }
 
@@ -382,9 +382,9 @@ public sealed class ProbeSchedulerService(
     /// peer's <c>peers</c> response, not yet on either of the other
     /// two surfaces). Per-callsign opt-outs from
     /// <see cref="DbProbedNode.OptOut"/> are honoured. Port preference
-    /// (highest precedence first): neighbour's <c>BpqPort</c>, peer's
-    /// observed <c>BpqPort</c>, candidate's stored <c>LastBpqPort</c>,
-    /// <see cref="SystemOptions.DefaultBpqPort"/>.
+    /// (highest precedence first): neighbour's <c>BearerPort</c>, peer's
+    /// observed <c>BearerPort</c>, candidate's stored <c>LastBearerPort</c>,
+    /// <see cref="SystemOptions.DefaultBearerPort"/>.
     /// </summary>
     public async Task<IReadOnlyList<ProbeTarget>> EnumerateTargets(SystemOptions opts)
     {
@@ -404,7 +404,7 @@ public sealed class ProbeSchedulerService(
             if (string.IsNullOrWhiteSpace(n.Callsign)) continue;
             if (n.UdpEndpoint is not null) continue;   // UDP path - no AGW probe possible
             if (optOut.Contains(n.Callsign)) continue;
-            targets[n.Callsign] = new ProbeTarget(n.Callsign, n.BpqPort ?? opts.DefaultBpqPort);
+            targets[n.Callsign] = new ProbeTarget(n.Callsign, n.BearerPort ?? opts.DefaultBearerPort);
         }
 
         foreach (var p in peers)
@@ -414,7 +414,7 @@ public sealed class ProbeSchedulerService(
             if (optOut.Contains(p.Callsign)) continue;
             // Don't overwrite a manual neighbour's port with a guessed one.
             if (targets.ContainsKey(p.Callsign)) continue;
-            targets[p.Callsign] = new ProbeTarget(p.Callsign, p.BpqPort ?? opts.DefaultBpqPort);
+            targets[p.Callsign] = new ProbeTarget(p.Callsign, p.BearerPort ?? opts.DefaultBearerPort);
         }
 
         // Phase 2 transitive candidates - DbProbedNode rows whose Source
@@ -427,7 +427,7 @@ public sealed class ProbeSchedulerService(
             if (string.IsNullOrWhiteSpace(c.Callsign)) continue;
             if (!c.Source.StartsWith("via:", StringComparison.OrdinalIgnoreCase)) continue;
             if (targets.ContainsKey(c.Callsign)) continue;
-            targets[c.Callsign] = new ProbeTarget(c.Callsign, c.LastBpqPort ?? opts.DefaultBpqPort);
+            targets[c.Callsign] = new ProbeTarget(c.Callsign, c.LastBearerPort ?? opts.DefaultBearerPort);
         }
 
         return targets.Values
@@ -442,5 +442,5 @@ public sealed class ProbeSchedulerService(
         return Random.Shared.Next(lo, hi);
     }
 
-    public sealed record ProbeTarget(string Callsign, int BpqPort);
+    public sealed record ProbeTarget(string Callsign, int BearerPort);
 }

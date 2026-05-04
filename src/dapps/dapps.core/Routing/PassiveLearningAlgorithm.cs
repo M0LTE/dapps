@@ -48,7 +48,7 @@ public sealed class PassiveLearningAlgorithm(
         if (learned is null) return new RouteDecision.Unreachable();
 
         // Resolve the next-hop callsign back to the actual neighbour
-        // row so we get the bearer hint (BPQ port / UDP endpoint).
+        // row so we get the bearer hint (bearer port / UDP endpoint).
         // If the neighbour has gone away (e.g. operator removed it
         // while a learned route still references it), drop the
         // learned route and report Unreachable - re-learning will
@@ -69,7 +69,7 @@ public sealed class PassiveLearningAlgorithm(
 
         return new RouteDecision.NextHop(new BackhaulRoute(
             nextHop.Callsign,
-            BpqPort: nextHop.BpqPort ?? ctx.DefaultBpqPort,
+            BearerPort: nextHop.BearerPort ?? ctx.DefaultBearerPort,
             UdpEndpoint: nextHop.UdpEndpoint));
     }
 

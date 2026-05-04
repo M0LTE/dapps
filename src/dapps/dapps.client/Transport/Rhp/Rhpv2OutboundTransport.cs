@@ -49,7 +49,7 @@ public sealed class Rhpv2OutboundTransport : IDappsOutboundTransport
     }
 
     public async Task<IDappsConnection> ConnectAsync(
-        string localCallsign, string remoteCallsign, int bpqPortNumber, CancellationToken stoppingToken)
+        string localCallsign, string remoteCallsign, int bearerPort, CancellationToken stoppingToken)
     {
         logger.LogInformation("RHP: connecting to {host}:{port}", host, port);
         var rhp = await RhpClient.ConnectAsync(host, port, stoppingToken);
@@ -60,13 +60,13 @@ public sealed class Rhpv2OutboundTransport : IDappsOutboundTransport
                 await rhp.AuthenticateAsync(authUser, authPass ?? "", stoppingToken);
             }
 
-            // RHP port-byte addressing: the bpqPortNumber here is DAPPS's
+            // RHP port-byte addressing: the bearerPort here is DAPPS's
             // bearer-neutral "AGW port byte". RHPv2 takes the port as a
             // string label that XRouter resolves to an INTERFACE/PORT
             // pair. XR's convention is that port="1" means PORT=1 in
             // XROUTER.CFG, etc. - 1-indexed, where DAPPS's port byte is
             // 0-indexed. Add one and convert.
-            var portName = (bpqPortNumber + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
+            var portName = (bearerPort + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
 
             logger.LogInformation("RHP: open active {local}->{remote} on port {p}", localCallsign, remoteCallsign, portName);
             var handle = await rhp.OpenAsync(

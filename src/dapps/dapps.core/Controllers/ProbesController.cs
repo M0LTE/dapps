@@ -79,10 +79,10 @@ public class ProbesController(
         return removed ? NoContent() : NotFound();
     }
 
-    /// <summary>Resolve the BPQ port byte to use for an on-demand
+    /// <summary>Resolve the bearer port to use for an on-demand
     /// probe of <paramref name="callsign"/>. Mirrors the precedence
     /// the scheduler uses: explicit neighbour > AGW-bearer discovered
-    /// peer > <see cref="SystemOptions.DefaultBpqPort"/>. Returns
+    /// peer > <see cref="SystemOptions.DefaultBearerPort"/>. Returns
     /// (port, true) when at least one source matched, or
     /// (default, false) when the callsign isn't known anywhere - the
     /// caller surfaces that as a 400 rather than blindly trying the
@@ -92,7 +92,7 @@ public class ProbesController(
         var neighbour = await database.GetNeighbour(callsign);
         if (neighbour is not null && neighbour.UdpEndpoint is null)
         {
-            return (neighbour.BpqPort ?? options.CurrentValue.DefaultBpqPort, true);
+            return (neighbour.BearerPort ?? options.CurrentValue.DefaultBearerPort, true);
         }
 
         var peers = await database.GetDiscoveredPeers();
@@ -101,15 +101,15 @@ public class ProbesController(
             && string.Equals(p.Callsign, callsign, StringComparison.OrdinalIgnoreCase));
         if (match is not null)
         {
-            return (match.BpqPort ?? options.CurrentValue.DefaultBpqPort, true);
+            return (match.BearerPort ?? options.CurrentValue.DefaultBearerPort, true);
         }
 
-        return (options.CurrentValue.DefaultBpqPort, false);
+        return (options.CurrentValue.DefaultBearerPort, false);
     }
 
     private static ProbedNodeModel ToModel(DbProbedNode r) => new(
         Callsign: r.Callsign,
-        LastBpqPort: r.LastBpqPort,
+        LastBearerPort: r.LastBearerPort,
         LastProbedAt: r.LastProbedAt,
         LastSuccessAt: r.LastSuccessAt,
         LastError: r.LastError,
@@ -124,7 +124,7 @@ public class ProbesController(
 /// row evolve without breaking the wire shape.</summary>
 public sealed record ProbedNodeModel(
     string Callsign,
-    int? LastBpqPort,
+    int? LastBearerPort,
     DateTime? LastProbedAt,
     DateTime? LastSuccessAt,
     string LastError,

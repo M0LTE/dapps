@@ -18,14 +18,14 @@ public sealed class AgwOutboundTransport(string host, int port, ILoggerFactory l
     public async Task<IDappsConnection> ConnectAsync(
         string localCallsign,
         string remoteCallsign,
-        int bpqPortNumber,
+        int bearerPort,
         CancellationToken stoppingToken)
     {
-        if (bpqPortNumber < 0 || bpqPortNumber > 255)
+        if (bearerPort < 0 || bearerPort > 255)
         {
-            throw new ArgumentOutOfRangeException(nameof(bpqPortNumber), "AGW port byte must fit in a single octet (0..255)");
+            throw new ArgumentOutOfRangeException(nameof(bearerPort), "AGW port byte must fit in a single octet (0..255)");
         }
-        var portByte = (byte)bpqPortNumber;
+        var portByte = (byte)bearerPort;
 
         var tcp = new TcpClient();
         try

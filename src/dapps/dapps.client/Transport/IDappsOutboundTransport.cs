@@ -10,7 +10,7 @@ namespace dapps.client.Transport;
 /// slot in alongside. The transport is responsible for:
 ///   - reaching the node
 ///   - identifying the local callsign as the source
-///   - asking the node to connect to the remote callsign on a given BPQ port
+///   - asking the node to connect to the remote callsign on a given bearer port
 ///   - returning a Stream over which raw bytes flow once connected
 /// It is not responsible for any DAPPS-protocol semantics - that lives in
 /// <see cref="DappsProtocolClient"/>.
@@ -20,7 +20,7 @@ public interface IDappsOutboundTransport
     Task<IDappsConnection> ConnectAsync(
         string localCallsign,
         string remoteCallsign,
-        int bpqPortNumber,
+        int bearerPort,
         CancellationToken stoppingToken);
 }
 

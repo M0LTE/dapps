@@ -17,7 +17,7 @@ public sealed class DatabaseRoutingContext(
 {
     public string LocalCallsign => options.CurrentValue.Callsign;
 
-    public int DefaultBpqPort => options.CurrentValue.DefaultBpqPort;
+    public int DefaultBearerPort => options.CurrentValue.DefaultBearerPort;
 
     public async Task<IReadOnlyList<DbNeighbour>> GetNeighboursAsync(CancellationToken ct)
         => (await database.GetNeighbours()).ToList();

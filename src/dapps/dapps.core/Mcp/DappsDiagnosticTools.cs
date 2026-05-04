@@ -133,7 +133,7 @@ public sealed class DappsDiagnosticTools(
         sb.Append($"{normalized}: ");
         if (neighbour is not null)
         {
-            var via = neighbour.UdpEndpoint is not null ? $"UDP {neighbour.UdpEndpoint}" : $"AGW port {neighbour.BpqPort}";
+            var via = neighbour.UdpEndpoint is not null ? $"UDP {neighbour.UdpEndpoint}" : $"AGW port {neighbour.BearerPort}";
             sb.Append($"configured as a manual neighbour ({via}); ");
         }
         if (discoveredPeers.Count > 0)
@@ -371,7 +371,7 @@ public sealed class DappsDiagnosticTools(
             || n.Callsign.StartsWith(destinationBaseCallsign + "-", StringComparison.OrdinalIgnoreCase));
         if (matchingNeighbour is not null)
         {
-            var via = matchingNeighbour.UdpEndpoint is not null ? $"UDP {matchingNeighbour.UdpEndpoint}" : $"AGW port {matchingNeighbour.BpqPort}";
+            var via = matchingNeighbour.UdpEndpoint is not null ? $"UDP {matchingNeighbour.UdpEndpoint}" : $"AGW port {matchingNeighbour.BearerPort}";
             return new RouteFinding(
                 Destination: destinationBaseCallsign,
                 NextHop: matchingNeighbour.Callsign,

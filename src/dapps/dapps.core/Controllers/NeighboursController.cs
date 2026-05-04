@@ -9,7 +9,7 @@ namespace dapps.core.Controllers;
 /// hand today; the auto-discovery work in Phase B feeds the same table.
 ///
 /// Callsign is the natural key. POST is upsert (re-POSTing changes the
-/// BPQ port without erroring), DELETE is idempotent (404 only when there
+/// bearer port without erroring), DELETE is idempotent (404 only when there
 /// was nothing to delete).
 /// </summary>
 [ApiController]
@@ -20,7 +20,7 @@ public class NeighboursController(Database database) : ControllerBase
     public async Task<IEnumerable<NeighbourModel>> List()
     {
         var rows = await database.GetNeighbours();
-        return rows.Select(n => new NeighbourModel(n.Callsign, n.BpqPort, n.UdpEndpoint));
+        return rows.Select(n => new NeighbourModel(n.Callsign, n.BearerPort, n.UdpEndpoint));
     }
 
     [HttpPost]
@@ -32,7 +32,7 @@ public class NeighboursController(Database database) : ControllerBase
         }
         await database.UpsertNeighbour(
             neighbour.Callsign.Trim().ToUpperInvariant(),
-            neighbour.BpqPort,
+            neighbour.BearerPort,
             string.IsNullOrWhiteSpace(neighbour.UdpEndpoint) ? null : neighbour.UdpEndpoint.Trim());
         return NoContent();
     }
@@ -48,7 +48,8 @@ public class NeighboursController(Database database) : ControllerBase
 /// <summary>
 /// Wire shape for /Neighbours. <see cref="UdpEndpoint"/> ("host:port") is
 /// set when this neighbour is reachable over the UDP datagram backhaul;
-/// null routes via BPQ/AGW. <see cref="BpqPort"/> is the AGW port byte
-/// (0-indexed) when AGW-routed; null falls back to DefaultBpqPort.
+/// null routes via the configured node bearer (AGW or RHPv2).
+/// <see cref="BearerPort"/> is the 0-indexed bearer port; null falls back
+/// to DefaultBearerPort.
 /// </summary>
-public sealed record NeighbourModel(string Callsign, int? BpqPort, string? UdpEndpoint = null);
+public sealed record NeighbourModel(string Callsign, int? BearerPort, string? UdpEndpoint = null);

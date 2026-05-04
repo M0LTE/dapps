@@ -229,7 +229,7 @@ public class DappsProtocolClient(Stream stream, ILoggerFactory loggerFactory)
     /// is empty when the server didn't tag it; the wire form is
     /// <c>"n"</c> for a neighbour, <c>"d"</c> for a beacon-discovered
     /// peer.</summary>
-    public sealed record DiscoveredPeerInfo(string Callsign, string Source, int? BpqPort);
+    public sealed record DiscoveredPeerInfo(string Callsign, string Source, int? BearerPort);
 
     /// <summary>One message yielded by the rev drain. Captures the
     /// fields a caller's <see cref="Backhaul.IBackhaulInbox"/>

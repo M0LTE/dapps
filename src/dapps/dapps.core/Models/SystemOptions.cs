@@ -28,10 +28,10 @@ public enum ProbeStrategy
 
 public class SystemOptions
 {
-    /// <summary>Hostname or IP of the local packet node BPQ instance.</summary>
+    /// <summary>Hostname or IP of the local packet node (BPQ, XRouter, ...).</summary>
     public string NodeHost { get; set; } = "";
 
-    /// <summary>TCP port the node's AGW listener is on (BPQ default: 8000).</summary>
+    /// <summary>TCP port the node's AGW listener is on (AGW convention: 8000).</summary>
     public int AgwPort { get; set; }
 
     /// <summary>
@@ -59,11 +59,11 @@ public class SystemOptions
     public string RhpPass { get; set; } = "";
 
     /// <summary>
-    /// Default BPQ port byte (0-indexed) to use when originating a connection
+    /// Default bearer port (0-indexed) to use when originating a connection
     /// to a neighbour DAPPS instance via AGW. Individual neighbours can
-    /// override this with DbNeighbour.BpqPort.
+    /// override this with DbNeighbour.BearerPort.
     /// </summary>
-    public int DefaultBpqPort { get; set; }
+    public int DefaultBearerPort { get; set; }
 
     /// <summary>This DAPPS instance's local callsign + SSID, used as `callfrom` on outbound AGW connects.</summary>
     public string Callsign { get; set; } = "";

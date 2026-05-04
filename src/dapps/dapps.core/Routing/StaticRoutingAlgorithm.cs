@@ -44,7 +44,7 @@ public sealed class StaticRoutingAlgorithm(ILogger<StaticRoutingAlgorithm> logge
         {
             return new RouteDecision.NextHop(new BackhaulRoute(
                 manual.Callsign,
-                BpqPort: manual.BpqPort ?? ctx.DefaultBpqPort,
+                BearerPort: manual.BearerPort ?? ctx.DefaultBearerPort,
                 UdpEndpoint: manual.UdpEndpoint));
         }
 
@@ -66,7 +66,7 @@ public sealed class StaticRoutingAlgorithm(ILogger<StaticRoutingAlgorithm> logge
                 freshPeer.CostHint, freshPeer.Hops);
             return new RouteDecision.NextHop(new BackhaulRoute(
                 freshPeer.Callsign,
-                BpqPort: freshPeer.BpqPort ?? ctx.DefaultBpqPort,
+                BearerPort: freshPeer.BearerPort ?? ctx.DefaultBearerPort,
                 UdpEndpoint: freshPeer.UdpEndpoint));
         }
 
@@ -81,7 +81,7 @@ public sealed class StaticRoutingAlgorithm(ILogger<StaticRoutingAlgorithm> logge
                 message.Id, message.Destination, hintNeighbour.Callsign);
             return new RouteDecision.NextHop(new BackhaulRoute(
                 hintNeighbour.Callsign,
-                BpqPort: hintNeighbour.BpqPort ?? ctx.DefaultBpqPort,
+                BearerPort: hintNeighbour.BearerPort ?? ctx.DefaultBearerPort,
                 UdpEndpoint: hintNeighbour.UdpEndpoint));
         }
 

@@ -71,7 +71,7 @@ public sealed class OperationalSnapshotBuilderTests : IAsyncLifetime
         airtime.TryReserve(2.0, "beacon udp/x").Should().BeTrue();
 
         var db = new Database(NullLogger<Database>.Instance, opts);
-        await db.UpsertNeighbour("G7PEER-9", bpqPort: 1);
+        await db.UpsertNeighbour("G7PEER-9", bearerPort: 1);
 
         var builder = new OperationalSnapshotBuilder(
             opts, metrics, airtime, db,
@@ -83,7 +83,7 @@ public sealed class OperationalSnapshotBuilderTests : IAsyncLifetime
         snap.Callsign.Should().Be("G7TST-9");
         snap.CallsignConfigured.Should().BeTrue();
         snap.Status.Should().Be("degraded", "BPQ + MQTT probes target unbound ports");
-        snap.BpqAgwReachable.Should().BeFalse();
+        snap.NodeReachable.Should().BeFalse();
         snap.MqttBrokerUp.Should().BeFalse();
 
         snap.ForwardSuccess.Should().Be(1);
@@ -153,7 +153,7 @@ public sealed class OperationalSnapshotBuilderTests : IAsyncLifetime
         var airtime = new AirtimeAccountant(opts, clock, NullLogger<AirtimeAccountant>.Instance);
         var db = new Database(NullLogger<Database>.Instance, opts, clock);
 
-        await db.UpsertNeighbour("G7HOP-1", bpqPort: 0);
+        await db.UpsertNeighbour("G7HOP-1", bearerPort: 0);
         await db.SubmitOutboundMessage("chat", "G7DEST", "hello"u8.ToArray(), ttlSeconds: 600);
 
         var builder = new OperationalSnapshotBuilder(

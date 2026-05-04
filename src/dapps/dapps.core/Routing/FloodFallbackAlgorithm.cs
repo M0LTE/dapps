@@ -107,7 +107,7 @@ public sealed class FloodFallbackAlgorithm(
                 || !n.Callsign.Split('-')[0].Equals(excludeBase, StringComparison.OrdinalIgnoreCase))
             .Select(n => new BackhaulRoute(
                 n.Callsign,
-                BpqPort: n.BpqPort ?? ctx.DefaultBpqPort,
+                BearerPort: n.BearerPort ?? ctx.DefaultBearerPort,
                 UdpEndpoint: n.UdpEndpoint))
             .ToList();
     }

@@ -77,7 +77,7 @@ public sealed class AgwUiDiscoveryTests
         got.Beacon.Callsign.Should().Be("G7XYZ-9");
         got.Beacon.Hops.Should().Be(1);
         got.Beacon.Bearer.Should().BeOfType<AgwBearerHint>();
-        ((AgwBearerHint)got.Beacon.Bearer).BpqPort.Should().Be(1);
+        ((AgwBearerHint)got.Beacon.Bearer).BearerPort.Should().Be(1);
         got.ChannelKey.Should().Be("1");
     }
 
@@ -145,7 +145,7 @@ public sealed class AgwUiDiscoveryTests
     [Fact]
     public async Task MultiplePorts_OneBearerInstance_DistinguishesByChannelKey()
     {
-        // A node with VHF on BPQ port 1 and AXIP on BPQ port 3 shares
+        // A node with VHF on AGW port 1 and AXIP on AGW port 3 shares
         // one AGW socket. Beacons on each port must be tagged with the
         // matching channel key when yielded.
         using var server = new FakeAgwServer();

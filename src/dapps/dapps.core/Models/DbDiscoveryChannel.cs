@@ -6,7 +6,7 @@ namespace dapps.core.Models;
 /// <summary>
 /// One row per channel a DAPPS node beacons on / listens on. A
 /// "channel" is a (bearer × physical or logical sub-port) pair -
-/// e.g. AGW BPQ port 1 (VHF), AGW BPQ port 3 (AXIP-UDP),
+/// e.g. AGW bearer port 1 (VHF), AGW bearer port 3 (AXIP-UDP),
 /// MeshCore radio 0 channel "default", UDP multicast group
 /// 239.42.42.42:1881.
 ///
@@ -32,10 +32,10 @@ public sealed class DbDiscoveryChannel
     [Indexed]
     public string Bearer { get; set; } = "";
 
-    /// <summary>Bearer-specific identifier. For "agw" this is the BPQ
-    /// port byte stringified ("0", "1", …). For "udp" this is a
-    /// multicast endpoint ("239.42.42.42:1881"). For "meshcore" it
-    /// would be a radio + channel-name composite. The bearer parses.</summary>
+    /// <summary>Bearer-specific identifier. For "agw" this is the bearer
+    /// port stringified ("0", "1", …). For "udp" this is a multicast
+    /// endpoint ("239.42.42.42:1881"). For "meshcore" it would be a
+    /// radio + channel-name composite. The bearer parses.</summary>
     public string ChannelKey { get; set; } = "";
 
     public LinkClass LinkClass { get; set; } = LinkClass.Unknown;

@@ -43,7 +43,7 @@ public sealed class DappsRoutingTools(Database database)
     [McpServerTool(Name = "list_probed_nodes")]
     [Description(
         "Per-callsign B6.1 connected-mode probe state. One row per callsign we've ever probed: LastProbedAt, " +
-        "LastSuccessAt, LastError, ConsecutiveFailures, SuccessCount, the BPQ port we used, OptOut flag (operator " +
+        "LastSuccessAt, LastError, ConsecutiveFailures, SuccessCount, the bearer port we used, OptOut flag (operator " +
         "asked us to stop probing this peer), Source ('neighbour' for direct rows or 'via:CALLSIGN' for transitive " +
         "candidates from a remote's peers list). Probes only fire when SystemOptions.ProbingEnabled is true.")]
     public async Task<IReadOnlyList<DbProbedNode>> ListProbedNodesAsync()

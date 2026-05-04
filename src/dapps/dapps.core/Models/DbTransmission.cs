@@ -46,7 +46,7 @@ public sealed class DbTransmission
 
     /// <summary>Discovery channel key when this is a discovery-class
     /// transmission (beacon, solicit, solicit-reply). For AGW that's
-    /// the BPQ port byte as a decimal string; for UDP it's the
+    /// the bearer port as a decimal string; for UDP it's the
     /// multicast endpoint. Empty for non-discovery transmissions.</summary>
     public string ChannelKey { get; init; } = "";
 

@@ -96,7 +96,7 @@
             '/Events/dropped': s => s.tables?.dropped ?? [],
             '/Probes': s => (s.tables?.probedNodes ?? []).map(p => ({
                 callsign: p.callsign,
-                lastBpqPort: p.lastBpqPort,
+                lastBearerPort: p.lastBearerPort,
                 lastProbedAt: p.lastProbedAt,
                 lastSuccessAt: p.lastSuccessAt,
                 lastError: p.lastError,
@@ -187,19 +187,25 @@
         <div class="caption">how this node identifies itself on the air</div>
     </div>
     <div class="card">
-        <div class="label">BPQ AGW</div>
+        <div class="label">Packet node</div>
         <div class="value mono">
-            <span>@Model.Options.NodeHost:@Model.Options.AgwPort</span>
-            <span class="dot @(Model.BpqAgwReachable ? "ok" : "warn")" title="@(Model.BpqAgwReachable ? "reachable" : "unreachable")"></span>
+            @{
+                var bearerLabel = string.Equals(Model.Options.NodeBearer, "rhpv2", StringComparison.OrdinalIgnoreCase) ? "RHPv2" : "AGW";
+                var nodePort = string.Equals(Model.Options.NodeBearer, "rhpv2", StringComparison.OrdinalIgnoreCase)
+                    ? (Model.Options.RhpPort > 0 ? Model.Options.RhpPort : 9000)
+                    : Model.Options.AgwPort;
+            }
+            <span>@bearerLabel @Model.Options.NodeHost:@nodePort</span>
+            <span class="dot @(Model.NodeReachable ? "ok" : "warn")" title="@(Model.NodeReachable ? "reachable" : "unreachable")"></span>
         </div>
         <div class="caption">
-            @(Model.BpqAgwReachable ? "TCP probe ok - BPQ accepting connections" : "TCP probe failed - start linbpq or check AGWPORT")
+            @(Model.NodeReachable ? "TCP probe ok - node accepting connections" : "TCP probe failed - check the packet node is running and the bearer port is correct")
         </div>
     </div>
     <div class="card">
         <div class="label">Default outbound port</div>
-        <div class="value mono">AGW @Model.Options.DefaultBpqPort → BPQ @(Model.Options.DefaultBpqPort + 1)</div>
-        <div class="caption">port byte sent on outbound forwards when a neighbour has none set</div>
+        <div class="value mono">@Model.Options.DefaultBearerPort</div>
+        <div class="caption">bearer port (0-indexed) sent on outbound forwards when a neighbour has none set</div>
     </div>
     <div class="card">
         <div class="label">MQTT broker</div>
@@ -246,12 +252,12 @@
 </div>
 <details class="edit-block">
     <summary>Edit configuration</summary>
-    <p class="muted">Restart required for callsign, BPQ AGW host/port, MQTT port, UDP listener port to take effect.</p>
+    <p class="muted">Restart required for callsign, node host/port, MQTT port, UDP listener port to take effect.</p>
     <form class="edit-form" onsubmit="dappsSaveConfig(event)">
         <label>Callsign <input name="Callsign" value="@Model.Options.Callsign" required /></label>
         <label>Node host <input name="NodeHost" value="@Model.Options.NodeHost" required /></label>
         <label>AGW port <input name="AgwPort" type="number" min="1" max="65535" value="@Model.Options.AgwPort" required /></label>
-        <label>Default BPQ port <input name="DefaultBpqPort" type="number" min="0" max="255" value="@Model.Options.DefaultBpqPort" required /></label>
+        <label>Default bearer port <input name="DefaultBearerPort" type="number" min="0" max="255" value="@Model.Options.DefaultBearerPort" required /></label>
         <label>MQTT port <input name="MqttPort" type="number" min="1" max="65535" value="@Model.Options.MqttPort" required /></label>
         <label>UDP listener port (0 = disabled) <input name="UdpListenPort" type="number" min="0" max="65535" value="@Model.Options.UdpListenPort" required /></label>
         <label class="checkbox-label"><input name="AuthRequired" type="checkbox" @(Model.Options.AuthRequired ? "checked" : "") /> App-interface auth required</label>
@@ -472,7 +478,7 @@
     <div class="card">
         <div class="label">Inbound L2 connects</div>
         <div class="value"><span id="m-inbound">-</span></div>
-        <div class="caption">'C' frames dispatched to us by BPQ</div>
+        <div class="caption">L2 connects dispatched to us by the packet node</div>
     </div>
     <div class="card">
         <div class="label">Hash mismatches</div>
@@ -751,7 +757,7 @@ else
         <thead>
             <tr>
                 <th>Callsign</th>
-                <th>BPQ port</th>
+                <th>Bearer port</th>
                 <th>UDP endpoint</th>
                 <th></th>
             </tr>
@@ -761,7 +767,7 @@ else
         {
             <tr>
                 <td>@n.Callsign</td>
-                <td class="numeric">@(n.BpqPort?.ToString() ?? "-")</td>
+                <td class="numeric">@(n.BearerPort?.ToString() ?? "-")</td>
                 <td>@(n.UdpEndpoint ?? "-")</td>
                 <td><button class="link-btn" onclick="dappsDeleteNeighbour('@n.Callsign')">remove</button></td>
             </tr>
@@ -773,7 +779,7 @@ else
     <summary>Add neighbour</summary>
     <form class="edit-form" onsubmit="dappsAddNeighbour(event)">
         <label>Callsign <input name="callsign" required placeholder="GB7XYZ" /></label>
-        <label>BPQ port <input name="bpqPort" type="number" min="0" max="255" placeholder="0" /></label>
+        <label>Bearer port <input name="bearerPort" type="number" min="0" max="255" placeholder="0" /></label>
         <label>UDP endpoint (optional) <input name="udpEndpoint" placeholder="host:port" /></label>
         <button type="submit">Add / update</button>
     </form>
@@ -842,7 +848,7 @@ else
                 <option value="udp">udp</option>
             </select>
         </label>
-        <label>Channel key <input name="channelKey" required placeholder="0 (BPQ port byte) or 239.0.0.1:54321" /></label>
+        <label>Channel key <input name="channelKey" required placeholder="0 (bearer port) or 239.0.0.1:54321" /></label>
         <label>Link class
             <select name="linkClass">
                 <option>VhfUhfFm</option>
@@ -889,7 +895,7 @@ else
                 <td>@p.LinkClass</td>
                 <td class="numeric">@p.CostHint</td>
                 <td class="numeric">@p.Hops</td>
-                <td>@(p.UdpEndpoint ?? (p.BpqPort is { } bp ? $"BPQ port {bp}" : "-"))</td>
+                <td>@(p.UdpEndpoint ?? (p.BearerPort is { } bp ? $"bearer port {bp}" : "-"))</td>
                 <td>@IndexModel.Age(p.LastSeen) ago</td>
                 <td class="numeric">@p.TtlSeconds s</td>
             </tr>
@@ -966,7 +972,7 @@ else
                     return `<tr>` +
                         `<td>${callPill}</td>` +
                         `<td>${srcPill}</td>` +
-                        `<td class="numeric">${r.lastBpqPort ?? '-'}</td>` +
+                        `<td class="numeric">${r.lastBearerPort ?? '-'}</td>` +
                         `<td class="muted">${fmtAgo(r.lastProbedAt)}</td>` +
                         `<td class="muted">${fmtAgo(r.lastSuccessAt)}</td>` +
                         `<td class="numeric">${r.consecutiveFailures}</td>` +
@@ -1240,7 +1246,7 @@ else
             Callsign: f.Callsign.value,
             NodeHost: f.NodeHost.value,
             AgwPort: parseInt(f.AgwPort.value, 10),
-            DefaultBpqPort: parseInt(f.DefaultBpqPort.value, 10),
+            DefaultBearerPort: parseInt(f.DefaultBearerPort.value, 10),
             MqttPort: parseInt(f.MqttPort.value, 10),
             UdpListenPort: parseInt(f.UdpListenPort.value, 10),
             AuthRequired: f.AuthRequired.checked,
@@ -1277,7 +1283,7 @@ else
         const f = ev.target;
         const body = {
             Callsign: f.callsign.value,
-            BpqPort: f.bpqPort.value === '' ? null : parseInt(f.bpqPort.value, 10),
+            BearerPort: f.bearerPort.value === '' ? null : parseInt(f.bearerPort.value, 10),
             UdpEndpoint: f.udpEndpoint.value || null,
         };
         if (await dappsPostJson('/Neighbours', body)) location.reload();

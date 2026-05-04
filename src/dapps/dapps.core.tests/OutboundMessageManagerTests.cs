@@ -41,13 +41,13 @@ public sealed class OutboundMessageManagerTests : IAsyncLifetime
             c.CreateTable<DbDiscoveredPeer>();
             // A neighbour entry alone is enough to route messages to
             // app@N0DEST (post-A2 resolver matches base callsigns).
-            c.Insert(new DbNeighbour { Callsign = "N0DEST", BpqPort = 0 });
+            c.Insert(new DbNeighbour { Callsign = "N0DEST", BearerPort = 0 });
         }
 
         var optionsMonitor = new TestOptionsMonitor<SystemOptions>(new SystemOptions
         {
             Callsign = "N0CALL",
-            DefaultBpqPort = 0,
+            DefaultBearerPort = 0,
         });
         database = new Database(NullLogger<Database>.Instance, optionsMonitor);
         backhaul = new FakeBackhaul();
@@ -187,18 +187,18 @@ public sealed class OutboundMessageManagerTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task DoRun_PassesNeighbourBpqPortToBackhaul()
+    public async Task DoRun_PassesNeighbourBearerPortToBackhaul()
     {
-        // Update the seeded neighbour to a non-default BPQ port byte.
+        // Update the seeded neighbour to a non-default bearer port.
         using (var c = DbInfo.GetConnection())
         {
-            c.Execute("update neighbours set BpqPort=? where callsign=?", 3, "N0DEST");
+            c.Execute("update neighbours set BearerPort=? where callsign=?", 3, "N0DEST");
         }
         InsertMessage(id: "portmsg", ttl: null, createdAt: DateTime.UtcNow);
 
         await manager.DoRun(TestContext.Current.CancellationToken);
 
-        backhaul.Sent.Single().Route.BpqPort.Should().Be(3);
+        backhaul.Sent.Single().Route.BearerPort.Should().Be(3);
     }
 
     // ── B4: cost-based resolver across DbDiscoveredPeer ─────────────
@@ -230,7 +230,7 @@ public sealed class OutboundMessageManagerTests : IAsyncLifetime
                 Callsign = "N0DEST", Bearer = "agw", ChannelKey = "1",
                 LinkClass = LinkClass.VhfUhfFm,
                 CostHint = LinkClassDefaults.CostHint(LinkClass.VhfUhfFm),
-                BpqPort = 1, TtlSeconds = 5400, LastSeen = now,
+                BearerPort = 1, TtlSeconds = 5400, LastSeen = now,
             });
             c.Insert(new DbDiscoveredPeer
             {
@@ -238,7 +238,7 @@ public sealed class OutboundMessageManagerTests : IAsyncLifetime
                 Callsign = "N0DEST", Bearer = "agw", ChannelKey = "3",
                 LinkClass = LinkClass.Hf,
                 CostHint = LinkClassDefaults.CostHint(LinkClass.Hf),
-                BpqPort = 3, TtlSeconds = 86400, LastSeen = now,
+                BearerPort = 3, TtlSeconds = 86400, LastSeen = now,
             });
         }
         InsertMessage("rffirst", ttl: null, createdAt: DateTime.UtcNow);
@@ -247,7 +247,7 @@ public sealed class OutboundMessageManagerTests : IAsyncLifetime
 
         backhaul.Sent.Should().ContainSingle();
         var route = backhaul.Sent.Single().Route;
-        route.BpqPort.Should().Be(1,
+        route.BearerPort.Should().Be(1,
             "VHF/UHF FM (RF, line-of-sight) is the project's preferred class - should beat HF and the IP bridge");
         route.UdpEndpoint.Should().BeNull("IP must not be picked when an RF route is fresh");
     }
@@ -270,7 +270,7 @@ public sealed class OutboundMessageManagerTests : IAsyncLifetime
                 Callsign = "N0DEST", Bearer = "agw", ChannelKey = "1",
                 LinkClass = LinkClass.VhfUhfFm,
                 CostHint = LinkClassDefaults.CostHint(LinkClass.VhfUhfFm),
-                BpqPort = 1, TtlSeconds = 60,
+                BearerPort = 1, TtlSeconds = 60,
                 LastSeen = now.AddMinutes(-10), // ttl=60, last seen 10 min ago → stale
             });
             c.Insert(new DbDiscoveredPeer
@@ -300,7 +300,7 @@ public sealed class OutboundMessageManagerTests : IAsyncLifetime
         // explicit override.
         using (var c = DbInfo.GetConnection())
         {
-            // Manual neighbour points at AGW BPQ port 0 (the seeded one).
+            // Manual neighbour points at AGW bearer port 0 (the seeded one).
             c.Insert(new DbDiscoveredPeer
             {
                 PeerKey = DbDiscoveredPeer.MakeKey("N0DEST", "udp", "g1"),
@@ -316,7 +316,7 @@ public sealed class OutboundMessageManagerTests : IAsyncLifetime
 
         var route = backhaul.Sent.Single().Route;
         route.UdpEndpoint.Should().BeNull("the manual neighbour entry has no UdpEndpoint set");
-        route.BpqPort.Should().Be(0, "the manual neighbour points at BPQ port 0");
+        route.BearerPort.Should().Be(0, "the manual neighbour points at bearer port 0");
     }
 
     [Fact]
@@ -331,21 +331,21 @@ public sealed class OutboundMessageManagerTests : IAsyncLifetime
                 PeerKey = DbDiscoveredPeer.MakeKey("N0DEST", "agw", "1"),
                 Callsign = "N0DEST", Bearer = "agw", ChannelKey = "1",
                 LinkClass = LinkClass.VhfUhfFm, CostHint = 5, Hops = 3,
-                BpqPort = 1, TtlSeconds = 5400, LastSeen = now,
+                BearerPort = 1, TtlSeconds = 5400, LastSeen = now,
             });
             c.Insert(new DbDiscoveredPeer
             {
                 PeerKey = DbDiscoveredPeer.MakeKey("N0DEST", "agw", "2"),
                 Callsign = "N0DEST", Bearer = "agw", ChannelKey = "2",
                 LinkClass = LinkClass.VhfUhfFm, CostHint = 5, Hops = 0,
-                BpqPort = 2, TtlSeconds = 5400, LastSeen = now,
+                BearerPort = 2, TtlSeconds = 5400, LastSeen = now,
             });
         }
         InsertMessage("tied", ttl: null, createdAt: DateTime.UtcNow);
 
         await manager.DoRun(TestContext.Current.CancellationToken);
 
-        backhaul.Sent.Single().Route.BpqPort.Should().Be(2,
+        backhaul.Sent.Single().Route.BearerPort.Should().Be(2,
             "tied costs break on hop count - direct neighbour beats 3-hop relay");
     }
 

@@ -549,7 +549,7 @@ public sealed class DiscoveryService(
             CostHint = channel?.CostHint ?? LinkClassDefaults.CostHint(LinkClass.Unknown),
             Hops = beacon.Hops,
             TtlSeconds = beacon.Ttl,
-            BpqPort = beacon.Bearer is AgwBearerHint a ? a.BpqPort : null,
+            BearerPort = beacon.Bearer is AgwBearerHint a ? a.BearerPort : null,
             UdpEndpoint = beacon.Bearer is UdpBearerHint u ? u.Endpoint : null,
             LastSeen = timeProvider.GetUtcNow().UtcDateTime,
         };
@@ -564,11 +564,11 @@ public sealed class DiscoveryService(
         if (options.CurrentValue.AutoDiscoverViaNodeCall
             && beacon.Bearer is AgwBearerHint agw)
         {
-            await SeedNodePromptCandidateAsync(beacon.Callsign, agw.BpqPort);
+            await SeedNodePromptCandidateAsync(beacon.Callsign, agw.BearerPort);
         }
     }
 
-    private async Task SeedNodePromptCandidateAsync(string sourceCallsign, int bpqPort)
+    private async Task SeedNodePromptCandidateAsync(string sourceCallsign, int bearerPort)
     {
         var baseCallsign = sourceCallsign.Split('-')[0].ToUpperInvariant();
         var ourBase = options.CurrentValue.Callsign.Split('-')[0];
@@ -589,11 +589,11 @@ public sealed class DiscoveryService(
         await database.UpsertProbedNode(new DbProbedNode
         {
             Callsign = baseCallsign,
-            LastBpqPort = bpqPort,
+            LastBearerPort = bearerPort,
             Source = $"node-prompt:{sourceCallsign}",
         });
         logger.LogInformation(
             "Auto-discovered node-prompt candidate: {0} (derived from beacon {1} on AGW port {2})",
-            baseCallsign, sourceCallsign, bpqPort);
+            baseCallsign, sourceCallsign, bearerPort);
     }
 }

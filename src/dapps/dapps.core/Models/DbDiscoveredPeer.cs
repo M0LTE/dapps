@@ -5,7 +5,7 @@ namespace dapps.core.Models;
 
 /// <summary>
 /// One row per (callsign, bearer, channelKey) - the same peer can be
-/// heard on multiple channels (different BPQ ports, MeshCore radios,
+/// heard on multiple channels (different bearer ports, MeshCore radios,
 /// LAN multicast, …) and we record each independently so the resolver
 /// can pick the cheapest one on a per-message basis.
 ///
@@ -32,7 +32,7 @@ public sealed class DbDiscoveredPeer
     /// and <see cref="DbDiscoveryChannel.Bearer"/>.</summary>
     public string Bearer { get; set; } = "";
 
-    /// <summary>Bearer-specific channel id (BPQ port byte stringified
+    /// <summary>Bearer-specific channel id (bearer port stringified
     /// for AGW, multicast endpoint for UDP).</summary>
     public string ChannelKey { get; set; } = "";
 
@@ -52,8 +52,8 @@ public sealed class DbDiscoveredPeer
     /// <c>now - LastSeen &gt; TtlSeconds</c>.</summary>
     public int TtlSeconds { get; set; }
 
-    /// <summary>BPQ port byte the beacon arrived on (AGW only).</summary>
-    public int? BpqPort { get; set; }
+    /// <summary>bearer port the beacon arrived on (AGW only).</summary>
+    public int? BearerPort { get; set; }
 
     /// <summary>UDP host:port the beacon datagram was sourced from
     /// (UDP only).</summary>

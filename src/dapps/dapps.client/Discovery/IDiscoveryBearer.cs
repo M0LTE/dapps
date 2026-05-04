@@ -45,7 +45,7 @@ public sealed record ReceivedSolicit(SolicitFrame Solicit, string ChannelKey)
 /// A channel over which DAPPS nodes announce themselves and overhear
 /// each other's announcements. One implementation per bearer kind
 /// ("agw", "udp", "meshcore"); each implementation can serve many
-/// channels (BPQ port bytes / multicast groups / MeshCore radios)
+/// channels (bearer ports / multicast groups / MeshCore radios)
 /// from the same connection.
 /// </summary>
 public interface IDiscoveryBearer : IAsyncDisposable

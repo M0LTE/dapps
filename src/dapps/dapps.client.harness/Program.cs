@@ -19,13 +19,13 @@ try
     const int agwPort = 8000;
     const string localCallsign = "M0LTE-7";
     const string remoteCallsign = "Q0BBB";
-    const int bpqPort = 0;          // 0-indexed AGW port byte (BPQ user-facing port 1)
+    const int bearerPort = 0;          // 0-indexed AGW port byte (BPQ user-facing port 1)
     const string destination = "testqueue@gb7rdg";
 
     var transport = new AgwOutboundTransport(nodeHost, agwPort, loggerFactory);
 
-    logger.LogInformation("Connecting {local}->{remote} on AGW port {p}", localCallsign, remoteCallsign, bpqPort);
-    await using var connection = await transport.ConnectAsync(localCallsign, remoteCallsign, bpqPort, CancellationToken.None);
+    logger.LogInformation("Connecting {local}->{remote} on AGW port {p}", localCallsign, remoteCallsign, bearerPort);
+    await using var connection = await transport.ConnectAsync(localCallsign, remoteCallsign, bearerPort, CancellationToken.None);
 
     var protocol = new DappsProtocolClient(connection.Stream, loggerFactory);
 

@@ -28,7 +28,7 @@ public sealed class UdpDatagramListener(
 {
     /// <summary>Source address used for inbound delivery's sourceCallsign
     /// when the bearer doesn't carry an explicit one. The DAPPSv1
-    /// session reader sees the connecting BPQ's callsign as the first
+    /// session reader sees the connecting peer's callsign as the first
     /// line; UDP has no equivalent. Using the IP:port of the sender as
     /// a fallback keeps the audit trail meaningful without inventing a
     /// fake callsign.</summary>

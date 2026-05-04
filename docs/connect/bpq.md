@@ -44,12 +44,12 @@ Set these in DAPPS's environment (in the systemd unit, the docker compose, or wh
 DAPPS_CALLSIGN=M0LTE-1
 DAPPS_NODE_HOST=<bpq-host>
 DAPPS_AGW_PORT=8000
-DAPPS_DEFAULT_BPQ_PORT=0
+DAPPS_DEFAULT_BEARER_PORT=0
 ```
 
 `DAPPS_CALLSIGN` is the callsign DAPPS registers with AGW for inbound dispatch. SSID matters: BPQ dispatches based on the full call+SSID, so `M0LTE-1` is different from `M0LTE-2`.
 
-`DAPPS_DEFAULT_BPQ_PORT` is the BPQ port byte (0-indexed; the order they appear in `bpq32.cfg`'s `PORTNUM` lines) used when originating an outbound session if a per-neighbour override isn't set. Leave it `0` unless you have multiple ports and you want to default to a specific one.
+`DAPPS_DEFAULT_BEARER_PORT` is the bearer port (0-indexed; the order they appear in `bpq32.cfg`'s `PORTNUM` lines) used when originating an outbound session if a per-neighbour override isn't set. Leave it `0` unless you have multiple ports and you want to default to a specific one.
 
 ## Step 4: start DAPPS, watch for AGW registration
 
@@ -78,14 +78,14 @@ Add a manual neighbour from the dashboard's **Neighbours** panel (or the [discov
 | Field          | Value                                       |
 |----------------|---------------------------------------------|
 | Callsign       | another DAPPS node's callsign with SSID     |
-| BPQ port       | the BPQ port byte to use for AGW originates |
+| bearer port       | the bearer port to use for AGW originates |
 | UDP endpoint   | leave blank                                 |
 
 Send a test message via the dashboard's **Send a test message** form. The forwarder service will pick it up within a few seconds, dial the remote callsign over AGW, and you'll see the session in BPQ's MHEARD / connections view.
 
 ## Multi-port setups
 
-If your BPQ has multiple radio ports (e.g. port 1 = VHF FM, port 2 = HF), every neighbour record can specify which BPQ port to use for that peer. The dashboard's add-neighbour form has the BPQ-port field; the discovery system records the port a peer was heard on automatically.
+If your BPQ has multiple radio ports (e.g. port 1 = VHF FM, port 2 = HF), every neighbour record can specify which bearer port to use for that peer. The dashboard's add-neighbour form has the bearer-port field; the discovery system records the port a peer was heard on automatically.
 
 You don't need an `APPLICATION` line per port - the single `APPLICATION DAPPS` line covers all ports. The port choice is per-neighbour for outbound; for inbound, BPQ dispatches the same way no matter which port the connect arrived on.
 

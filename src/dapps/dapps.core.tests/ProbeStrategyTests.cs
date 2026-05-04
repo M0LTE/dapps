@@ -165,7 +165,7 @@ public sealed class ProbeStrategyTests
     /// these tests don't exercise probing - supply a no-op.</summary>
     private sealed class NoopTransport : IDappsOutboundTransport
     {
-        public Task<IDappsConnection> ConnectAsync(string localCallsign, string remoteCallsign, int bpqPortNumber, CancellationToken ct)
+        public Task<IDappsConnection> ConnectAsync(string localCallsign, string remoteCallsign, int bearerPort, CancellationToken ct)
             => throw new NotImplementedException();
     }
 }

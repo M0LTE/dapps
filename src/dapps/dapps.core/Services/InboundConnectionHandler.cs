@@ -238,7 +238,7 @@ public class InboundConnectionHandler(
             if (n.UdpEndpoint is not null) continue;   // UDP-only - not AGW-reachable for the asker
             if (!emitted.Add(n.Callsign)) continue;
             sb.Append("peer ").Append(n.Callsign).Append(" source=n");
-            if (n.BpqPort is { } port) sb.Append(" port=").Append(port);
+            if (n.BearerPort is { } port) sb.Append(" port=").Append(port);
             sb.Append('\n');
         }
 
@@ -249,7 +249,7 @@ public class InboundConnectionHandler(
             if (string.IsNullOrWhiteSpace(p.Callsign)) continue;
             if (!emitted.Add(p.Callsign)) continue;     // already reported as a neighbour
             sb.Append("peer ").Append(p.Callsign).Append(" source=d");
-            if (p.BpqPort is { } port) sb.Append(" port=").Append(port);
+            if (p.BearerPort is { } port) sb.Append(" port=").Append(port);
             sb.Append('\n');
         }
 

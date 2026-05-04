@@ -5,7 +5,7 @@ namespace dapps.client.Backhaul;
 /// agnostic identity (callsign) plus optional bearer-specific hints
 /// the implementation knows how to consume.
 ///
-/// Today only <see cref="BpqPort"/> is meaningful, and only to the AGW
+/// Today only <see cref="BearerPort"/> is meaningful, and only to the AGW
 /// backhaul. As bearer types are added (MeshCore companion, MeshCore
 /// KISS, etc.) further fields go here. Each backhaul reads what's
 /// relevant and ignores the rest; the queue/router layer doesn't have
@@ -13,5 +13,5 @@ namespace dapps.client.Backhaul;
 /// </summary>
 public sealed record BackhaulRoute(
     string Callsign,
-    int? BpqPort = null,
+    int? BearerPort = null,
     string? UdpEndpoint = null);

@@ -23,9 +23,9 @@ public interface IRoutingContext
     /// (<c>SystemOptions.Callsign</c>).</summary>
     string LocalCallsign { get; }
 
-    /// <summary>Default BPQ port byte (0-indexed) for AGW routes when
+    /// <summary>Default bearer port (0-indexed) for AGW routes when
     /// no per-neighbour override is set.</summary>
-    int DefaultBpqPort { get; }
+    int DefaultBearerPort { get; }
 
     Task<IReadOnlyList<DbNeighbour>> GetNeighboursAsync(CancellationToken ct);
 

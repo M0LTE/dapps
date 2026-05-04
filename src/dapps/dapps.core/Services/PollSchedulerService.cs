@@ -85,7 +85,7 @@ public sealed class PollSchedulerService(
         {
             ct.ThrowIfCancellationRequested();
             var t = targets[i];
-            await PollAndRecordAsync(opts.Callsign, t.Callsign, t.BpqPort, ct);
+            await PollAndRecordAsync(opts.Callsign, t.Callsign, t.BearerPort, ct);
             if (i < targets.Count - 1)
             {
                 var jitterMs = RandomDelayMs(MinInterPollDelay, MaxInterPollDelay);
@@ -99,11 +99,11 @@ public sealed class PollSchedulerService(
     /// <see cref="DbPolledNode"/>. Used by the scheduler and the
     /// on-demand REST endpoint.</summary>
     public async Task<DbPolledNode> PollAndRecordAsync(
-        string localCallsign, string remoteCallsign, int bpqPort, CancellationToken ct,
+        string localCallsign, string remoteCallsign, int bearerPort, CancellationToken ct,
         string reason = "scheduled poll sweep")
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        var result = await poller.PollAsync(localCallsign, remoteCallsign, bpqPort, ct);
+        var result = await poller.PollAsync(localCallsign, remoteCallsign, bearerPort, ct);
         sw.Stop();
         var row = await RecordResultAsync(result);
         if (transmissionAudit is { } ta)
@@ -111,7 +111,7 @@ public sealed class PollSchedulerService(
             await ta.RecordAsync(
                 kind: "poll",
                 bearer: "agw",
-                channelKey: bpqPort.ToString(),
+                channelKey: bearerPort.ToString(),
                 targetCallsign: remoteCallsign,
                 reason: result.Success
                     ? $"{reason} (drained {result.MessagesDrained})"
@@ -163,14 +163,14 @@ public sealed class PollSchedulerService(
             .Select(p => p.Callsign)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        var defaultPort = options.CurrentValue.DefaultBpqPort;
+        var defaultPort = options.CurrentValue.DefaultBearerPort;
         var targets = new List<PollTarget>();
         foreach (var n in neighbours)
         {
             if (string.IsNullOrWhiteSpace(n.Callsign)) continue;
             if (n.UdpEndpoint is not null) continue;
             if (optOut.Contains(n.Callsign)) continue;
-            targets.Add(new PollTarget(n.Callsign, n.BpqPort ?? defaultPort));
+            targets.Add(new PollTarget(n.Callsign, n.BearerPort ?? defaultPort));
         }
         return targets
             .OrderBy(t => t.Callsign, StringComparer.OrdinalIgnoreCase)
@@ -184,5 +184,5 @@ public sealed class PollSchedulerService(
         return Random.Shared.Next(lo, hi);
     }
 
-    public sealed record PollTarget(string Callsign, int BpqPort);
+    public sealed record PollTarget(string Callsign, int BearerPort);
 }

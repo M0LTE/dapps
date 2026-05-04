@@ -35,7 +35,7 @@ public sealed class F3PollSchedulerTests : IAsyncLifetime
             c.CreateTable<DbMessage>();
         }
         database = new Database(NullLogger<Database>.Instance,
-            new TestOptionsMonitor<SystemOptions>(new SystemOptions { Callsign = "N0US", DefaultBpqPort = 0 }));
+            new TestOptionsMonitor<SystemOptions>(new SystemOptions { Callsign = "N0US", DefaultBearerPort = 0 }));
         return ValueTask.CompletedTask;
     }
 
@@ -56,7 +56,7 @@ public sealed class F3PollSchedulerTests : IAsyncLifetime
     [Fact]
     public async Task EnumerateTargets_AgwNeighbour_Included()
     {
-        await database.UpsertNeighbour("N0THEM-9", bpqPort: 1);
+        await database.UpsertNeighbour("N0THEM-9", bearerPort: 1);
         var sched = MakeScheduler(new RecordingPollTransport(), new RecordingInbox());
 
         var targets = await sched.EnumerateTargetsAsync();
@@ -69,7 +69,7 @@ public sealed class F3PollSchedulerTests : IAsyncLifetime
     {
         // Plan F3 is AGW-only by design - UDP-only neighbours don't
         // have a session-based protocol to poll over.
-        await database.UpsertNeighbour("N0UDP-9", bpqPort: null, udpEndpoint: "127.0.0.1:1880");
+        await database.UpsertNeighbour("N0UDP-9", bearerPort: null, udpEndpoint: "127.0.0.1:1880");
         var sched = MakeScheduler(new RecordingPollTransport(), new RecordingInbox());
 
         (await sched.EnumerateTargetsAsync()).Should().BeEmpty();
@@ -78,7 +78,7 @@ public sealed class F3PollSchedulerTests : IAsyncLifetime
     [Fact]
     public async Task EnumerateTargets_OptOutRow_Excluded()
     {
-        await database.UpsertNeighbour("N0OPT-9", bpqPort: 1);
+        await database.UpsertNeighbour("N0OPT-9", bearerPort: 1);
         await database.UpsertPolledNode(new DbPolledNode { Callsign = "N0OPT-9", OptOut = true });
 
         var sched = MakeScheduler(new RecordingPollTransport(), new RecordingInbox());
@@ -88,7 +88,7 @@ public sealed class F3PollSchedulerTests : IAsyncLifetime
     [Fact]
     public async Task PollAndRecord_SuccessNoMessages_RecordsCleanRow()
     {
-        await database.UpsertNeighbour("N0EMPTY-9", bpqPort: 1);
+        await database.UpsertNeighbour("N0EMPTY-9", bearerPort: 1);
         // Server: just emits the prompt, then immediate drained-prompt for rev.
         var transport = new RecordingPollTransport(("N0EMPTY-9", "DAPPSv1>\nDAPPSv1>\n"));
         var inbox = new RecordingInbox();
@@ -106,7 +106,7 @@ public sealed class F3PollSchedulerTests : IAsyncLifetime
     [Fact]
     public async Task PollAndRecord_OneQueuedMessage_DrainsAndIncrementsCount()
     {
-        await database.UpsertNeighbour("N0HASMAIL-9", bpqPort: 2);
+        await database.UpsertNeighbour("N0HASMAIL-9", bearerPort: 2);
         // Build server bytes: prompt → ihave → data + payload → drained-prompt.
         var payload = "queued"u8.ToArray();
         long salt = 555;
@@ -133,7 +133,7 @@ public sealed class F3PollSchedulerTests : IAsyncLifetime
     [Fact]
     public async Task PollAndRecord_SuccessAfterFailure_ResetsCounter()
     {
-        await database.UpsertNeighbour("N0FLAP-9", bpqPort: 1);
+        await database.UpsertNeighbour("N0FLAP-9", bearerPort: 1);
         // First call: server doesn't emit prompt - fails. Second call:
         // emits prompt + immediate drained - success.
         var transport = new RecordingPollTransport(
@@ -154,7 +154,7 @@ public sealed class F3PollSchedulerTests : IAsyncLifetime
     [Fact]
     public async Task PollAndRecord_PreservesOptOutAcrossUpdate()
     {
-        await database.UpsertNeighbour("N0OPT-9", bpqPort: 1);
+        await database.UpsertNeighbour("N0OPT-9", bearerPort: 1);
         await database.UpsertPolledNode(new DbPolledNode { Callsign = "N0OPT-9", OptOut = true });
         var transport = new RecordingPollTransport(("N0OPT-9", "DAPPSv1>\nDAPPSv1>\n"));
         var sched = MakeScheduler(transport, new RecordingInbox());
@@ -172,7 +172,7 @@ public sealed class F3PollSchedulerTests : IAsyncLifetime
         var poller = new NodePoller(transport, inbox, TimeProvider.System,
             NullLoggerFactory.Instance, NullLogger<NodePoller>.Instance);
         var opts = new TestOptionsMonitor<SystemOptions>(
-            new SystemOptions { Callsign = "N0US", DefaultBpqPort = 0, ScheduledPollEnabled = true });
+            new SystemOptions { Callsign = "N0US", DefaultBearerPort = 0, ScheduledPollEnabled = true });
         return new PollSchedulerService(poller, database, opts, TimeProvider.System,
             NullLogger<PollSchedulerService>.Instance)
         {
@@ -206,9 +206,9 @@ public sealed class F3PollSchedulerTests : IAsyncLifetime
         private readonly Queue<(string Remote, string Reply)> _queue = new(cannedByCallsign);
         public List<(string Remote, int Port)> Connects { get; } = new();
 
-        public Task<IDappsConnection> ConnectAsync(string localCallsign, string remoteCallsign, int bpqPortNumber, CancellationToken stoppingToken)
+        public Task<IDappsConnection> ConnectAsync(string localCallsign, string remoteCallsign, int bearerPort, CancellationToken stoppingToken)
         {
-            Connects.Add((remoteCallsign, bpqPortNumber));
+            Connects.Add((remoteCallsign, bearerPort));
             string reply = "";
             if (_queue.Count > 0)
             {
