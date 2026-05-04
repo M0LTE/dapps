@@ -35,6 +35,30 @@ public class SystemOptions
     public int AgwPort { get; set; }
 
     /// <summary>
+    /// Which bearer DAPPS uses to talk to the local packet node.
+    /// <c>agw</c> (default) - AGW host protocol; works with BPQ, Direwolf
+    /// AGW server, AGWPE, etc. <c>rhpv2</c> - Remote Host Protocol v2;
+    /// works with XRouter today and BPQ when it gains RHPv2 support.
+    /// Operators pick one per installation. Restart required.
+    /// </summary>
+    public string NodeBearer { get; set; } = "agw";
+
+    /// <summary>
+    /// TCP port for the RHPv2 bearer. Only consulted when
+    /// <see cref="NodeBearer"/> is <c>rhpv2</c>. Default 9000 per the
+    /// RHPv2 spec; XRouter uses this by default.
+    /// </summary>
+    public int RhpPort { get; set; } = 9000;
+
+    /// <summary>
+    /// Optional RHPv2 authentication credentials. Most loopback
+    /// deployments don't require auth. Empty string = skip the
+    /// AuthenticateAsync step on connect.
+    /// </summary>
+    public string RhpUser { get; set; } = "";
+    public string RhpPass { get; set; } = "";
+
+    /// <summary>
     /// Default BPQ port byte (0-indexed) to use when originating a connection
     /// to a neighbour DAPPS instance via AGW. Individual neighbours can
     /// override this with DbNeighbour.BpqPort.

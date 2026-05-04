@@ -120,8 +120,19 @@ builder.Services.AddOptions<SystemOptions>().Configure<OptionsRepo, ILogger<Syst
         is { Length: > 0 } npac
         ? npac
         : "DAPPS";
+    o.NodeBearer = options.SingleOrDefault(opt => opt.Option == "NodeBearer")?.Value
+        is { Length: > 0 } nb
+        ? nb.Trim().ToLowerInvariant()
+        : "agw";
+    o.RhpPort = int.TryParse(
+        options.SingleOrDefault(opt => opt.Option == "RhpPort")?.Value, out var rp) && rp > 0
+        ? rp
+        : 9000;
+    o.RhpUser = options.SingleOrDefault(opt => opt.Option == "RhpUser")?.Value ?? "";
+    o.RhpPass = options.SingleOrDefault(opt => opt.Option == "RhpPass")?.Value ?? "";
 
     logger.LogInformation($"Callsign: {o.Callsign}");
+    logger.LogInformation($"Node bearer: {o.NodeBearer}");
     logger.LogInformation($"BPQ AGW: {o.NodeHost}:{o.AgwPort} (default port byte {o.DefaultBpqPort})");
     logger.LogInformation($"MQTT broker: localhost:{o.MqttPort}");
     logger.LogInformation($"UDP datagram listener: {(o.UdpListenPort > 0 ? $":{o.UdpListenPort}" : "disabled")}");
@@ -184,7 +195,24 @@ builder.Services.AddSingleton<IUpdaterFileSystem, RealUpdaterFileSystem>();
 
 builder.Services.AddSingleton<MqttBrokerService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<MqttBrokerService>());
-builder.Services.AddHostedService<AgwInboundService>();
+
+// Bearer selector. Pick AGW (BPQ, Direwolf, AGWPE, ...) or RHPv2
+// (XRouter today; future BPQ versions). Read directly from the
+// DAPPS_NODE_BEARER env var here so we don't have to instantiate
+// the IOptionsMonitor service-provider mid-registration. The
+// persisted SystemOptions row picks up the same value via the
+// usual DbStartup env-var seed; restart required to change the
+// bearer either way.
+var nodeBearer = (Environment.GetEnvironmentVariable("DAPPS_NODE_BEARER") ?? "agw")
+    .Trim().ToLowerInvariant();
+if (nodeBearer == "rhpv2")
+{
+    builder.Services.AddHostedService<Rhpv2InboundService>();
+}
+else
+{
+    builder.Services.AddHostedService<AgwInboundService>();
+}
 builder.Services.AddHostedService<TtlSweeperService>();
 builder.Services.AddSingleton<Database>();
 builder.Services.AddSingleton<OptionsRepo>();
@@ -262,6 +290,16 @@ builder.Services.AddSingleton<IDappsOutboundTransport>(sp =>
 {
     var opts = sp.GetRequiredService<IOptionsMonitor<SystemOptions>>().CurrentValue;
     var lf = sp.GetRequiredService<ILoggerFactory>();
+    if (string.Equals(opts.NodeBearer, "rhpv2", StringComparison.OrdinalIgnoreCase))
+    {
+        var port = opts.RhpPort > 0 ? opts.RhpPort : 9000;
+        var user = string.IsNullOrEmpty(opts.RhpUser) ? null : opts.RhpUser;
+        var pass = string.IsNullOrEmpty(opts.RhpPass) ? null : opts.RhpPass;
+        return new dapps.client.Transport.Rhp.Rhpv2OutboundTransport(
+            opts.NodeHost, port,
+            lf.CreateLogger<dapps.client.Transport.Rhp.Rhpv2OutboundTransport>(),
+            user, pass);
+    }
     return new AgwOutboundTransport(opts.NodeHost, opts.AgwPort, lf);
 });
 // Order of registration matters: OutboundMessageManager picks the first

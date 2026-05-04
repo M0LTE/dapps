@@ -1,35 +1,49 @@
 # Connect via RHPv2
 
-**Status: planned.** RHPv2 (Radio Host Protocol v2) is a more modern host-to-node protocol than AGW. The DAPPS bearer is on the [Phase H roadmap](https://github.com/M0LTE/dapps/blob/master/plan.md#phase-h---concrete-bearer-integrations).
+**Status: implemented.** RHPv2 (Remote Host Protocol v2) is a more modern host-to-node protocol than AGW. DAPPS speaks it via the [`RhpV2.Client` NuGet package](https://www.nuget.org/packages/RhpV2.Client) and selects between AGW and RHPv2 with a single env var.
 
-[XRouter](xrouter.md) already supports RHPv2, so it's the natural first test target once we add the bearer. Mainline BPQ does not yet, but is expected to in due course; when it does, DAPPS will prefer RHPv2 over AGW for any host that exposes both.
+[XRouter](xrouter.md) supports RHPv2 natively, and **RHPv2 is required for DAPPS-on-XRouter** - XRouter's AGW emulator is not usable as a DAPPS bearer because XRouter scopes the AGW callsign claim per-TCP-connection, which collides with DAPPS's per-outbound-fresh-connection pattern. The XRouter operator guide is at [Connect via XRouter (RHPv2)](xrouter.md).
+
+Mainline BPQ does not yet ship RHPv2; when it does, DAPPS will work over it without code changes.
 
 ## Why RHPv2
 
-AGW is a 1990s protocol - it works fine for what it does, but it has limits that show up under modern use. RHPv2 addresses several of them:
+AGW is a 1990s protocol - it works fine on hosts that don't constrain callsign claims per connection (BPQ being the obvious one), but it has limits that show up under modern use. RHPv2 addresses several of them:
 
-- **Better session multiplexing.** AGW assumes one TCP connection per host application; multiple apps on the same machine each maintain their own.
-- **Cleaner inbound dispatch.** AGW's "register a callsign and receive every connect that matches" model has edge cases around shared callsigns and SSIDs that RHPv2 handles more gracefully.
+- **Better session multiplexing.** AGW assumes one TCP connection per host application. RHPv2 multiplexes many sessions over one TCP connection, with handle-based addressing. DAPPS's inbound listener and per-outbound-forward sends share one socket on RHPv2; on AGW each outbound forward needs its own TCP connection.
+- **Cleaner inbound dispatch.** AGW's "register a callsign and receive every connect that matches" model has edge cases around shared callsigns and SSIDs. XRouter's per-TCP-connection AGW callsign claim is the most painful manifestation of this; RHPv2's handle-based binding sidesteps it entirely.
 - **Actually defined error semantics.** AGW's behaviour on TNC reconnect, port up/down events, etc., is empirically discovered; RHPv2 makes it part of the spec.
 
-For DAPPS the day-to-day difference would be modest - the AGW path works well - but the long tail (reconnect storms, multi-app coexistence, shared callsign experiments) gets cleaner.
+## Configure DAPPS to use RHPv2
 
-## What integration will look like
-
-The DAPPS bearer-agnostic seam already supports stream-shaped session bearers (that's what AGW is). RHPv2 plugs in alongside, with a config knob to prefer RHPv2 when it's available:
+In DAPPS's environment (systemd unit, shell, etc.):
 
 ```
-DAPPS_RHP_ENABLED=true
-DAPPS_RHP_HOST=127.0.0.1
-DAPPS_RHP_PORT=<rhp port BPQ exposes>
+DAPPS_NODE_BEARER=rhpv2
+DAPPS_NODE_HOST=<host>
+DAPPS_RHP_PORT=<rhp port>
+DAPPS_DEFAULT_BPQ_PORT=0
 ```
 
-When both AGW and RHPv2 are configured, DAPPS would prefer RHPv2 for new sessions and fall back to AGW only if the RHPv2 connection isn't available. Existing sessions keep using whichever bearer they started on.
+`DAPPS_NODE_BEARER=rhpv2` flips the bearer selector from AGW (the default) to RHPv2. The AGW knobs (`DAPPS_AGW_PORT`) are then unused.
+
+`DAPPS_RHP_PORT` matches the host's RHPv2 listener port (XRouter's `RHPPORT=` directive; default 9000).
+
+`DAPPS_DEFAULT_BPQ_PORT` is the same 0-indexed port byte used in the AGW path. DAPPS adds 1 internally to derive the RHPv2 port name (which is 1-indexed in XRouter, matching `PORT=N` in `XROUTER.CFG`). So `DAPPS_DEFAULT_BPQ_PORT=0` -> RHPv2 port "1" -> `PORT=1` in XRouter's config.
+
+If RHPv2 requires authentication on your host, also set:
+
+```
+DAPPS_RHP_USER=<user>
+DAPPS_RHP_PASS=<pass>
+```
+
+These are skipped if `DAPPS_RHP_USER` is empty.
 
 ## What stays the same
 
-Everything above the bearer seam - the protocol, the app interface, the discovery model, the routing graph, the dashboard - works identically over RHPv2.
+Everything above the bearer seam - the protocol, the app interface, the discovery model, the routing graph, the dashboard - works identically over RHPv2 and AGW. Switching between them is a restart with one env var changed; no data migration, no on-air-format change, no neighbour table rebuild.
 
-## When?
+## Testing
 
-Tracking issue: [Phase H in plan.md](https://github.com/M0LTE/dapps/blob/master/plan.md#phase-h---concrete-bearer-integrations). XRouter's existing RHPv2 support means we don't have to wait for mainline BPQ to start work on the DAPPS side. If you're an XRouter operator with RHPv2 enabled and would like to be in the loop on testing, [open an issue](https://github.com/M0LTE/dapps/issues).
+`scripts/sim-mixed-bearer.sh` brings up a 4-node BPQ+XRouter mesh (two BPQ, two XRouter) with DAPPS daemons attached - the BPQ-side daemons use AGW, the XRouter-side daemons use RHPv2. End-to-end exercise covers all five paths including the 3-hop XR->BPQ->BPQ->XR mixed-bearer route. The XRouter integration in CI stays on AGW (single-container frame-format coverage); the mixed-bearer four-container run is operator-driven on a workstation where the XRouter image is already pulled.
