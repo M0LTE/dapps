@@ -8,7 +8,19 @@ The on-air protocol DAPPS speaks **between nodes** is summarised in the section 
 
 ## MQTT
 
-Embedded broker, default port 1883. Speak MQTT 5 - clean session is fine and recommended. The broker holds no persistent state; messages are durable in DAPPS's SQLite queue, the broker is just the real-time delivery channel.
+Embedded broker, default port 1883 (TCP). Speak MQTT 5 - clean session is fine and recommended. The broker holds no persistent state; messages are durable in DAPPS's SQLite queue, the broker is just the real-time delivery channel.
+
+The same broker is also exposed at **`/mqtt` over WebSocket** on the dashboard's HTTP listener (default `:5000`) - same topics, same CONNECT auth, same interceptors. Browsers connect with sub-protocol `mqtt`:
+
+```js
+// mqtt.js, in a browser
+const client = mqtt.connect("ws://<host>:5000/mqtt", {
+    protocolVersion: 5,
+    clientId: "myapp-" + crypto.randomUUID(),
+});
+```
+
+paho-mqtt with `transport='websockets'` works the same way. A worked browser example is in [`examples/file-transfer/`](https://github.com/M0LTE/dapps/tree/master/examples/file-transfer) on the repo.
 
 ### Topics
 

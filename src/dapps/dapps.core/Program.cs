@@ -9,6 +9,7 @@ using dapps.core.Services;
 using dapps.core.Updater;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.Extensions.Options;
+using MQTTnet.AspNetCore;
 using System.Net.Sockets;
 // OpenAPI / Scalar dropped in the .NET 8 rollback - the native
 // OpenAPI generation (AddOpenApi / MapOpenApi) is a .NET 9+ API.
@@ -193,6 +194,27 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<UpdateChecker>());
 // privileged dapps-updater.service via `dapps --apply-update`.
 builder.Services.AddSingleton<IUpdaterFileSystem, RealUpdaterFileSystem>();
 
+// Embedded MQTT broker. Register via MQTTnet.AspNetCore so a single
+// MqttServer instance backs both the TCP listener (port from
+// SystemOptions.MqttPort) and the WebSocket endpoint mounted at
+// /mqtt below. Browsers can speak MQTT directly over the WS endpoint -
+// no REST round-trip per message.
+//
+// AddHostedMqttServerWithServices registers MqttServer + an IHostedService
+// that owns its lifecycle, and runs the options-builder callback at
+// singleton-resolution time so SystemOptions is fully populated before
+// we read MqttPort. AddMqttConnectionHandler + AddMqttTcpServerAdapter
+// supply the WS / TCP transports respectively. MqttBrokerService runs
+// AFTER the broker is up and just attaches DAPPS-specific event handlers
+// (auth, topic-scope enforcement, queue persistence, replay-on-subscribe).
+builder.Services.AddHostedMqttServerWithServices(builder =>
+{
+    var sysOpts = builder.ServiceProvider.GetRequiredService<IOptionsMonitor<SystemOptions>>().CurrentValue;
+    builder.WithDefaultEndpoint().WithDefaultEndpointPort(sysOpts.MqttPort);
+});
+builder.Services.AddMqttConnectionHandler();
+builder.Services.AddMqttTcpServerAdapter();
+builder.Services.AddConnections();
 builder.Services.AddSingleton<MqttBrokerService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<MqttBrokerService>());
 
@@ -358,6 +380,13 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.UseMiddleware<BearerAuthMiddleware>();
 app.UseMiddleware<AdminAuthMiddleware>();
+// MQTT-over-WebSocket. Same broker instance as the TCP :MqttPort
+// listener; same auth interceptors. Browsers connect to ws://host/mqtt
+// with sub-protocol "mqtt" and speak MQTT 5 directly. Allowlisted in
+// AdminAuthMiddleware alongside /Health and /mcp - WebSocket clients
+// don't carry the admin cookie.
+app.UseWebSockets();
+app.MapMqtt("/mqtt");
 app.MapControllers();
 app.MapRazorPages();
 // Plan G - mount the MCP endpoint at /mcp. The MCP transport
@@ -375,9 +404,17 @@ catch (Exception ex) when (IsFatalConfigError(ex))
     // restart. Exit with code 78 - paired with
     // RestartPreventExitStatus=78 in the systemd unit (see
     // scripts/dapps.service) so systemd stops the crash-loop and
-    // surfaces the actionable journal message instead. The host has
-    // already logged a critical line via MqttBrokerService /
-    // similar; we just translate the exit code.
+    // surfaces the actionable journal message instead. Drop a single
+    // operator-facing hint into the journal so the cause is obvious
+    // even without scrolling past the stack trace - typical case is
+    // a co-located mosquitto holding :MqttPort or a stray daemon on
+    // ASPNETCORE_URLS' port.
+    var logger = app.Services.GetService<ILoggerFactory>()?.CreateLogger("dapps");
+    var mqttPort = app.Services.GetService<IOptionsMonitor<SystemOptions>>()?.CurrentValue.MqttPort;
+    logger?.LogCritical(
+        "Fatal startup config error: a port is already in use. Check DAPPS_MQTT_PORT (currently {0}) and ASPNETCORE_URLS, " +
+        "free whichever is held, or POST {{\"MqttPort\":<free-port>}} to /Config and restart.",
+        mqttPort?.ToString() ?? "?");
     return 78;
 }
 return 0;

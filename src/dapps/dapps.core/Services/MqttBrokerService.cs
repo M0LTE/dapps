@@ -2,7 +2,6 @@ using dapps.core.Models;
 using Microsoft.Extensions.Options;
 using MQTTnet;
 using MQTTnet.Server;
-using System.Net.Sockets;
 using System.Text;
 
 namespace dapps.core.Services;
@@ -19,18 +18,26 @@ namespace dapps.core.Services;
 /// real-time delivery channel. Messages stay in the database until the app
 /// explicitly acks; if no subscriber is connected, the publish is a no-op
 /// and the message is replayed when a subscriber later connects.
+///
+/// Hosting: the broker itself is registered via MQTTnet.AspNetCore's
+/// <c>AddHostedMqttServer</c> so a single <see cref="MqttServer"/>
+/// instance can serve both TCP (port <see cref="SystemOptions.MqttPort"/>)
+/// and the WebSocket endpoint mounted at <c>/mqtt</c>. This service is a
+/// thin lifecycle wrapper around the shared instance: it attaches DAPPS-
+/// specific event handlers in <see cref="StartAsync"/> and detaches them
+/// in <see cref="StopAsync"/>, leaving the actual listener lifecycle to
+/// the hosted broker.
 /// </summary>
 public sealed class MqttBrokerService(
     ILogger<MqttBrokerService> logger,
     IOptionsMonitor<SystemOptions> options,
     Database database,
-    AppTokenStore tokens) : IHostedService
+    AppTokenStore tokens,
+    MqttServer server) : IHostedService
 {
     private const string OutTopicPrefix = "dapps/out/";
     private const string InTopicPrefix = "dapps/in/";
     private const string AckTopicPrefix = "dapps/ack/";
-
-    private MqttServer? server;
 
     /// <summary>Tracks which app a connected MQTT client authenticated as,
     /// keyed on ClientId. When auth is required, publish/subscribe
@@ -38,16 +45,9 @@ public sealed class MqttBrokerService(
     private readonly Dictionary<string, string> clientApps = new(StringComparer.Ordinal);
     private readonly object clientAppsLock = new();
 
-    public async Task StartAsync(CancellationToken cancellationToken)
+    public Task StartAsync(CancellationToken cancellationToken)
     {
         var opts = options.CurrentValue;
-
-        var serverOptions = new MqttServerOptionsBuilder()
-            .WithDefaultEndpoint()
-            .WithDefaultEndpointPort(opts.MqttPort)
-            .Build();
-
-        server = new MqttFactory().CreateMqttServer(serverOptions);
 
         server.ValidatingConnectionAsync += OnValidatingConnection;
         server.InterceptingPublishAsync += OnInterceptingPublish;
@@ -55,48 +55,23 @@ public sealed class MqttBrokerService(
         server.ClientSubscribedTopicAsync += OnClientSubscribedTopic;
         server.ClientDisconnectedAsync += OnClientDisconnected;
 
-        try
-        {
-            await server.StartAsync();
-        }
-        catch (SocketException ex) when (ex.SocketErrorCode == SocketError.AddressAlreadyInUse)
-        {
-            // The host's default exception handler logs a noisy
-            // "Hosting failed to start" stack trace and crash-loops via
-            // systemd's Restart=on-failure. Operators running into this
-            // hit it as e.g. a co-located mosquitto container holding
-            // :1883 - the cause is operational, not a bug. Surface a
-            // single short actionable line so the journal shows what to
-            // do, then rethrow as a clean InvalidOperationException so
-            // the host's stack-trace dump references *our* message
-            // rather than a buried Bind() / MQTTnet internals chain.
-            //
-            // Once a sysop notices the journal log, they typically:
-            //   - set DAPPS_MQTT_PORT=11883 (or another free port) and
-            //     update systemoptions.MqttPort to match (env var only
-            //     seeds on first start; existing rows persist), or
-            //   - stop whatever else holds the port (often mosquitto
-            //     for an unrelated BPQ tooling stack).
-            var msg =
-                $"MQTT broker port {opts.MqttPort} is already in use. " +
-                $"Another process holds it (often a docker-published mosquitto). " +
-                $"Free the port, or POST {{\"MqttPort\":<free-port>}} to /Config and restart " +
-                $"to use a different port.";
-            logger.LogCritical(msg);
-            throw new InvalidOperationException(msg, ex);
-        }
-        logger.LogInformation("MQTT broker listening on :{port} (auth required: {auth})",
+        logger.LogInformation(
+            "MQTT broker: TCP :{port}, WebSocket /mqtt (auth required: {auth})",
             opts.MqttPort, opts.AuthRequired);
+        return Task.CompletedTask;
     }
 
-    public async Task StopAsync(CancellationToken cancellationToken)
+    public Task StopAsync(CancellationToken cancellationToken)
     {
-        if (server is not null)
-        {
-            await server.StopAsync();
-            server.Dispose();
-            server = null;
-        }
+        // Detach handlers so a re-StartAsync (e.g. test scenarios) doesn't
+        // double-subscribe. The broker itself stops via its own hosted
+        // service - we don't own that lifecycle here.
+        server.ValidatingConnectionAsync -= OnValidatingConnection;
+        server.InterceptingPublishAsync -= OnInterceptingPublish;
+        server.InterceptingSubscriptionAsync -= OnInterceptingSubscription;
+        server.ClientSubscribedTopicAsync -= OnClientSubscribedTopic;
+        server.ClientDisconnectedAsync -= OnClientDisconnected;
+        return Task.CompletedTask;
     }
 
     /// <summary>
@@ -115,7 +90,6 @@ public sealed class MqttBrokerService(
     /// </summary>
     public async Task<bool> PublishRetainedAsync(string topic, byte[] payload, CancellationToken ct = default)
     {
-        if (server is null) return false;
         var msg = new MqttApplicationMessageBuilder()
             .WithTopic(topic)
             .WithPayload(payload)
@@ -144,7 +118,6 @@ public sealed class MqttBrokerService(
     /// </summary>
     public async Task<bool> PublishAsync(string topic, byte[] payload, CancellationToken ct = default)
     {
-        if (server is null) return false;
         var msg = new MqttApplicationMessageBuilder()
             .WithTopic(topic)
             .WithPayload(payload)
@@ -164,8 +137,6 @@ public sealed class MqttBrokerService(
 
     public async Task InjectInboundMessage(DbMessage message)
     {
-        if (server is null) return;
-
         var (app, _) = DestinationParser.Parse(message.Destination);
         if (app.Length == 0) return;
 

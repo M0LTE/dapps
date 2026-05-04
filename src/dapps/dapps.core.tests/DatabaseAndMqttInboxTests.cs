@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using MQTTnet;
 using MQTTnet.Client;
+using MQTTnet.Server;
 using SQLite;
 
 namespace dapps.core.tests;
@@ -29,6 +30,7 @@ public sealed class DatabaseAndMqttInboxTests : IAsyncLifetime
     private string dbPath = null!;
     private int brokerPort;
     private Database database = null!;
+    private MqttServer mqttServer = null!;
     private MqttBrokerService broker = null!;
     private DatabaseAndMqttInbox inbox = null!;
 
@@ -54,8 +56,11 @@ public sealed class DatabaseAndMqttInboxTests : IAsyncLifetime
         });
         database = new Database(NullLogger<Database>.Instance, optionsMonitor);
         var tokens = new AppTokenStore(NullLogger<AppTokenStore>.Instance);
+        mqttServer = new MqttFactory().CreateMqttServer(new MqttServerOptionsBuilder()
+            .WithDefaultEndpoint().WithDefaultEndpointPort(brokerPort).Build());
+        await mqttServer.StartAsync();
         broker = new MqttBrokerService(
-            NullLogger<MqttBrokerService>.Instance, optionsMonitor, database, tokens);
+            NullLogger<MqttBrokerService>.Instance, optionsMonitor, database, tokens, mqttServer);
         var routingContext = new DatabaseRoutingContext(database, optionsMonitor);
         var routingAlgorithm = new StaticRoutingAlgorithm(NullLogger<StaticRoutingAlgorithm>.Instance);
         inbox = new DatabaseAndMqttInbox(database, broker, new InboundEventBus(),
@@ -68,6 +73,8 @@ public sealed class DatabaseAndMqttInboxTests : IAsyncLifetime
     public async ValueTask DisposeAsync()
     {
         await broker.StopAsync(CancellationToken.None);
+        await mqttServer.StopAsync();
+        mqttServer.Dispose();
         DbInfo.OverridePath = null;
         try { File.Delete(dbPath); } catch { /* ignore */ }
     }
