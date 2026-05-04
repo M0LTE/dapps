@@ -22,7 +22,7 @@ namespace dapps.core.Services;
 /// </summary>
 public sealed class AdminAuthMiddleware(RequestDelegate next)
 {
-    public async Task InvokeAsync(HttpContext ctx, AdminPasswordStore store)
+    public async Task InvokeAsync(HttpContext ctx, AdminPasswordStore store, SystemOptionsStore options)
     {
         var path = ctx.Request.Path.Value ?? "";
 
@@ -61,6 +61,18 @@ public sealed class AdminAuthMiddleware(RequestDelegate next)
 
         if (ctx.User.Identity?.IsAuthenticated == true)
         {
+            // Setup-required state: admin password configured, callsign
+            // still the placeholder. Bounce back to /Setup so the
+            // wizard's bearer step picks up. Existing operators (real
+            // callsign) skip this branch entirely.
+            var callsign = options.CurrentValue.Callsign;
+            if (string.IsNullOrWhiteSpace(callsign)
+                || string.Equals(callsign, DbStartup.PlaceholderCallsign, StringComparison.OrdinalIgnoreCase))
+            {
+                ctx.Response.Redirect("/Setup");
+                return;
+            }
+
             await next(ctx);
             return;
         }

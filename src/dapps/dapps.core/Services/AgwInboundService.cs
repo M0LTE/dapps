@@ -41,19 +41,30 @@ public sealed class AgwInboundService(
     OperationalMetrics? metrics = null) : IHostedService
 {
     private static readonly TimeSpan ReconnectBackoff = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan IdleBackoff = TimeSpan.FromSeconds(2);
 
     private readonly CancellationTokenSource stoppingTokenSource = new();
     private readonly OperationalMetrics metrics = metrics ?? new OperationalMetrics();
     private Task? loopTask;
+    private CancellationTokenSource? cycleTokenSource;
+    private IDisposable? optionsChangeSubscription;
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
+        // Kick the current connect-cycle on any SystemOptions change so
+        // a /Config save (callsign, node host/port, bearer flip, RHP
+        // creds) takes effect on the next iteration. Subscribed in
+        // StartAsync so test fixtures that construct the service without
+        // ever calling StartAsync don't accumulate listeners.
+        optionsChangeSubscription = options.OnChange((_, _) => cycleTokenSource?.Cancel());
         loopTask = Task.Run(() => RunLoop(stoppingTokenSource.Token));
         return Task.CompletedTask;
     }
 
     public async Task StopAsync(CancellationToken cancellationToken)
     {
+        optionsChangeSubscription?.Dispose();
+        optionsChangeSubscription = null;
         await stoppingTokenSource.CancelAsync();
         if (loopTask is not null)
         {
@@ -61,24 +72,30 @@ public sealed class AgwInboundService(
         }
     }
 
-    private async Task RunLoop(CancellationToken ct)
+    private async Task RunLoop(CancellationToken outerCt)
     {
-        while (!ct.IsCancellationRequested)
+        while (!outerCt.IsCancellationRequested)
         {
+            cycleTokenSource = CancellationTokenSource.CreateLinkedTokenSource(outerCt);
+            var cycleCt = cycleTokenSource.Token;
             try
             {
-                await RunOnce(ct);
+                await RunOnce(cycleCt);
             }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            catch (OperationCanceledException) when (outerCt.IsCancellationRequested)
             {
                 return;
+            }
+            catch (OperationCanceledException)
+            {
+                // Cycle cancelled by an options change; loop and reconnect.
             }
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "AGW inbound loop ended; reconnecting in {0}s", ReconnectBackoff.TotalSeconds);
             }
 
-            try { await Task.Delay(ReconnectBackoff, ct); }
+            try { await Task.Delay(ReconnectBackoff, outerCt); }
             catch (OperationCanceledException) { return; }
         }
     }
@@ -86,11 +103,23 @@ public sealed class AgwInboundService(
     private async Task RunOnce(CancellationToken ct)
     {
         var opts = options.CurrentValue;
-        var localCall = opts.Callsign;
-        if (string.IsNullOrWhiteSpace(localCall))
+
+        // Bearer-active gate: only run when AGW is the configured bearer.
+        // The Rhpv2InboundService runs alongside us and gates the same way
+        // on "rhpv2"; OnChange fires when /Config flips the value, which
+        // cancels our cycle (or theirs) so the loop re-evaluates.
+        if (!string.Equals(opts.NodeBearer, "agw", StringComparison.OrdinalIgnoreCase))
         {
-            logger.LogWarning("Callsign not configured; AGW inbound idle");
-            await Task.Delay(ReconnectBackoff, ct);
+            await Task.Delay(IdleBackoff, ct);
+            return;
+        }
+
+        var localCall = opts.Callsign;
+        if (string.IsNullOrWhiteSpace(localCall)
+            || string.Equals(localCall, DbStartup.PlaceholderCallsign, StringComparison.OrdinalIgnoreCase))
+        {
+            logger.LogDebug("Callsign not configured; AGW inbound idle (waiting for /Setup or /Config)");
+            await Task.Delay(IdleBackoff, ct);
             return;
         }
 

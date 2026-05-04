@@ -22,7 +22,7 @@ namespace dapps.core.Mcp;
 public sealed class DappsHealthTools(
     OperationalSnapshotBuilder snapshotBuilder,
     OperationalMetrics metrics,
-    Database database)
+    SystemOptionsStore options)
 {
     [McpServerTool(Name = "get_operational_snapshot")]
     [Description(
@@ -58,6 +58,6 @@ public sealed class DappsHealthTools(
         "Returns the persisted SystemOptions row - every operator-tunable knob: callsign, node host/port, " +
         "MQTT port, fragmenting threshold, probing/polling/heartbeat enable + cadences, routing algorithm, " +
         "discovery airtime budget, etc. Same shape as GET /Config (which is gated behind admin auth). Read-only.")]
-    public async Task<dapps.core.Models.SystemOptions> GetSystemOptionsAsync()
-        => await database.GetSystemOptions();
+    public Task<dapps.core.Models.SystemOptions> GetSystemOptionsAsync()
+        => Task.FromResult(options.CurrentValue);
 }

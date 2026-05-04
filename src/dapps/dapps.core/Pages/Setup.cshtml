@@ -18,6 +18,7 @@
             --text: #0f172a; --text-muted: #64748b;
             --accent: #2563eb; --accent-hover: #1d4ed8;
             --err: #dc2626; --err-soft: #fee2e2;
+            --ok: #16a34a;
         }
         @@media (prefers-color-scheme: dark) {
             :root {
@@ -26,6 +27,7 @@
                 --text: #e5e7eb; --text-muted: #94a3b8;
                 --accent: #60a5fa; --accent-hover: #93c5fd;
                 --err: #f87171; --err-soft: #7f1d1d;
+                --ok: #4ade80;
             }
         }
         * { box-sizing: border-box; }
@@ -39,10 +41,12 @@
             margin: 0; min-height: 100vh;
             display: flex; align-items: center; justify-content: center;
             -webkit-font-smoothing: antialiased;
+            padding: 1.5rem;
         }
         .card {
             background: var(--surface); border: 1px solid var(--border);
-            padding: 2rem 2.25rem; border-radius: 12px; min-width: 360px; max-width: 440px;
+            padding: 2rem 2.25rem; border-radius: 12px;
+            min-width: 360px; max-width: 520px; width: 100%;
             box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 12px 32px rgba(0,0,0,0.08);
         }
         .brand {
@@ -52,11 +56,23 @@
         }
         .brand .dot {
             width: 8px; height: 8px; border-radius: 50%;
-            background: #16a34a; align-self: center;
-            box-shadow: 0 0 0 3px color-mix(in srgb, #16a34a 25%, transparent);
+            background: var(--ok); align-self: center;
+            box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 25%, transparent);
+        }
+        .stepper {
+            display: flex; gap: 0.4rem; margin-top: 0.4rem;
+            font-size: 0.78rem; color: var(--text-muted);
+            text-transform: uppercase; letter-spacing: 0.06em;
+        }
+        .stepper .pill {
+            padding: 0.15rem 0.5rem; border-radius: 999px;
+            background: color-mix(in srgb, var(--text-muted) 10%, transparent);
+        }
+        .stepper .pill.active {
+            background: var(--accent); color: white;
         }
         h1 {
-            margin: 0.25rem 0 0.5rem 0; font-size: 1.4rem; font-weight: 600;
+            margin: 0.5rem 0 0.5rem 0; font-size: 1.4rem; font-weight: 600;
             letter-spacing: -0.01em;
         }
         .intro {
@@ -68,15 +84,21 @@
             font-size: 0.78rem; font-weight: 600; text-transform: uppercase;
             letter-spacing: 0.06em; color: var(--text-muted);
         }
-        input[type=password] {
+        label .normal {
+            text-transform: none; letter-spacing: 0;
+            color: var(--text-muted); font-weight: 400;
+            margin-left: 0.4rem;
+        }
+        input[type=text], input[type=password], input[type=number], select {
             width: 100%; padding: 0.65rem 0.75rem;
             background: var(--surface); border: 1px solid var(--border-strong);
             border-radius: 6px; color: var(--text); font-size: 1rem; font-family: inherit;
         }
-        input[type=password]:focus {
+        input:focus, select:focus {
             outline: 2px solid var(--accent); outline-offset: -1px;
             border-color: var(--accent);
         }
+        .row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
         button {
             width: 100%; padding: 0.7rem; margin-top: 1.25rem;
             background: var(--accent); color: white; border: 0;
@@ -84,6 +106,11 @@
             cursor: pointer; transition: background 120ms; font-family: inherit;
         }
         button:hover { background: var(--accent-hover); }
+        button.secondary {
+            background: transparent; color: var(--text);
+            border: 1px solid var(--border-strong); margin-top: 0.5rem;
+        }
+        button.secondary:hover { background: color-mix(in srgb, var(--text-muted) 8%, transparent); }
         .error {
             color: var(--err); background: var(--err-soft);
             margin-top: 0.85rem; padding: 0.5rem 0.7rem;
@@ -93,36 +120,164 @@
             color: var(--text-muted); margin-top: 1.25rem;
             font-size: 0.78rem; line-height: 1.5;
         }
+        .detect {
+            display: flex; align-items: center; gap: 0.6rem;
+            margin: 0.5rem 0;
+            font-size: 0.85rem; color: var(--text-muted);
+        }
+        .detect button {
+            width: auto; padding: 0.35rem 0.75rem; margin: 0;
+            font-size: 0.8rem; font-weight: 500;
+            background: transparent; color: var(--accent);
+            border: 1px solid var(--border-strong);
+        }
+        .detect button:hover { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+        .detect-result { font-family: ui-monospace, "Cascadia Mono", Menlo, Consolas, monospace; }
+        .detect-result.ok { color: var(--ok); }
+        .detect-result.err { color: var(--err); }
+        .bearer-fields { display: none; }
+        .bearer-fields.show { display: block; }
     </style>
 </head>
 <body>
     <div class="card">
         <div class="brand"><span class="dot"></span> DAPPS</div>
-        <h1>First-time setup</h1>
-        <p class="intro">
-            Choose a password for the dashboard. You'll use it to sign in
-            here and to gate the admin endpoints (<code>/Config</code>,
-            <code>/Neighbours</code>, <code>/AppTokens</code>). One password
-            for the whole node - there are no user accounts.
-        </p>
-        <form method="post">
-            <label for="password">Password</label>
-            <input id="password" name="password" type="password" autofocus required minlength="8" />
-
-            <label for="confirm">Confirm password</label>
-            <input id="confirm" name="confirm" type="password" required minlength="8" />
-
-            <button type="submit">Set password &amp; sign in</button>
-            @if (!string.IsNullOrEmpty(Model.Error))
-            {
-                <div class="error">@Model.Error</div>
-            }
-        </form>
-        <div class="hint">
-            Forgotten later? Stop dapps, run
-            <code>sqlite3 /var/lib/dapps/dapps.db "delete from systemoptions where option like 'AdminPassword%';"</code>,
-            restart, and you'll land back here.
+        <div class="stepper">
+            <span class="pill @(Model.Step == dapps.core.Pages.SetupModel.SetupStep.Password ? "active" : "")">1. Password</span>
+            <span class="pill @(Model.Step == dapps.core.Pages.SetupModel.SetupStep.Bearer ? "active" : "")">2. Packet node</span>
         </div>
+
+        @if (Model.Step == dapps.core.Pages.SetupModel.SetupStep.Password)
+        {
+            <h1>Set an admin password</h1>
+            <p class="intro">
+                You'll use this to sign in here and to gate the admin
+                endpoints (<code>/Config</code>, <code>/Neighbours</code>,
+                <code>/AppTokens</code>). One password for the whole node -
+                there are no user accounts.
+            </p>
+            <form method="post" asp-page-handler="Password">
+                <label for="password">Password</label>
+                <input id="password" name="password" type="password" autofocus required minlength="8" />
+
+                <label for="confirm">Confirm password</label>
+                <input id="confirm" name="confirm" type="password" required minlength="8" />
+
+                <button type="submit">Continue &rarr;</button>
+                @if (!string.IsNullOrEmpty(Model.Error))
+                {
+                    <div class="error">@Model.Error</div>
+                }
+            </form>
+            <div class="hint">
+                Forgotten later? Stop dapps, run
+                <code>sqlite3 /var/lib/dapps/dapps.db "delete from systemoptions where option like 'AdminPassword%';"</code>,
+                restart, and you'll land back here.
+            </div>
+        }
+        else
+        {
+            <h1>Connect your packet node</h1>
+            <p class="intro">
+                DAPPS rides on top of a packet node (BPQ, XRouter, or
+                similar). Tell it your callsign and which bearer the node
+                speaks. The <em>Detect</em> button probes localhost for
+                AGW (TCP 8000) and RHPv2 (TCP 9000) and pre-fills the
+                choice.
+            </p>
+            <form method="post" asp-page-handler="Bearer" id="bearerForm">
+                <label for="callsign">Your callsign with SSID <span class="normal">e.g. M0LTE-1</span></label>
+                <input id="callsign" name="callsign" type="text" autofocus required
+                    pattern="[A-Za-z0-9\-]{3,15}" value="@Model.Callsign" />
+
+                <label for="nodeHost">Packet-node host <span class="normal">usually localhost</span></label>
+                <input id="nodeHost" name="nodeHost" type="text" required value="@Model.NodeHost" />
+
+                <div class="detect">
+                    <button type="button" id="detectBtn">Detect packet node</button>
+                    <span class="detect-result" id="detectResult">not detected yet</span>
+                </div>
+
+                <label for="nodeBearer">Bearer</label>
+                <select id="nodeBearer" name="nodeBearer">
+                    <option value="agw" selected="@(Model.NodeBearer == "agw")">AGW (BPQ, Direwolf, AGWPE, ...)</option>
+                    <option value="rhpv2" selected="@(Model.NodeBearer == "rhpv2")">RHPv2 (XRouter)</option>
+                </select>
+
+                <div class="row">
+                    <div>
+                        <label for="agwPort">AGW port</label>
+                        <input id="agwPort" name="agwPort" type="number" min="1" max="65535" value="@Model.AgwPort" required />
+                    </div>
+                    <div>
+                        <label for="rhpPort">RHPv2 port</label>
+                        <input id="rhpPort" name="rhpPort" type="number" min="1" max="65535" value="@Model.RhpPort" required />
+                    </div>
+                </div>
+
+                <div id="rhpAuthFields" class="bearer-fields @(Model.NodeBearer == "rhpv2" ? "show" : "")">
+                    <label for="rhpUser">RHPv2 user <span class="normal">leave blank if your XRouter doesn't require RHPv2 auth</span></label>
+                    <input id="rhpUser" name="rhpUser" type="text" value="@Model.RhpUser" />
+
+                    <label for="rhpPass">RHPv2 password</label>
+                    <input id="rhpPass" name="rhpPass" type="password" value="@Model.RhpPass" />
+                </div>
+
+                <button type="submit">Save &amp; finish &rarr;</button>
+                @if (!string.IsNullOrEmpty(Model.Error))
+                {
+                    <div class="error">@Model.Error</div>
+                }
+            </form>
+            <div class="hint">
+                You can change any of this later under <em>Edit configuration</em>
+                on the dashboard. Bearer changes take effect within a few seconds
+                (no daemon restart).
+            </div>
+
+            <script>
+                (function () {
+                    const detectBtn = document.getElementById("detectBtn");
+                    const detectResult = document.getElementById("detectResult");
+                    const nodeHost = document.getElementById("nodeHost");
+                    const nodeBearer = document.getElementById("nodeBearer");
+                    const rhpAuth = document.getElementById("rhpAuthFields");
+
+                    function updateRhpVisibility() {
+                        rhpAuth.classList.toggle("show", nodeBearer.value === "rhpv2");
+                    }
+                    nodeBearer.addEventListener("change", updateRhpVisibility);
+
+                    detectBtn.addEventListener("click", async () => {
+                        detectResult.className = "detect-result";
+                        detectResult.textContent = "probing...";
+                        try {
+                            const url = "/Config/detect-bearer?host=" + encodeURIComponent(nodeHost.value || "localhost");
+                            const r = await fetch(url, { credentials: "same-origin" });
+                            if (!r.ok) throw new Error("HTTP " + r.status);
+                            const j = await r.json();
+                            const parts = [];
+                            if (j.agw) parts.push("AGW :8000");
+                            if (j.rhpv2) parts.push("RHPv2 :9000");
+                            if (parts.length === 0) {
+                                detectResult.className = "detect-result err";
+                                detectResult.textContent = "neither AGW :8000 nor RHPv2 :9000 responded";
+                                return;
+                            }
+                            detectResult.className = "detect-result ok";
+                            detectResult.textContent = parts.join(" + ") + " responded";
+                            if (j.suggested === "agw" || j.suggested === "rhpv2") {
+                                nodeBearer.value = j.suggested;
+                                updateRhpVisibility();
+                            }
+                        } catch (err) {
+                            detectResult.className = "detect-result err";
+                            detectResult.textContent = "probe failed: " + (err.message || err);
+                        }
+                    });
+                })();
+            </script>
+        }
     </div>
 </body>
 </html>

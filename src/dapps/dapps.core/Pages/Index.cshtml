@@ -252,11 +252,23 @@
 </div>
 <details class="edit-block">
     <summary>Edit configuration</summary>
-    <p class="muted">Restart required for callsign, node host/port, MQTT port, UDP listener port to take effect.</p>
+    <p class="muted">Callsign, node host, bearer choice, AGW + RHPv2 ports - applied immediately (hot-reload). MQTT and UDP-listener ports still need a daemon restart.</p>
     <form class="edit-form" onsubmit="dappsSaveConfig(event)">
         <label>Callsign <input name="Callsign" value="@Model.Options.Callsign" required /></label>
         <label>Node host <input name="NodeHost" value="@Model.Options.NodeHost" required /></label>
+        @{
+            var nb = (Model.Options.NodeBearer ?? "agw").Trim().ToLowerInvariant();
+        }
+        <label>Node bearer
+            <select name="NodeBearer">
+                <option value="agw" selected="@(nb == "agw")">AGW (BPQ, Direwolf, AGWPE, ...)</option>
+                <option value="rhpv2" selected="@(nb == "rhpv2")">RHPv2 (XRouter)</option>
+            </select>
+        </label>
         <label>AGW port <input name="AgwPort" type="number" min="1" max="65535" value="@Model.Options.AgwPort" required /></label>
+        <label>RHPv2 port <input name="RhpPort" type="number" min="1" max="65535" value="@Model.Options.RhpPort" required /></label>
+        <label>RHPv2 user (blank if no auth) <input name="RhpUser" type="text" value="@Model.Options.RhpUser" /></label>
+        <label>RHPv2 password <input name="RhpPass" type="password" value="@Model.Options.RhpPass" /></label>
         <label>Default bearer port <input name="DefaultBearerPort" type="number" min="0" max="255" value="@Model.Options.DefaultBearerPort" required /></label>
         <label>MQTT port <input name="MqttPort" type="number" min="1" max="65535" value="@Model.Options.MqttPort" required /></label>
         <label>UDP listener port (0 = disabled) <input name="UdpListenPort" type="number" min="0" max="65535" value="@Model.Options.UdpListenPort" required /></label>
@@ -1245,7 +1257,11 @@ else
         const body = {
             Callsign: f.Callsign.value,
             NodeHost: f.NodeHost.value,
+            NodeBearer: f.NodeBearer.value,
             AgwPort: parseInt(f.AgwPort.value, 10),
+            RhpPort: parseInt(f.RhpPort.value, 10),
+            RhpUser: f.RhpUser.value,
+            RhpPass: f.RhpPass.value,
             DefaultBearerPort: parseInt(f.DefaultBearerPort.value, 10),
             MqttPort: parseInt(f.MqttPort.value, 10),
             UdpListenPort: parseInt(f.UdpListenPort.value, 10),

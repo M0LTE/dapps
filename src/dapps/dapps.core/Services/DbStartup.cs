@@ -24,11 +24,13 @@ public static class DbInfo
 
 public static class DbStartup
 {
-    /// <summary>Sentinel callsign in the seeded defaults. If the resolved
-    /// value still matches this after seed it means the operator never
-    /// configured a real one - refuse to start rather than transmit
-    /// frames stamped with it.</summary>
-    private const string PlaceholderCallsign = "N0CALL";
+    /// <summary>Sentinel callsign in the seeded defaults. The daemon
+    /// starts with this in place but refuses to operate (won't bind
+    /// the inbound bearer, won't forward outbound, /Health reports
+    /// degraded with <c>setupRequired</c>) until the operator configures
+    /// a real callsign via /Setup or /Config. Frames stamped with the
+    /// placeholder never go on the air.</summary>
+    public const string PlaceholderCallsign = "N0CALL";
 
     /// <summary>
     /// Create every table the daemon needs and seed the first-run
@@ -38,7 +40,7 @@ public static class DbStartup
     /// Called once from Program.cs *before* <c>builder.Build()</c> so
     /// the eager DI materialisation of hosted services (which transit
     /// IRoutingAlgorithm → IOptionsMonitor&lt;SystemOptions&gt;.CurrentValue
-    /// → SystemOptions Configure → OptionsRepo.GetOptions) finds a
+    /// → <see cref="SystemOptionsStore"/>'s constructor read) finds a
     /// seeded table rather than racing it.
     /// </summary>
     public static void EnsureSchemaAndSeed(ILogger? logger = null)
@@ -125,10 +127,13 @@ public static class DbStartup
     }
 
     /// <summary>
-    /// Refuse to start on a misconfigured-or-missing callsign. The
-    /// placeholder default is fine in tests but actively dangerous in
-    /// the wild - frames go on the air with the configured callsign,
-    /// and pretending to be N0CALL is both wrong and traceable to us.
+    /// Warn if the callsign is the seeded placeholder. The daemon starts
+    /// either way - inbound bearer services and the outbound forwarder
+    /// gate themselves on a real callsign at runtime, and /Health reports
+    /// <c>setupRequired</c> until the operator configures one via the
+    /// dashboard's /Setup or /Config form. Letting the daemon start with
+    /// the placeholder is what makes "drop the binary, run the systemd
+    /// unit, configure in the browser" possible.
     /// </summary>
     private static void ValidateRequiredConfig(SQLiteConnection db, ILogger? logger)
     {
@@ -141,11 +146,11 @@ public static class DbStartup
         if (string.IsNullOrWhiteSpace(callsign)
             || string.Equals(callsign, PlaceholderCallsign, StringComparison.OrdinalIgnoreCase))
         {
-            var msg = $"Callsign is not configured (currently '{callsign}'). " +
-                $"Set the DAPPS_CALLSIGN environment variable before first start, " +
-                $"or POST {{\"Callsign\":\"YOUR-CALL\", ...}} to /Config and restart.";
-            logger?.LogError(msg);
-            throw new InvalidOperationException(msg);
+            logger?.LogWarning(
+                "Callsign is not configured (currently '{0}'). The daemon is in setup-required mode: " +
+                "open the dashboard's /Setup page to configure a callsign and bearer. Inbound bearer " +
+                "services and the outbound forwarder will not bind/transmit until then.",
+                callsign);
         }
     }
 

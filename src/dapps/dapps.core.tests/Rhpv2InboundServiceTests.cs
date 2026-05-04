@@ -28,6 +28,7 @@ public sealed class Rhpv2InboundServiceTests
         var opts = new TestOptionsMonitor<SystemOptions>(new SystemOptions
         {
             Callsign = "G0DPB-1",
+            NodeBearer = "rhpv2",
             NodeHost = server.Endpoint.Address.ToString(),
             RhpPort = server.Endpoint.Port,
             // No auth - leave RhpUser/RhpPass empty.
@@ -44,7 +45,7 @@ public sealed class Rhpv2InboundServiceTests
         await service.StartAsync(ct);
         try
         {
-            var frames = WaitForFrames(server, count: 3, TimeSpan.FromSeconds(2));
+            var frames = WaitForFrames(server, count: 3, TimeSpan.FromSeconds(5));
             frames[0].Should().BeOfType<SocketMessage>();
             frames[1].Should().BeOfType<BindMessage>();
             frames[2].Should().BeOfType<ListenMessage>();
@@ -82,6 +83,7 @@ public sealed class Rhpv2InboundServiceTests
         var opts = new TestOptionsMonitor<SystemOptions>(new SystemOptions
         {
             Callsign = "G0DPB-1",
+            NodeBearer = "rhpv2",
             NodeHost = server.Endpoint.Address.ToString(),
             RhpPort = server.Endpoint.Port,
             RhpUser = "op",
@@ -99,7 +101,7 @@ public sealed class Rhpv2InboundServiceTests
         await service.StartAsync(ct);
         try
         {
-            var frames = WaitForFrames(server, count: 4, TimeSpan.FromSeconds(2));
+            var frames = WaitForFrames(server, count: 4, TimeSpan.FromSeconds(5));
             frames[0].Should().BeOfType<AuthMessage>(
                 "AUTH must precede SOCKET when RhpUser is configured");
             frames[1].Should().BeOfType<SocketMessage>();
