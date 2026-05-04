@@ -7,7 +7,7 @@
 - [**Getting started**](getting-started.md) - what DAPPS is, why you might want it, and a 10-minute tour from install to first message.
 - [**Install**](install/index.md) - Linux/systemd, Docker, Windows, macOS.
 - [**Configure**](configure.md) - every operator-tunable knob, set via environment variable or the dashboard.
-- [**Connect a node**](connect/index.md) - wire DAPPS up to your packet node. BPQ AGW today; MeshCore and RHPv2 in flight.
+- [**Connect a node**](connect/index.md) - wire DAPPS up to your packet node. BPQ via AGW and XRouter via RHPv2 supported today; MeshCore in flight.
 - [**Run**](run.md) - what each background loop does and how to watch it.
 - [**Tune**](tune.md) - airtime budgets, probe strategies, fragment thresholds, routing algorithm.
 - [**Discovery & routing**](discovery-and-routing.md) - channels, beacons, probes, neighbours, route hints.
@@ -21,12 +21,12 @@
 
 ## Bearer-agnostic by design
 
-DAPPS does **not** require BPQ. The default setup guide is BPQ because that's where the on-air ecosystem lives today, but DAPPS talks to the bearer through a small interface - anything that exposes an AGW-compatible session bearer works the same way, and once RHPv2 lands in mainstream BPQ it'll plug in alongside. A non-stream bearer is already in tree (UDP datagram, used as the test stand-in for what MeshCore will become). The bits that change per bearer are isolated; the rest of the system doesn't care whether your link is 1200-baud VHF AX.25 or LoRa mesh.
+DAPPS does **not** require BPQ. The default setup guide is BPQ because that's where the on-air ecosystem lives today, but DAPPS talks to the bearer through a small interface - anything that exposes an AGW-compatible session bearer works the same way. RHPv2 (Remote Host Protocol v2) is already in tree alongside AGW: XRouter operators set `DAPPS_NODE_BEARER=rhpv2` and DAPPS uses RHPv2 instead. A non-stream bearer is also in tree (UDP datagram, used as the test stand-in for what MeshCore will become). The bits that change per bearer are isolated; the rest of the system doesn't care whether your link is 1200-baud VHF AX.25 or LoRa mesh.
 
 ## Status
 
 - **Protocol**: DAPPSv1 specified end-to-end. See the [protocol reference for app developers](app-developers/reference.md) for the wire format.
 - **Implementation**: in active development. The [versioning policy](configure.md#versioning) describes where breaking changes are still fair game versus where compatibility is preserved.
-- **Bearers**: AGW (BPQ today, any AGW host in principle) is production-quality. MeshCore Companion + KISS, and RHPv2, are in the [Phase H roadmap](https://github.com/M0LTE/dapps/blob/master/plan.md#phase-h--concrete-bearer-integrations).
+- **Bearers**: AGW (BPQ today, any AGW host in principle) and RHPv2 (XRouter today; mainline BPQ when it ships RHPv2) are production-quality. MeshCore Companion + KISS are in the [Phase H roadmap](https://github.com/M0LTE/dapps/blob/master/plan.md#phase-h--concrete-bearer-integrations).
 
 If you've never heard of DAPPS before, [start here](getting-started.md).

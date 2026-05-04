@@ -29,6 +29,8 @@ sudo -u $USER \
   /opt/dapps/dapps
 ```
 
+For XRouter (RHPv2 instead of AGW), substitute `DAPPS_NODE_BEARER=rhpv2 DAPPS_RHP_PORT=9000` for `DAPPS_AGW_PORT=8000`. See [Connect via XRouter](../connect/xrouter.md).
+
 Open `http://localhost:5000/` in a browser, set an admin password on `/Setup`. `Ctrl+C` to stop.
 
 ## 3. Run on boot via launchd (optional)

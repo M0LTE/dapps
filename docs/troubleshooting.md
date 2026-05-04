@@ -28,24 +28,29 @@ The unit file's `RestartPreventExitStatus=78` keeps systemd from hot-looping on 
 
 DAPPS expects to be able to create a SQLite file at `data/dapps.db` (relative to the working directory) or wherever you've pointed it. If the working directory isn't writable, startup fails. On Linux/systemd the recommended unit uses `WorkingDirectory=/var/lib/dapps`; make sure that exists and is owned by the runtime user.
 
-## AGW connection problems
+## Packet-node connection problems
 
-### "AGW connection refused"
+DAPPS connects to the packet node over either AGW (`DAPPS_NODE_BEARER=agw`, the default - works with BPQ, Direwolf, AGWPE, ...) or RHPv2 (`DAPPS_NODE_BEARER=rhpv2`, required for XRouter). The dashboard's **Packet node** card on the home page shows the bearer + host:port DAPPS is using and a reachability dot.
 
-DAPPS can't reach the AGW listener on `DAPPS_NODE_HOST:DAPPS_AGW_PORT`. Check:
+### "Packet-node connection refused" / repeated reconnects
 
-- The packet node is actually running and AGW is enabled. For BPQ: `AGWPORT 8000` in `bpq32.cfg`, no other `#` commenting it out, BPQ restarted since.
-- Network connectivity from where DAPPS runs to where the node runs. `nc -vz <bpq-host> 8000` from the DAPPS host should connect.
+DAPPS can't reach the bearer port on `DAPPS_NODE_HOST` (`DAPPS_AGW_PORT` for AGW, `DAPPS_RHP_PORT` for RHPv2). Check:
+
+- The packet node is actually running and the bearer is enabled.
+    - **BPQ AGW**: `AGWPORT=8000` in `bpq32.cfg`, no `#` commenting it out, BPQ restarted since.
+    - **XRouter RHPv2**: `RHPPORT=9000` in `XROUTER.CFG`, XRouter restarted.
+- Network connectivity from where DAPPS runs to where the node runs. `nc -vz <node-host> <port>` from the DAPPS host should connect.
 - No firewall in the way.
+- For non-loopback XRouter, `ACCESS.SYS` allows your DAPPS host's subnet (flag `1` for callsign-only). Loopback is allowed without an entry.
 
-### "AGW connection drops repeatedly"
+### "Packet-node connection drops repeatedly"
 
 DAPPS reconnects automatically (with backoff). If it's flapping every few seconds:
 
 - Check the packet node's logs for whether it's actively closing the connection. Some BPQ misconfigurations cause AGW to disconnect clients on every L2 event.
-- Check for two DAPPS instances accidentally sharing a callsign - AGW will silently dispatch to whichever client registered last, and the older one sees its inbound dispatch evaporate.
+- Check for two DAPPS instances accidentally sharing a callsign - the second binding wins and the first one sees its inbound dispatch evaporate.
 
-### Inbound sessions never arrive
+### Inbound sessions never arrive (BPQ AGW)
 
 A remote node can `c <your-callsign>` and lands at the BPQ node prompt, but not at the `DAPPSv1>` prompt. Check:
 
@@ -53,6 +58,14 @@ A remote node can `c <your-callsign>` and lands at the BPQ node prompt, but not 
 - The CMD field on the `APPLICATION` line is **empty** (the `,,,,,`). Older recipes had `C N HOST K TRANS S` here - for DAPPS, leave it empty so BPQ doesn't run a node command on inbound, just dispatches the L2 'C' frame to the registered AGW client.
 - DAPPS is registering the right callsign. The startup log shows `AGW: registered <callsign> for inbound dispatch`. If the callsign there doesn't match what the remote is connecting to, it won't route.
 - AGW exact-match is by call+SSID. `M0LTE-1` is different from `M0LTE-7`.
+
+### Inbound sessions never arrive (XRouter RHPv2)
+
+A remote node can `c <your-callsign>` and lands at the XRouter node prompt, but not at the `DAPPSv1>` prompt. Check:
+
+- DAPPS bound the callsign at startup. Look for `RHP inbound: listener bound to <callsign> on handle <N>` in the log.
+- The DAPPS callsign is **not** declared in any `APPL` block, `NODECALL`, `CONSOLECALL`, or `CHATCALL` in `XROUTER.CFG`. XRouter claims those callsigns for its own internal use; DAPPS's runtime bind would fail.
+- Authentication: if XRouter requires it, `DAPPS_RHP_USER` / `DAPPS_RHP_PASS` must match an entry the RHPv2 listener accepts.
 
 ## Discovery / routing problems
 
@@ -76,7 +89,7 @@ Check, in order:
 
 The probed-nodes table shows the recent failure reason. Common ones:
 
-- **`RETRYOUT`**: AGW retried the connect to the remote callsign but never got a response. The remote isn't reachable on the link, or your AGW port byte is wrong for that peer.
+- **`RETRYOUT`**: the bearer retried the connect to the remote callsign but never got a response. The remote isn't reachable on the link, or the bearer port for that peer is wrong (per-neighbour `BearerPort` or `DAPPS_DEFAULT_BEARER_PORT`).
 - **Connect timeout**: the connect went out but the protocol parser never saw the `DAPPSv1>` prompt. The peer either isn't running DAPPS, or you're connecting to the wrong application (their `APPLICATION` line might use a different command name).
 - **TIMEOUT after `DAPPSv1>`**: probe got the prompt but the session hung. Network is dropping packets mid-session, or one side has a serious clock skew.
 

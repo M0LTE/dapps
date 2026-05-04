@@ -7,7 +7,7 @@ This page gives you the shortest path from "I've heard of DAPPS" to "my node is 
 A DAPPS node is a small daemon you run alongside your packet node. It exposes two things:
 
 1. **An app interface** - local applications publish and subscribe over MQTT (or REST). They name their destination as `app@CALLSIGN` and DAPPS handles the rest: routing, forwarding, fragmenting, retrying, and acking when the message lands.
-2. **A backhaul** - DAPPS opens sessions to other DAPPS nodes (today over AGW; tomorrow over MeshCore and RHPv2) to move messages towards their destination, hop by hop, with TTL.
+2. **A backhaul** - DAPPS opens sessions to other DAPPS nodes (today over AGW for BPQ or RHPv2 for XRouter; tomorrow over MeshCore) to move messages towards their destination, hop by hop, with TTL.
 
 The wire protocol is small and human-readable on the line: a peer connects, gets a `DAPPSv1>` prompt, offers `ihave id=<sha1> dst=<callsign> sz=<bytes> ttl=<seconds>`, the receiver responds `send` or `?` (already have it), the sender ships the bytes, the receiver acks the SHA-1 hash. That's the heart of it. Multi-part messages, source tracking, polling, and source-routing are all opt-in additions on top.
 
@@ -16,7 +16,7 @@ The wire protocol is small and human-readable on the line: a peer connects, gets
 - **Not real-time.** A DAPPS message is a queued unit of work, not a live stream. If your application needs sub-second latency, this isn't the layer.
 - **Not packet mail.** DAPPS doesn't replace BPQ Mail or any existing BBS - it complements them. Apps that want mail-shaped persistence + addressability use DAPPS; apps that want a BBS use a BBS.
 - **Not a routing protocol replacement for the AX.25 layer.** DAPPS routes its own messages over whichever bearer is available, but it doesn't replace what your packet node does for connecting users.
-- **Not BPQ-specific.** BPQ is the first supported bearer because that's where the ecosystem is, but DAPPS only needs an AGW-style session interface. Anything that speaks AGW (or, soon, RHPv2) works the same.
+- **Not BPQ-specific.** BPQ is one supported packet node; XRouter is another (via RHPv2). Anything that speaks AGW or RHPv2 works the same; MeshCore is in flight.
 
 ## 10-minute tour
 
@@ -31,15 +31,17 @@ curl -L https://github.com/M0LTE/dapps/releases/latest/download/dapps-linux-x64 
 chmod +x /opt/dapps/dapps
 ```
 
-### 2. Tell BPQ to talk to it
+### 2. Tell your packet node to talk to it
 
-Add an `APPLICATION` line to your `bpq32.cfg` so BPQ dispatches DAPPS-bound sessions over AGW to the DAPPS daemon. The full recipe is on the [BPQ connect page](connect/bpq.md); the line itself is:
+For **BPQ**, add an `APPLICATION` line to your `bpq32.cfg` so BPQ dispatches DAPPS-bound sessions over AGW to the DAPPS daemon. The full recipe is on the [BPQ connect page](connect/bpq.md); the line itself is:
 
 ```
 APPLICATION 1,DAPPS,,,,, 0
 ```
 
 This advertises a `DAPPS` command at the BPQ node prompt and routes inbound L2 connects over AGW.
+
+For **XRouter**, add `RHPPORT=9000` to `XROUTER.CFG` and DAPPS will use RHPv2 (XRouter's AGW emulator is not usable as a DAPPS bearer). The full recipe is on the [XRouter connect page](connect/xrouter.md); set `DAPPS_NODE_BEARER=rhpv2` in step 3.
 
 ### 3. Configure DAPPS
 
@@ -69,7 +71,7 @@ Open `http://<node>:5000/` in a browser. The first request lands on `/Setup` to 
 
 ### 5. Add a neighbour
 
-DAPPS knows nothing about other DAPPS nodes until you tell it about one. The simplest way is the dashboard's **Neighbours** panel - enter the remote callsign and the bearer port your AGW link goes out on. There's a REST API and a [discovery system](discovery-and-routing.md) that auto-finds peers if you turn on beaconing, but a single manual neighbour gets you to "first message" fastest.
+DAPPS knows nothing about other DAPPS nodes until you tell it about one. The simplest way is the dashboard's **Neighbours** panel - enter the remote callsign and the bearer port your link goes out on (the AGW port byte for BPQ, or the 0-indexed `PORT=N - 1` for XRouter). There's a REST API and a [discovery system](discovery-and-routing.md) that auto-finds peers if you turn on beaconing, but a single manual neighbour gets you to "first message" fastest.
 
 ### 6. Send a test message
 

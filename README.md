@@ -19,7 +19,7 @@ It covers:
 
 - [Getting started](https://m0lte.github.io/dapps/getting-started/) - 10-minute install-to-message tour.
 - [Install](https://m0lte.github.io/dapps/install/) - Linux/systemd, Docker, Windows, macOS.
-- [Connect a node](https://m0lte.github.io/dapps/connect/) - BPQ AGW today, MeshCore + RHPv2 in flight.
+- [Connect a node](https://m0lte.github.io/dapps/connect/) - BPQ via AGW and XRouter via RHPv2 supported today; MeshCore in flight.
 - [Configure](https://m0lte.github.io/dapps/configure/), [Run](https://m0lte.github.io/dapps/run/), [Tune](https://m0lte.github.io/dapps/tune/) - every operator knob, what each background loop does, what to leave alone.
 - [Discovery & routing](https://m0lte.github.io/dapps/discovery-and-routing/), [Operate](https://m0lte.github.io/dapps/operate/), [Update](https://m0lte.github.io/dapps/update/) - the day-to-day surfaces.
 - [MCP for assistants](https://m0lte.github.io/dapps/mcp/) - let an AI assistant drive the operator surface.

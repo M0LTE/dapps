@@ -37,6 +37,6 @@ A running DAPPS node writes:
 - An HTTP listener on TCP 5000 (configurable; this is the dashboard, REST API, and MCP endpoint).
 - Optional UDP datagram listener on a port of your choosing (off by default; used by the test stand-in for MeshCore).
 
-It opens an outbound TCP connection to your packet node's AGW port (default 8000 on BPQ).
+It opens an outbound TCP connection to your packet node's bearer port - AGW (default 8000 on BPQ) or RHPv2 (default 9000 on XRouter), depending on `DAPPS_NODE_BEARER`.
 
 The full list of operator-tunable knobs is on the [Configure](../configure.md) page.

@@ -18,7 +18,7 @@ Every site where the daemon puts bytes on a bearer:
 | `poll`              | Reverse-poll request to a peer (scheduled or operator-triggered).                         |
 | `heartbeat`         | The periodic MQTT publish to `dapps/metrics/heartbeat`.                                   |
 
-Each row carries: timestamp, kind, bearer (`agw` / `udp` / `mqtt`), channel key (e.g. bearer port), target callsign, message id (when forwarding a specific message), bytes, duration, success boolean, reason, and an error tag on failure.
+Each row carries: timestamp, kind, bearer (`agw` / `rhpv2` / `udp` / `mqtt`), channel key (e.g. bearer port), target callsign, message id (when forwarding a specific message), bytes, duration, success boolean, reason, and an error tag on failure.
 
 ## The "why" field
 

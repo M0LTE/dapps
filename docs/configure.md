@@ -6,7 +6,7 @@ Every operator-tunable setting on a DAPPS node has three configuration surfaces:
 2. **An environment variable**, of the form `DAPPS_SCREAMING_SNAKE_NAME`, which **overrides the persisted default at first start** and updates the persisted row.
 3. **The dashboard's `/Config` form** (or `POST /Config` REST API), which writes a new value to the persisted row at any time.
 
-For runtime-changeable knobs (probing on/off, fragment threshold, airtime budget, etc.), the dashboard is the right surface - changes pick up without a restart. For startup-only knobs (callsign, BPQ host/port, MQTT port, dashboard URL), the env var is the right surface - they're read once at boot.
+For runtime-changeable knobs (probing on/off, fragment threshold, airtime budget, etc.), the dashboard is the right surface - changes pick up without a restart. For startup-only knobs (callsign, packet-node host/port, MQTT port, dashboard URL), the env var is the right surface - they're read once at boot.
 
 ## Show the current persisted config
 
@@ -23,9 +23,13 @@ Walks the persisted `systemoptions` table and prints `DAPPS_SCREAMING_SNAKE=valu
 | Name             | Env var          | Default     | What it does                                                              |
 |------------------|------------------|-------------|---------------------------------------------------------------------------|
 | Callsign         | `DAPPS_CALLSIGN` | `N0CALL`    | Your callsign with SSID, e.g. `M0LTE-1`. **Refuses to start on the placeholder.** |
-| Node host        | `DAPPS_NODE_HOST`| `localhost` | TCP host of your packet node (BPQ, etc.).                                 |
-| AGW port         | `DAPPS_AGW_PORT` | `8000`      | TCP port the packet node's AGW interface listens on.                      |
-| Default bearer port | `DAPPS_DEFAULT_BEARER_PORT` | `0` | bearer port (0-indexed) for outbound sessions when no per-neighbour override is set. |
+| Node host        | `DAPPS_NODE_HOST`| `localhost` | TCP host of your packet node (BPQ, XRouter, etc.).                        |
+| Node bearer      | `DAPPS_NODE_BEARER` | `agw`    | Which host protocol DAPPS speaks to the packet node: `agw` (BPQ, Direwolf, AGWPE, ...) or `rhpv2` (XRouter, future RHPv2-capable BPQ). See [Connect a node](connect/index.md). |
+| AGW port         | `DAPPS_AGW_PORT` | `8000`      | TCP port the packet node's AGW interface listens on. Used when `Node bearer = agw`. |
+| RHPv2 port       | `DAPPS_RHP_PORT` | `9000`      | TCP port the packet node's RHPv2 listener is on. Used when `Node bearer = rhpv2`. |
+| RHPv2 user       | `DAPPS_RHP_USER` | _empty_     | Username for RHPv2 authentication. Leave empty if your packet node accepts unauthenticated RHPv2. |
+| RHPv2 password   | `DAPPS_RHP_PASS` | _empty_     | Password matching the RHPv2 user.                                         |
+| Default bearer port | `DAPPS_DEFAULT_BEARER_PORT` | `0` | Bearer port (0-indexed) for outbound sessions when a neighbour has no per-row override. For AGW this is the AGW port byte; for RHPv2 DAPPS adds 1 internally to derive XRouter's 1-indexed `PORT=N` name. |
 
 ### App-interface ports
 
