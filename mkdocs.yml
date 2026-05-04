@@ -95,7 +95,7 @@ nav:
   - Connect a node:
       - connect/index.md
       - BPQ (AGW): connect/bpq.md
-      - XRouter (AGW): connect/xrouter.md
+      - XRouter (RHPv2): connect/xrouter.md
       - MeshCore: connect/meshcore.md
       - RHPv2: connect/rhp.md
   - Run: run.md
