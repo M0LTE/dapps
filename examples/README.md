@@ -5,6 +5,7 @@ First-party example apps that build against a running DAPPS instance.
 | Example | Language / runtime | What it demonstrates |
 |---------|---------------------|----------------------|
 | [`file-transfer/`](file-transfer/) | Browser (HTML + vanilla JS, mqtt.js over WebSocket) | Binary file transfer with inline preview for browser-friendly types. Whole-file send (DAPPS handles fragmentation). MQTT-over-WebSocket. |
+| [`letters/`](letters/) | Browser (HTML + vanilla JS, mqtt.js over WebSocket, IndexedDB) | Long-form messenger - subject + multi-paragraph body, conversations per peer, persistent history. Like email, not chat. |
 
 Smaller Python scripts (chat, hello, sensor, pager) live in [`docs/examples/`](../docs/examples/) - those ship alongside the [app-developer guide](https://m0lte.github.io/dapps/app-developers/) and exercise MQTT-over-TCP via paho-mqtt.
 

@@ -1,6 +1,6 @@
 # Sample gallery
 
-Four small apps that demonstrate common shapes you'll build on top of DAPPS. Each is short, runnable, and chosen to surface a specific design point. None are production-ready - they're written to be read.
+Five small apps that demonstrate common shapes you'll build on top of DAPPS. Each is short, runnable, and chosen to surface a specific design point. None are production-ready - they're written to be read.
 
 If you haven't yet, read [Concepts](concepts.md) and walk through the [tutorial](tutorial.md) first.
 
@@ -10,11 +10,11 @@ The first three are Python + paho-mqtt:
 pip install paho-mqtt
 ```
 
-The fourth is a browser app (HTML + vanilla JS, MQTT-over-WebSocket via mqtt.js).
+The last two are browser apps (HTML + vanilla JS, MQTT-over-WebSocket via mqtt.js).
 
 Run a DAPPS instance locally, replace `<your-callsign>` with your own throughout, and try the examples in any order.
 
-The Python sources live in the repo at [`docs/examples/`](https://github.com/M0LTE/dapps/tree/master/docs/examples). The browser one lives at [`examples/file-transfer/`](https://github.com/M0LTE/dapps/tree/master/examples/file-transfer).
+The Python sources live in the repo at [`docs/examples/`](https://github.com/M0LTE/dapps/tree/master/docs/examples). The browser ones live under [`examples/`](https://github.com/M0LTE/dapps/tree/master/examples) at the top level.
 
 ## Group chat - `chat.py`
 
@@ -136,9 +136,40 @@ Open `index.html` directly from disk; no static server needed. The app speaks MQ
 - No app-layer chunking / progressive UX. F2 fragments under the hood and reassembles before delivery, so the receiver gets the whole file in one event - no "I've got 30% of it" intermediate state. If you wanted progressive render, you'd split the source into N independent DAPPS messages at the app layer.
 - Auth-required mode is supported by pasting a token into the form, but there's no operator-friendly first-run flow for minting / sharing the token.
 
+## Long-form messenger (browser) - `examples/letters/`
+
+[examples/letters/index.html on GitHub](https://github.com/M0LTE/dapps/blob/master/examples/letters/index.html)
+
+A browser app for **long-form correspondence** - subject + multi-paragraph body, conversations grouped per peer, persistent across reloads via IndexedDB. Like email, not chat. Each DAPPS message is one letter; the wire envelope is JSON: `{v, subject, body, ts}`.
+
+```js
+// the app's outbound, abbreviated
+const envelope = { v: 1, subject, body, ts: new Date().toISOString() };
+client.publish(`dapps/out/letters/${dest}`,
+    new TextEncoder().encode(JSON.stringify(envelope)),
+    { qos: 1, properties: { userProperties: { "dapps-ttl": "604800" } } });
+```
+
+The receive subscription on `dapps/in/letters` parses the same envelope and renders into the conversation timeline. The app self-loopback-dedups on `dapps-source = my-callsign` (so sending to your own callsign for testing only shows the letter once).
+
+**What this demonstrates**:
+
+- **MQTT-over-WebSocket from a browser** - same transport pattern as `file-transfer/`.
+- **IndexedDB persistence** - conversations + read/unread state + first-run config (your callsign, the connect URL) all survive reloads.
+- **App-defined envelope on top of a DAPPS payload** - one ASCII line of compact JSON for the metadata, body inside the JSON. Reader splits / parses; sender builds.
+- **Sender-side composition timestamp** carried in the envelope so messages within a thread sort sensibly even when DAPPS's at-least-once delivery delivers them out of order across reconnects.
+- **Long TTL (7 days)** - long-form correspondence is "still useful next week if not delivered today."
+
+**What this glosses over**:
+
+- Read receipts. Adding "I read your letter" notifications would be a reverse DAPPS message per inbound; out of scope.
+- Multi-thread per peer. v1 is per-peer-only - if you want to discuss two unrelated topics with the same person they're in one timeline.
+- Attachments. Combining with `file-transfer/`'s binary-envelope shape is a future exercise.
+- Auth-required UX polish. The connect form has a Token field but no first-run helper.
+
 ## When to write your own
 
-These four apps cover the major DAPPS-shaped patterns:
+These five apps cover the major DAPPS-shaped patterns:
 
 | Pattern                       | Example                | Distinguishing feature                                                              |
 |-------------------------------|------------------------|-------------------------------------------------------------------------------------|
@@ -148,5 +179,6 @@ These four apps cover the major DAPPS-shaped patterns:
 | Periodic submit               | `sensor.py` (default)  | Publisher only; no `on_message`.                                                    |
 | Mixed listener + sender       | `pager.py`             | Two CLI modes share the same app slot.                                              |
 | Browser-native binary file    | `file-transfer/`       | MQTT-over-WebSocket from a browser; binary payload + app-defined envelope.          |
+| Browser-native long-form text | `letters/`             | MQTT-over-WebSocket; IndexedDB persistence; subject + body envelope; conversations. |
 
 If your app fits one of these shapes, copy the closest example and adapt. If it doesn't, the [reference](reference.md) has the full surface - almost any DAPPS app boils down to combinations of subscribe, publish, and ack against your own `<app>` slot.
