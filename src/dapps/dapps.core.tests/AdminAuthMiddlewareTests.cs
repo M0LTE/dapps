@@ -58,7 +58,7 @@ public sealed class AdminAuthMiddlewareTests : IAsyncLifetime
     {
         var (mw, ctx, nextCalled) = Build(path);
 
-        await mw.InvokeAsync(ctx, store);
+        await mw.InvokeAsync(ctx, store, BuildOptionsStore());
 
         nextCalled().Should().BeTrue();
     }
@@ -78,9 +78,21 @@ public sealed class AdminAuthMiddlewareTests : IAsyncLifetime
         // authentication service registered, so ChallengeAsync throws -
         // catch broadly because the relevant assertion is just that
         // next() didn't run for these gated paths.
-        try { await mw.InvokeAsync(ctx, store); } catch { /* expected */ }
+        try { await mw.InvokeAsync(ctx, store, BuildOptionsStore()); } catch { /* expected */ }
 
         nextCalled().Should().BeFalse();
+    }
+
+    private SystemOptionsStore BuildOptionsStore()
+    {
+        // Pre-seed a real callsign so the middleware's "callsign is the
+        // placeholder → /Setup" branch doesn't kick in for these tests.
+        // The setup-wizard redirect is its own test concern.
+        using (var c = DbInfo.GetConnection())
+        {
+            c.InsertOrReplace(new DbSystemOption { Option = "Callsign", Value = "M0LTE-9" });
+        }
+        return new SystemOptionsStore(NullLogger<SystemOptionsStore>.Instance);
     }
 
     private static (AdminAuthMiddleware mw, DefaultHttpContext ctx, Func<bool> nextCalled) Build(string path)
