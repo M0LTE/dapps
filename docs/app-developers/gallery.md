@@ -1,18 +1,20 @@
 # Sample gallery
 
-Three small apps that demonstrate common shapes you'll build on top of DAPPS. Each is short, runnable, and chosen to surface a specific design point. None are production-ready - they're written to be read.
+Four small apps that demonstrate common shapes you'll build on top of DAPPS. Each is short, runnable, and chosen to surface a specific design point. None are production-ready - they're written to be read.
 
 If you haven't yet, read [Concepts](concepts.md) and walk through the [tutorial](tutorial.md) first.
 
-All three are Python + paho-mqtt:
+The first three are Python + paho-mqtt:
 
 ```bash
 pip install paho-mqtt
 ```
 
+The fourth is a browser app (HTML + vanilla JS, MQTT-over-WebSocket via mqtt.js).
+
 Run a DAPPS instance locally, replace `<your-callsign>` with your own throughout, and try the examples in any order.
 
-The runnable source for each example lives in the repo at [`docs/examples/`](https://github.com/M0LTE/dapps/tree/master/docs/examples).
+The Python sources live in the repo at [`docs/examples/`](https://github.com/M0LTE/dapps/tree/master/docs/examples). The browser one lives at [`examples/file-transfer/`](https://github.com/M0LTE/dapps/tree/master/examples/file-transfer).
 
 ## Group chat - `chat.py`
 
@@ -101,16 +103,50 @@ The receiver prints incoming messages with `[<source>] <text>` and notes the res
 - No reply-to / threading. A real messenger would build that on top - perhaps using a header in the payload to correlate.
 - No history; restart the receiver and old pages re-arrive (because `seen` is in-memory). In production, persist `seen` and on startup also fetch the queue once via REST to display the backlog before the broker replay fires.
 
+## File transfer (browser) - `examples/file-transfer/`
+
+[examples/file-transfer/index.html on GitHub](https://github.com/M0LTE/dapps/blob/master/examples/file-transfer/index.html)
+
+A single-page browser app: pick a file, type a destination callsign, click Send. The receiving end - any other browser tab pointed at any DAPPS daemon that the message can route to - shows the file with an inline preview if it's `image/*`, or a Download link otherwise.
+
+Open `index.html` directly from disk; no static server needed. The app speaks MQTT-over-WebSocket to the daemon's `/mqtt` endpoint, so there's no CORS surface to deal with.
+
+```html
+<!-- in the HTML, abbreviated -->
+<script src="https://unpkg.com/mqtt@5/dist/mqtt.min.js"></script>
+<script>
+  const client = mqtt.connect("ws://localhost:5000/mqtt", { protocolVersion: 5 });
+  client.on("connect", () => client.subscribe("dapps/in/files", { qos: 1 }));
+  client.on("message", (topic, payload, packet) => {
+    // split off a one-line JSON envelope, render the rest as the file
+  });
+</script>
+```
+
+**What this demonstrates**:
+
+- **Browser-native DAPPS app**. No REST round-trip per message; mqtt.js handles the WebSocket transport.
+- **Binary payloads + an app-defined envelope**. DAPPS carries `byte[]`; this app sticks a one-line JSON envelope on the front (`{name, mime, size}` + `\n` + bytes) so the receiver knows what the file is.
+- **Inline preview when the MIME type allows**. Browsers natively render `image/*` from a `Blob` URL. The app falls back to a `<a download>` link otherwise.
+- **TTL of 24 hours**. File transfer is "useful for a while" - longer than chat (1h), shorter than indefinite.
+
+**What this glosses over**:
+
+- The `seen` set is in-memory; if you reload the receive tab while a message is unacked, you'll see it again. A real app would persist `seen` (e.g. IndexedDB).
+- No app-layer chunking / progressive UX. F2 fragments under the hood and reassembles before delivery, so the receiver gets the whole file in one event - no "I've got 30% of it" intermediate state. If you wanted progressive render, you'd split the source into N independent DAPPS messages at the app layer.
+- Auth-required mode is supported by pasting a token into the form, but there's no operator-friendly first-run flow for minting / sharing the token.
+
 ## When to write your own
 
-These three apps cover the major DAPPS-shaped patterns:
+These four apps cover the major DAPPS-shaped patterns:
 
-| Pattern                | Example                | Distinguishing feature                                           |
-|------------------------|------------------------|------------------------------------------------------------------|
-| Request → reply        | `hello.py`             | Both subscribes and publishes; replies on `dapps-source`.        |
-| Many-to-many           | `chat.py`              | Loops `publish()` per peer; participants are symmetric.          |
-| One-shot submit        | `sensor.py` (`--once`) | No subscription; submit and exit.                                |
-| Periodic submit        | `sensor.py` (default)  | Publisher only; no `on_message`.                                 |
-| Mixed listener + sender| `pager.py`             | Two CLI modes share the same app slot.                           |
+| Pattern                       | Example                | Distinguishing feature                                                              |
+|-------------------------------|------------------------|-------------------------------------------------------------------------------------|
+| Request → reply               | `hello.py`             | Both subscribes and publishes; replies on `dapps-source`.                           |
+| Many-to-many                  | `chat.py`              | Loops `publish()` per peer; participants are symmetric.                             |
+| One-shot submit               | `sensor.py` (`--once`) | No subscription; submit and exit.                                                   |
+| Periodic submit               | `sensor.py` (default)  | Publisher only; no `on_message`.                                                    |
+| Mixed listener + sender       | `pager.py`             | Two CLI modes share the same app slot.                                              |
+| Browser-native binary file    | `file-transfer/`       | MQTT-over-WebSocket from a browser; binary payload + app-defined envelope.          |
 
 If your app fits one of these shapes, copy the closest example and adapt. If it doesn't, the [reference](reference.md) has the full surface - almost any DAPPS app boils down to combinations of subscribe, publish, and ack against your own `<app>` slot.

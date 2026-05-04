@@ -92,6 +92,17 @@ What you should know:
 
 For most apps, treat multi-part as "transparent - your message goes." For very large messages, consider whether DAPPS is the right layer at all (it isn't for MB-scale data).
 
+## Binary payloads
+
+DAPPS doesn't impose any encoding on the payload. The bytes you submit are the bytes the destination app receives. JSON, Protocol Buffers, MessagePack, an image file, a TLS handshake - DAPPS doesn't care. Both interfaces give you a byte array:
+
+- **MQTT**: the publish payload is `byte[]`. Use it directly.
+- **REST**: the JSON request/response wraps the bytes as a base64 string in the `payload` field. The example apps decode it on receive and base64-encode on submit.
+
+A worked browser example is [`examples/file-transfer/`](https://github.com/M0LTE/dapps/tree/master/examples/file-transfer) - picks a file, sends it, previews it on arrival inline if it's `image/*` or as a download link otherwise. The app puts a one-line JSON envelope in front of the file body so the receiver knows the filename and MIME type; that envelope is the **app's** convention, not DAPPS's.
+
+For payloads above the fragment threshold, the multi-part machinery above kicks in - again invisibly. There's no "the sender chunked it deliberately" path that the receiver needs to be aware of: app code submits one whole message, app code receives one whole message, DAPPS handles the wire-level splitting in between.
+
 ## Where to next
 
 - Walk [a working hello-world app](tutorial.md) in Python, end-to-end.
