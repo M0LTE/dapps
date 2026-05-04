@@ -10,11 +10,11 @@ Today that interface is **AGW** - the long-standing host-side TCP protocol that 
 | Bearer        | Status         | Setup guide                |
 |---------------|----------------|----------------------------|
 | BPQ AGW       | Production     | [BPQ (AGW)](bpq.md)        |
-| XRouter AGW   | Untested but expected to work | [XRouter (AGW)](xrouter.md) |
+| XRouter AGW   | Works for inbound; outbound is fragile - RHPv2 is the recommended bearer for XRouter | [XRouter (AGW)](xrouter.md) |
+| XRouter RHPv2 | Production - the recommended bearer for XRouter hosts | [RHPv2](rhp.md) |
 | Other AGW host| Likely works   | [BPQ (AGW)](bpq.md) covers the protocol-shaped bits; only the config-file specifics differ |
 | MeshCore Companion | Planned   | [MeshCore](meshcore.md)    |
 | MeshCore KISS | Planned        | [MeshCore](meshcore.md)    |
-| RHPv2         | Planned (XRouter is the natural first test target) | [RHPv2](rhp.md) |
 | UDP datagram  | Test stand-in  | Not for production; used as the architectural placeholder for what MeshCore will become. |
 
 ## Why bearer-agnostic matters

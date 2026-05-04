@@ -1,6 +1,6 @@
 # Connect via XRouter (AGW)
 
-This page is the full XRouter recipe for getting DAPPS on-air. If you're already running XRouter as your packet node, here's what you need to do to add DAPPS.
+This page is the AGW recipe for connecting DAPPS to XRouter. **For XRouter we now recommend the [RHPv2 bearer](rhp.md) instead** - it sidesteps an XRouter-specific AGW limitation around per-TCP-connection callsign authorisation that makes outbound forwards fragile. Use this page if you have a specific reason to stay on AGW (e.g. an older XRouter without RHPv2 support, or compatibility testing); use [RHPv2](rhp.md) for new deployments.
 
 ## What we're wiring up
 
