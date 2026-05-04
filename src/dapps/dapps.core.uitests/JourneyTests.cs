@@ -37,19 +37,28 @@ public sealed class JourneyTests(PlaywrightFixture pw) : IAsyncLifetime
         });
         var page = await ctx.NewPageAsync();
 
-        // 1. Land on /Setup, fill the form, submit. The handler sets
-        // the cookie and redirects to /, so by the time NetworkIdle
-        // fires we should be looking at the dashboard.
+        // 1. Land on /Setup, fill the password step, submit. The
+        // handler sets the cookie and redirects back to /Setup,
+        // which then renders the bearer step (callsign + node).
         await page.GotoAsync(_app.BaseUrl);
         page.Url.Should().EndWith("/Setup");
         await page.FillAsync("input[name='password']", AdminPassword);
         await page.FillAsync("input[name='confirm']", AdminPassword);
         await page.ClickAsync("button[type='submit']");
+
+        // Bearer step: wait for the callsign input to appear, fill
+        // it in, submit. Once the callsign is set, the wizard's
+        // OnGet routes us to "/" on next nav.
+        await page.WaitForSelectorAsync("input[name='callsign']",
+            new PageWaitForSelectorOptions { Timeout = 10_000 });
+        await CaptureAsync(page, "setup-bearer");
+        await page.FillAsync("input[name='callsign']", "TEST-7");
+        await page.ClickAsync("#bearerForm button[type='submit']");
         await page.WaitForURLAsync(url => !url.Contains("/Setup", StringComparison.OrdinalIgnoreCase),
             new PageWaitForURLOptions { Timeout = 10_000 });
 
         page.Url.TrimEnd('/').Should().Be(_app.BaseUrl.TrimEnd('/'),
-            "Setup should drop us on the dashboard root");
+            "completing the wizard should drop us on the dashboard root");
         await CaptureAsync(page, "dashboard");
 
         // 2. /Inbound - SSE-driven live tail. The cookie carries

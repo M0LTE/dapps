@@ -18,8 +18,9 @@ namespace dapps.core.uitests;
 ///   anyone needs it) AND via <c>DAPPS_DB_PATH</c> isn't a knob
 ///   today, so we cd into a temp dir whose <c>data/</c> subdir is the
 ///   one DbInfo's default-path lookup picks up.
-/// - Callsign → 'N0TEST' via env var, since DbStartup refuses to
-///   start on the placeholder.
+/// - Callsign is intentionally left unset - the daemon now starts in
+///   setup-required mode on the placeholder, so JourneyTests drives
+///   the /Setup wizard's bearer step end-to-end.
 /// - MQTT → high port (28830) to avoid collision with a local dev
 ///   daemon on 1883.
 /// - AGW → port 0 means the AGW client connects to an unbound port
@@ -61,7 +62,6 @@ public sealed class WebAppFixture : IAsyncLifetime
 
         var env = _process.StartInfo.EnvironmentVariables;
         env["ASPNETCORE_URLS"] = "http://127.0.0.1:0";
-        env["DAPPS_CALLSIGN"] = "N0TEST";
         env["DAPPS_MQTT_PORT"] = PickEphemeralPort().ToString();
         env["DAPPS_AGW_PORT"] = "0";
         env["DAPPS_UDP_LISTEN_PORT"] = "0";
