@@ -26,7 +26,7 @@ Terms used throughout this manual.
 
 **BPQ** - A long-running packet-radio multi-protocol stack, the most common AGW host in service. DAPPS supports BPQ as the production backhaul. Not a hard dependency - anything with an AGW interface should work.
 
-**BPQ port byte** - A 0-indexed identifier for which BPQ port (= which physical radio, in `bpq32.cfg`'s `PORTS` layout) DAPPS should use for outbound. Per-neighbour or default.
+**bearer port** - A 0-indexed identifier for which bearer port (= which physical radio, in `bpq32.cfg`'s `PORTS` layout) DAPPS should use for outbound. Per-neighbour or default.
 
 **callsign** - Your radio licence callsign, optionally with an SSID (`-1`, `-7`, etc). DAPPS treats the full call+SSID as a unique identifier for routing; the base callsign without SSID is used for some discovery features.
 

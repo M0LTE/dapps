@@ -64,13 +64,13 @@ public sealed class InboundConnectionHandlerPeersTests : IAsyncLifetime
     [Fact]
     public async Task PeersCommand_NeighbourAndAgwDiscoveredPeer_EmitsBoth()
     {
-        await database.UpsertNeighbour("N0NEIGH-9", bpqPort: 1);
+        await database.UpsertNeighbour("N0NEIGH-9", bearerPort: 1);
         await database.UpsertDiscoveredPeer(new DbDiscoveredPeer
         {
             Callsign = "N0BCN-7",
             Bearer = "agw",
             ChannelKey = "0",
-            BpqPort = 0,
+            BearerPort = 0,
             LinkClass = LinkClass.VhfUhfFm,
             CostHint = 1,
             TtlSeconds = 600,
@@ -93,8 +93,8 @@ public sealed class InboundConnectionHandlerPeersTests : IAsyncLifetime
     {
         // UDP-only neighbours can't be reached via AGW from the asker's
         // side, so emitting them as peers would just cause failed probes.
-        await database.UpsertNeighbour("N0UDP-9", bpqPort: null, udpEndpoint: "127.0.0.1:1880");
-        await database.UpsertNeighbour("N0AGW-9", bpqPort: 1);
+        await database.UpsertNeighbour("N0UDP-9", bearerPort: null, udpEndpoint: "127.0.0.1:1880");
+        await database.UpsertNeighbour("N0AGW-9", bearerPort: 1);
 
         var output = await DriveSession("peers\nq\n");
 
@@ -131,13 +131,13 @@ public sealed class InboundConnectionHandlerPeersTests : IAsyncLifetime
         // Same callsign appears as both a manual neighbour and a
         // beacon-discovered peer. We emit it once, with source=n
         // (neighbour wins) - the asker doesn't need to dedupe.
-        await database.UpsertNeighbour("N0BOTH-9", bpqPort: 5);
+        await database.UpsertNeighbour("N0BOTH-9", bearerPort: 5);
         await database.UpsertDiscoveredPeer(new DbDiscoveredPeer
         {
             Callsign = "N0BOTH-9",
             Bearer = "agw",
             ChannelKey = "0",
-            BpqPort = 0,
+            BearerPort = 0,
             LinkClass = LinkClass.VhfUhfFm,
             CostHint = 1,
             TtlSeconds = 600,
@@ -159,7 +159,7 @@ public sealed class InboundConnectionHandlerPeersTests : IAsyncLifetime
         // accepting it makes ad-hoc operator inspection from a terminal
         // pleasanter without the asker needing to know the canonical
         // command name.
-        await database.UpsertNeighbour("N0AAA-9", bpqPort: 1);
+        await database.UpsertNeighbour("N0AAA-9", bearerPort: 1);
 
         var output = await DriveSession("who\nq\n");
 

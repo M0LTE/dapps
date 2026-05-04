@@ -46,7 +46,7 @@ public sealed class ProbedNodeCrudTests : IAsyncLifetime
         await database.UpsertProbedNode(new DbProbedNode
         {
             Callsign = "N0THEM-9",
-            LastBpqPort = 1,
+            LastBearerPort = 1,
             LastProbedAt = new DateTime(2026, 5, 1, 12, 0, 0, DateTimeKind.Utc),
             LastSuccessAt = new DateTime(2026, 5, 1, 12, 0, 0, DateTimeKind.Utc),
             SuccessCount = 1,
@@ -56,7 +56,7 @@ public sealed class ProbedNodeCrudTests : IAsyncLifetime
         rows.Should().ContainSingle();
         var row = rows.Single();
         row.Callsign.Should().Be("N0THEM-9");
-        row.LastBpqPort.Should().Be(1);
+        row.LastBearerPort.Should().Be(1);
         row.SuccessCount.Should().Be(1);
         row.OptOut.Should().BeFalse();
     }

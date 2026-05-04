@@ -38,7 +38,7 @@ public sealed class NodePoller(
     public async Task<PollResult> PollAsync(
         string localCallsign,
         string remoteCallsign,
-        int bpqPort,
+        int bearerPort,
         CancellationToken ct)
     {
         var at = timeProvider.GetUtcNow().UtcDateTime;
@@ -47,7 +47,7 @@ public sealed class NodePoller(
             await using var connection = await transport.ConnectAsync(
                 localCallsign: localCallsign,
                 remoteCallsign: remoteCallsign,
-                bpqPortNumber: bpqPort,
+                bearerPort: bearerPort,
                 stoppingToken: ct);
 
             var protocol = new DappsProtocolClient(connection.Stream, loggerFactory);

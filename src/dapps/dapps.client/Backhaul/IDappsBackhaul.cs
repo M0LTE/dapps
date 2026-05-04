@@ -18,7 +18,7 @@ public interface IDappsBackhaul
     /// <summary>
     /// True when this implementation knows how to deliver to the route
     /// - typically because the route carries the bearer-specific hint
-    /// the impl needs (BPQ port for AGW, UDP endpoint for datagram, etc).
+    /// the impl needs (bearer port for AGW, UDP endpoint for datagram, etc).
     /// The caller iterates registered backhauls and picks the first one
     /// that returns true. Order of registration determines priority
     /// when multiple backhauls could handle the same route.

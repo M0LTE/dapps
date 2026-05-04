@@ -49,7 +49,7 @@ DAPPS_CALLSIGN=M0LTE-7
 DAPPS_NODE_BEARER=rhpv2
 DAPPS_NODE_HOST=<xrouter-host>
 DAPPS_RHP_PORT=9000
-DAPPS_DEFAULT_BPQ_PORT=0
+DAPPS_DEFAULT_BEARER_PORT=0
 ```
 
 `DAPPS_NODE_BEARER=rhpv2` flips DAPPS from its default AGW bearer to RHPv2.
@@ -58,7 +58,7 @@ DAPPS_DEFAULT_BPQ_PORT=0
 
 `DAPPS_RHP_PORT` matches the `RHPPORT` you set in step 1.
 
-`DAPPS_DEFAULT_BPQ_PORT` is the byte DAPPS uses to identify which radio port to originate sessions on. With XRouter, the byte numbering is 0-indexed against the order ports appear in `XROUTER.CFG`'s `PORT=N` blocks: `PORT=1` -> byte 0, `PORT=2` -> byte 1, etc. DAPPS adds 1 internally to derive RHPv2's 1-indexed port name. Pick the port you want DAPPS's outbound sessions to go over.
+`DAPPS_DEFAULT_BEARER_PORT` is the byte DAPPS uses to identify which radio port to originate sessions on. With XRouter, the byte numbering is 0-indexed against the order ports appear in `XROUTER.CFG`'s `PORT=N` blocks: `PORT=1` -> byte 0, `PORT=2` -> byte 1, etc. DAPPS adds 1 internally to derive RHPv2's 1-indexed port name. Pick the port you want DAPPS's outbound sessions to go over.
 
 If your XRouter requires authentication on RHPv2, also set:
 
@@ -103,7 +103,7 @@ Add a manual neighbour from the dashboard's **Neighbours** panel:
 | Field          | Value                                       |
 |----------------|---------------------------------------------|
 | Callsign       | another DAPPS node's callsign with SSID     |
-| BPQ port       | the XRouter port byte to use for the originate |
+| bearer port       | the XRouter port byte to use for the originate |
 | UDP endpoint   | leave blank                                 |
 
 Send a test message via the dashboard's **Send a test message** form. The forwarder service picks it up within a few seconds, asks XRouter to dial the remote callsign, and you'll see the session in XRouter's stats / monitor view.
@@ -112,7 +112,7 @@ Send a test message via the dashboard's **Send a test message** form. The forwar
 
 If your XRouter has multiple radio ports (`PORT=1`, `PORT=2`, etc.), every neighbour record can specify which port to use. The dashboard's add-neighbour form has the field; the discovery system records the port a peer was heard on automatically.
 
-The byte numbering in DAPPS is 0-indexed against the order ports appear in `XROUTER.CFG`. `PORT=1` -> byte 0, `PORT=2` -> byte 1, and so on. DAPPS handles the +1 conversion to RHPv2's port-name shape internally, so the same `BpqPort` value works for both AGW (BPQ) and RHPv2 (XRouter) neighbours.
+The byte numbering in DAPPS is 0-indexed against the order ports appear in `XROUTER.CFG`. `PORT=1` -> byte 0, `PORT=2` -> byte 1, and so on. DAPPS handles the +1 conversion to RHPv2's port-name shape internally, so the same `BearerPort` value works for both AGW (BPQ) and RHPv2 (XRouter) neighbours.
 
 ## Sharing a callsign between XRouter and DAPPS
 
@@ -128,7 +128,7 @@ Same-callsign-same-SSID with another XRouter declaration is **not** supported - 
 | Authentication failure in the log | `DAPPS_RHP_USER` / `DAPPS_RHP_PASS` don't match XRouter's RHPv2 credentials. |
 | Inbound `c <DAPPS-callsign>` lands at the XRouter node prompt instead of `DAPPSv1>` | DAPPS isn't successfully bound - either it's not running, or the bind failed (callsign collision with NODECALL / CONSOLECALL / CHATCALL / APPL). Check DAPPS logs. |
 | Inbound `c <DAPPS-callsign>` fails with no L2 response | The remote node doesn't have a route to your DAPPS callsign. NetROM/AX.25 routing is XRouter's job, not DAPPS's. |
-| Outbound forwards never connect | DAPPS's neighbour has the wrong `BPQ port` byte - check the port-numbering note above. |
+| Outbound forwards never connect | DAPPS's neighbour has the wrong `bearer port` byte - check the port-numbering note above. |
 
 For more general DAPPS troubleshooting, see the main [Troubleshooting](../troubleshooting.md) page.
 

@@ -20,10 +20,9 @@ public sealed class DbStartupTests : IAsyncLifetime
 
     private static readonly string[] EnvKeys =
     [
-        "DAPPS_NODE_TYPE",
         "DAPPS_NODE_HOST",
         "DAPPS_AGW_PORT",
-        "DAPPS_DEFAULT_BPQ_PORT",
+        "DAPPS_DEFAULT_BEARER_PORT",
         "DAPPS_CALLSIGN",
         "DAPPS_MQTT_PORT",
     ];
@@ -82,7 +81,7 @@ public sealed class DbStartupTests : IAsyncLifetime
         Environment.SetEnvironmentVariable("DAPPS_CALLSIGN", "G0TST");
         Environment.SetEnvironmentVariable("DAPPS_NODE_HOST", "bpq.local");
         Environment.SetEnvironmentVariable("DAPPS_AGW_PORT", "8001");
-        Environment.SetEnvironmentVariable("DAPPS_DEFAULT_BPQ_PORT", "2");
+        Environment.SetEnvironmentVariable("DAPPS_DEFAULT_BEARER_PORT", "2");
         Environment.SetEnvironmentVariable("DAPPS_MQTT_PORT", "1884");
 
         DbStartup.EnsureSchemaAndSeed();
@@ -91,7 +90,7 @@ public sealed class DbStartupTests : IAsyncLifetime
         c.Find<DbSystemOption>("Callsign")!.Value.Should().Be("G0TST");
         c.Find<DbSystemOption>("NodeHost")!.Value.Should().Be("bpq.local");
         c.Find<DbSystemOption>("AgwPort")!.Value.Should().Be("8001");
-        c.Find<DbSystemOption>("DefaultBpqPort")!.Value.Should().Be("2");
+        c.Find<DbSystemOption>("DefaultBearerPort")!.Value.Should().Be("2");
         c.Find<DbSystemOption>("MqttPort")!.Value.Should().Be("1884");
     }
 

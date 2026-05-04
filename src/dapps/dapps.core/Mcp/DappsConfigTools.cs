@@ -61,7 +61,7 @@ public sealed class DappsConfigTools(Database database)
         if (update.FragmentReassemblyTimeoutSeconds.HasValue) current.FragmentReassemblyTimeoutSeconds = ClampPositive(update.FragmentReassemblyTimeoutSeconds.Value);
         if (update.AuthRequired.HasValue) current.AuthRequired = update.AuthRequired.Value;
         if (update.UpdateCheckEnabled.HasValue) current.UpdateCheckEnabled = update.UpdateCheckEnabled.Value;
-        if (update.DefaultBpqPort.HasValue) current.DefaultBpqPort = Math.Max(0, update.DefaultBpqPort.Value);
+        if (update.DefaultBearerPort.HasValue) current.DefaultBearerPort = Math.Max(0, update.DefaultBearerPort.Value);
         if (update.AutoDiscoverViaNodeCall.HasValue) current.AutoDiscoverViaNodeCall = update.AutoDiscoverViaNodeCall.Value;
         if (!string.IsNullOrEmpty(update.NodePromptApplicationCommand))
             current.NodePromptApplicationCommand = update.NodePromptApplicationCommand.Trim();
@@ -114,8 +114,8 @@ public sealed record ConfigUpdate(
     bool? AuthRequired = null,
     [property: Description("C5.1 - when true, periodically check GitHub Releases and surface available updates on the dashboard.")]
     bool? UpdateCheckEnabled = null,
-    [property: Description("Default BPQ port byte (0-indexed) used when originating to a neighbour with no explicit BpqPort set.")]
-    int? DefaultBpqPort = null,
+    [property: Description("Default bearer port (0-indexed) used when originating to a neighbour with no explicit BearerPort set.")]
+    int? DefaultBearerPort = null,
     [property: Description("B6.1 Phase 2b - when true, AGW DAPPS beacons auto-seed node-prompt-probe candidates for the BASE callsign of the source. Off by default.")]
     bool? AutoDiscoverViaNodeCall = null,
     [property: Description("B6.1 Phase 2b - application command typed at the BPQ node prompt to enter the DAPPS slot. Default 'DAPPS'; override for operators using a different APPLICATIONS= name.")]

@@ -6,7 +6,7 @@ namespace dapps.core.Models;
 /// Plan B6.1 - connected-mode probe-and-map. One row per known
 /// callsign that the prober has either tried, or that an operator
 /// has flagged opt-out. The schedule runs L2 connects to each
-/// row's <see cref="Callsign"/> on the chosen <see cref="LastBpqPort"/>
+/// row's <see cref="Callsign"/> on the chosen <see cref="LastBearerPort"/>
 /// and confirms a <c>DAPPSv1&gt;</c> prompt comes back; the result
 /// updates this row.
 ///
@@ -23,10 +23,10 @@ public sealed class DbProbedNode
     [PrimaryKey]
     public string Callsign { get; set; } = "";
 
-    /// <summary>BPQ port byte (0-indexed) used on the most recent
+    /// <summary>bearer port (0-indexed) used on the most recent
     /// probe attempt. Null if we've never attempted, or if the row
     /// was operator-created opt-out without a probe.</summary>
-    public int? LastBpqPort { get; set; }
+    public int? LastBearerPort { get; set; }
 
     /// <summary>UTC timestamp of the most recent probe attempt, success
     /// or otherwise. Null = never attempted.</summary>

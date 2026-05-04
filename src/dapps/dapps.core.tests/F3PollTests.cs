@@ -323,7 +323,7 @@ public sealed class Dappsv1SessionBackhaulOpportunisticPollTests
 
         var result = await sb.SendAsync(
             new BackhaulMessage(pushedId, "app@N0DEST", null, null, "x"u8.ToArray()),
-            new BackhaulRoute("N0DEST", BpqPort: 0),
+            new BackhaulRoute("N0DEST", BearerPort: 0),
             "N0US",
             CancellationToken.None);
 
@@ -358,7 +358,7 @@ public sealed class Dappsv1SessionBackhaulOpportunisticPollTests
 
         var result = await sb.SendAsync(
             new BackhaulMessage(pushedId, "app@N0DEST", null, null, "x"u8.ToArray()),
-            new BackhaulRoute("N0DEST", BpqPort: 0),
+            new BackhaulRoute("N0DEST", BearerPort: 0),
             "N0US",
             CancellationToken.None);
 
@@ -384,7 +384,7 @@ public sealed class Dappsv1SessionBackhaulOpportunisticPollTests
 
         var result = await sb.SendAsync(
             new BackhaulMessage(pushedId, "app@N0DEST", null, null, "x"u8.ToArray()),
-            new BackhaulRoute("N0DEST", BpqPort: 0),
+            new BackhaulRoute("N0DEST", BearerPort: 0),
             "N0US",
             CancellationToken.None);
 
@@ -413,7 +413,7 @@ public sealed class Dappsv1SessionBackhaulOpportunisticPollTests
         private CapturingStream? _stream;
         public byte[] WriteCapture => _stream?.WriteCapture.ToArray() ?? [];
 
-        public Task<IDappsConnection> ConnectAsync(string localCallsign, string remoteCallsign, int bpqPortNumber, CancellationToken stoppingToken)
+        public Task<IDappsConnection> ConnectAsync(string localCallsign, string remoteCallsign, int bearerPort, CancellationToken stoppingToken)
         {
             _stream = new CapturingStream(cannedReceiverBytes);
             return Task.FromResult<IDappsConnection>(new FakeConnection(_stream));

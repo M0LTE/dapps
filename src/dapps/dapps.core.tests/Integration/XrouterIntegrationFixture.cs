@@ -43,11 +43,11 @@ public sealed class XrouterIntegrationFixture : IAsyncLifetime
 
     public string LocalCallsign => "G9DUM-1";
 
-    /// <summary>BPQ-port-byte equivalent on XRouter. The
+    /// <summary>Bearer port equivalent on XRouter. The
     /// AGW emulator dispatches on the per-port byte the same as BPQ;
     /// 0 corresponds to the first INTERFACE/PORT pair (the loopback
     /// in the test config).</summary>
-    public int BpqPortIndex => 0;
+    public int BearerPortIndex => 0;
 
     private IContainer? _container;
 

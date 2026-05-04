@@ -147,8 +147,8 @@ public class OutboundMessageManager(
         if (backhaul is null)
         {
             logger.LogError(
-                "No backhaul accepts route to {0} (BpqPort={1}, UdpEndpoint={2}). Skipping {3}.",
-                route.Callsign, route.BpqPort, route.UdpEndpoint, message.Id);
+                "No backhaul accepts route to {0} (BearerPort={1}, UdpEndpoint={2}). Skipping {3}.",
+                route.Callsign, route.BearerPort, route.UdpEndpoint, message.Id);
             return;
         }
 
@@ -174,7 +174,7 @@ public class OutboundMessageManager(
             await ta.RecordAsync(
                 kind: "forward",
                 bearer: route.UdpEndpoint is not null ? "udp" : "agw",
-                channelKey: route.BpqPort?.ToString() ?? "",
+                channelKey: route.BearerPort?.ToString() ?? "",
                 targetCallsign: route.Callsign,
                 messageId: message.Id,
                 bytes: message.Payload.Length,
@@ -234,7 +234,7 @@ public class OutboundMessageManager(
                 await ta.RecordAsync(
                     kind: "forward-flood",
                     bearer: route.UdpEndpoint is not null ? "udp" : "agw",
-                    channelKey: route.BpqPort?.ToString() ?? "",
+                    channelKey: route.BearerPort?.ToString() ?? "",
                     targetCallsign: route.Callsign,
                     messageId: message.Id,
                     bytes: message.Payload.Length,

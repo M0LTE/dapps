@@ -70,10 +70,9 @@ public static class DbStartup
         // otherwise the hardcoded fallback applies. Either way the value
         // is only written when no row exists - once configured (here or
         // via /Config), the row sticks and env vars stop mattering.
-        InsertIfNotPresent(db, options, "NodeType", "BPQ", logger);
         InsertIfNotPresent(db, options, "NodeHost", "localhost", logger);
         InsertIfNotPresent(db, options, "AgwPort", "8000", logger);
-        InsertIfNotPresent(db, options, "DefaultBpqPort", "0", logger);
+        InsertIfNotPresent(db, options, "DefaultBearerPort", "0", logger);
         InsertIfNotPresent(db, options, "Callsign", PlaceholderCallsign, logger);
         InsertIfNotPresent(db, options, "MqttPort", "1883", logger);
         InsertIfNotPresent(db, options, "UdpListenPort", "0", logger);
@@ -153,7 +152,7 @@ public static class DbStartup
     /// <summary>
     /// Convert a PascalCase or camelCase identifier to SCREAMING_SNAKE_CASE
     /// for use as an environment-variable suffix. <c>NodeHost</c> →
-    /// <c>NODE_HOST</c>; <c>DefaultBpqPort</c> → <c>DEFAULT_BPQ_PORT</c>.
+    /// <c>NODE_HOST</c>; <c>DefaultBearerPort</c> → <c>DEFAULT_BPQ_PORT</c>.
     /// </summary>
     private static string ToScreamingSnake(string identifier)
     {

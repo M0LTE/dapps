@@ -53,13 +53,13 @@ public class TtlForwardingIntegrationTests(TwoInstanceLinbpqFixture fixture) : I
             // Adding the neighbour is enough - the resolver matches its
             // base callsign against the destination's @-suffix, no
             // separate route hint required (A2).
-            c.Insert(new DbNeighbour { Callsign = fixture.ApplCallB, BpqPort = fixture.AxipPortIndex });
+            c.Insert(new DbNeighbour { Callsign = fixture.ApplCallB, BearerPort = fixture.AxipPortIndex });
         }
 
         var optionsMonitor = new TestOptionsMonitor<SystemOptions>(new SystemOptions
         {
             Callsign = fixture.ApplCallA,
-            DefaultBpqPort = fixture.AxipPortIndex,
+            DefaultBearerPort = fixture.AxipPortIndex,
         });
         database = new Database(NullLogger<Database>.Instance, optionsMonitor);
 
@@ -129,7 +129,7 @@ public class TtlForwardingIntegrationTests(TwoInstanceLinbpqFixture fixture) : I
         var optionsMonitor = new TestOptionsMonitor<SystemOptions>(new SystemOptions
         {
             Callsign = fixture.ApplCallA,
-            DefaultBpqPort = fixture.AxipPortIndex,
+            DefaultBearerPort = fixture.AxipPortIndex,
         });
         var routingContext = new DatabaseRoutingContext(database, optionsMonitor);
         var routingAlgorithm = new StaticRoutingAlgorithm(NullLogger<StaticRoutingAlgorithm>.Instance);

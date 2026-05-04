@@ -25,7 +25,7 @@ Walks the persisted `systemoptions` table and prints `DAPPS_SCREAMING_SNAKE=valu
 | Callsign         | `DAPPS_CALLSIGN` | `N0CALL`    | Your callsign with SSID, e.g. `M0LTE-1`. **Refuses to start on the placeholder.** |
 | Node host        | `DAPPS_NODE_HOST`| `localhost` | TCP host of your packet node (BPQ, etc.).                                 |
 | AGW port         | `DAPPS_AGW_PORT` | `8000`      | TCP port the packet node's AGW interface listens on.                      |
-| Default BPQ port | `DAPPS_DEFAULT_BPQ_PORT` | `0` | BPQ port byte (0-indexed) for outbound sessions when no per-neighbour override is set. |
+| Default bearer port | `DAPPS_DEFAULT_BEARER_PORT` | `0` | bearer port (0-indexed) for outbound sessions when no per-neighbour override is set. |
 
 ### App-interface ports
 

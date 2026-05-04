@@ -27,7 +27,7 @@ public sealed class DappsHealthTools(
     [McpServerTool(Name = "get_operational_snapshot")]
     [Description(
         "Returns the canonical 'what's going on with this DAPPS node?' snapshot - same shape as GET /Operational. " +
-        "Includes liveness (BPQ AGW reachable, MQTT broker up, callsign configured), every counter from the in-memory " +
+        "Includes liveness (node reachable, MQTT broker up, callsign configured), every counter from the in-memory " +
         "metrics ring (forwards, probes, polls, route learnings, peer age-outs, budget refusals), queue/peer/channel/" +
         "neighbour counts, trailing-hour airtime usage, and the last 20 decision events. Use this as the first tool " +
         "to call when answering 'how is this node doing right now'.")]
@@ -55,7 +55,7 @@ public sealed class DappsHealthTools(
 
     [McpServerTool(Name = "get_system_options")]
     [Description(
-        "Returns the persisted SystemOptions row - every operator-tunable knob: callsign, BPQ AGW host/port, " +
+        "Returns the persisted SystemOptions row - every operator-tunable knob: callsign, node host/port, " +
         "MQTT port, fragmenting threshold, probing/polling/heartbeat enable + cadences, routing algorithm, " +
         "discovery airtime budget, etc. Same shape as GET /Config (which is gated behind admin auth). Read-only.")]
     public async Task<dapps.core.Models.SystemOptions> GetSystemOptionsAsync()

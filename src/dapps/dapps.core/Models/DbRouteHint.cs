@@ -20,11 +20,11 @@ public class DbNeighbour
     public string Callsign { get; set; } = "";
 
     /// <summary>
-    /// Optional override for which BPQ port byte (0-indexed) to use when
+    /// Optional override for which bearer port (0-indexed) to use when
     /// connecting to this neighbour. Null falls back to
-    /// SystemOptions.DefaultBpqPort.
+    /// SystemOptions.DefaultBearerPort.
     /// </summary>
-    public int? BpqPort { get; set; }
+    public int? BearerPort { get; set; }
 
     /// <summary>
     /// Optional UDP endpoint (<c>host:port</c>) for the datagram

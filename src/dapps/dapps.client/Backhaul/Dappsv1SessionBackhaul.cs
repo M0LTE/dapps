@@ -43,7 +43,7 @@ public sealed class Dappsv1SessionBackhaul : IDappsBackhaul
     /// <summary>
     /// AGW handles any route that does not specify a higher-priority
     /// bearer like UDP. Effectively: this is the fallback bearer when
-    /// only callsign + BPQ port are known.
+    /// only callsign + bearer port are known.
     /// </summary>
     public bool CanHandle(BackhaulRoute route) => route.UdpEndpoint is null;
 
@@ -53,14 +53,14 @@ public sealed class Dappsv1SessionBackhaul : IDappsBackhaul
         string localCallsign,
         CancellationToken ct)
     {
-        var bpqPort = route.BpqPort ?? 0;
+        var bearerPort = route.BearerPort ?? 0;
 
         try
         {
             await using var connection = await transport.ConnectAsync(
                 localCallsign: localCallsign,
                 remoteCallsign: route.Callsign,
-                bpqPortNumber: bpqPort,
+                bearerPort: bearerPort,
                 stoppingToken: ct);
 
             var protocol = new DappsProtocolClient(connection.Stream, loggerFactory);

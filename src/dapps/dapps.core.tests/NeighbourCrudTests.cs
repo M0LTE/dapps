@@ -45,38 +45,38 @@ public sealed class NeighbourCrudTests : IAsyncLifetime
     [Fact]
     public async Task UpsertNeighbour_FirstWrite_Inserts()
     {
-        await database.UpsertNeighbour("N0BBB-9", bpqPort: 1);
+        await database.UpsertNeighbour("N0BBB-9", bearerPort: 1);
 
         var rows = await database.GetNeighbours();
         rows.Should().ContainSingle();
         rows.Single().Callsign.Should().Be("N0BBB-9");
-        rows.Single().BpqPort.Should().Be(1);
+        rows.Single().BearerPort.Should().Be(1);
     }
 
     [Fact]
     public async Task UpsertNeighbour_SameCallsignTwice_UpdatesInPlace()
     {
-        await database.UpsertNeighbour("N0BBB-9", bpqPort: 1);
-        await database.UpsertNeighbour("N0BBB-9", bpqPort: 2);
+        await database.UpsertNeighbour("N0BBB-9", bearerPort: 1);
+        await database.UpsertNeighbour("N0BBB-9", bearerPort: 2);
 
         var rows = await database.GetNeighbours();
         rows.Should().ContainSingle("upsert MUST NOT create a duplicate row for the same callsign");
-        rows.Single().BpqPort.Should().Be(2);
+        rows.Single().BearerPort.Should().Be(2);
     }
 
     [Fact]
     public async Task UpsertNeighbour_NullPort_RoundTripsAsNull()
     {
-        await database.UpsertNeighbour("N0BBB-9", bpqPort: null);
+        await database.UpsertNeighbour("N0BBB-9", bearerPort: null);
 
         var rows = await database.GetNeighbours();
-        rows.Single().BpqPort.Should().BeNull();
+        rows.Single().BearerPort.Should().BeNull();
     }
 
     [Fact]
     public async Task RemoveNeighbour_Existing_ReturnsTrueAndDeletes()
     {
-        await database.UpsertNeighbour("N0BBB-9", bpqPort: 1);
+        await database.UpsertNeighbour("N0BBB-9", bearerPort: 1);
 
         var deleted = await database.RemoveNeighbour("N0BBB-9");
 

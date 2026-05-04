@@ -44,7 +44,7 @@ builder.Services.AddOptions<SystemOptions>().Configure<OptionsRepo, ILogger<Syst
     var options = db.GetOptions().GetAwaiter().GetResult();
     o.NodeHost = options.Single(o => o.Option == "NodeHost").Value;
     o.AgwPort = int.Parse(options.Single(o => o.Option == "AgwPort").Value);
-    o.DefaultBpqPort = int.Parse(options.Single(o => o.Option == "DefaultBpqPort").Value);
+    o.DefaultBearerPort = int.Parse(options.Single(o => o.Option == "DefaultBearerPort").Value);
     o.Callsign = options.Single(o => o.Option == "Callsign").Value;
     o.MqttPort = int.Parse(options.Single(o => o.Option == "MqttPort").Value);
     o.UdpListenPort = int.TryParse(
@@ -133,7 +133,7 @@ builder.Services.AddOptions<SystemOptions>().Configure<OptionsRepo, ILogger<Syst
 
     logger.LogInformation($"Callsign: {o.Callsign}");
     logger.LogInformation($"Node bearer: {o.NodeBearer}");
-    logger.LogInformation($"BPQ AGW: {o.NodeHost}:{o.AgwPort} (default port byte {o.DefaultBpqPort})");
+    logger.LogInformation($"Packet node: {o.NodeHost} (AGW :{o.AgwPort}, RHPv2 :{o.RhpPort}, default bearer port {o.DefaultBearerPort})");
     logger.LogInformation($"MQTT broker: localhost:{o.MqttPort}");
     logger.LogInformation($"UDP datagram listener: {(o.UdpListenPort > 0 ? $":{o.UdpListenPort}" : "disabled")}");
     logger.LogInformation($"App-interface auth required: {o.AuthRequired}");

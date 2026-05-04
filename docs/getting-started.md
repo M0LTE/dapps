@@ -69,7 +69,7 @@ Open `http://<node>:5000/` in a browser. The first request lands on `/Setup` to 
 
 ### 5. Add a neighbour
 
-DAPPS knows nothing about other DAPPS nodes until you tell it about one. The simplest way is the dashboard's **Neighbours** panel - enter the remote callsign and the BPQ port byte your AGW link goes out on. There's a REST API and a [discovery system](discovery-and-routing.md) that auto-finds peers if you turn on beaconing, but a single manual neighbour gets you to "first message" fastest.
+DAPPS knows nothing about other DAPPS nodes until you tell it about one. The simplest way is the dashboard's **Neighbours** panel - enter the remote callsign and the bearer port your AGW link goes out on. There's a REST API and a [discovery system](discovery-and-routing.md) that auto-finds peers if you turn on beaconing, but a single manual neighbour gets you to "first message" fastest.
 
 ### 6. Send a test message
 

@@ -60,7 +60,7 @@ public class AgwIntegrationTests(LinbpqIntegrationFixture fixture)
         var act = async () => await transport.ConnectAsync(
             localCallsign: fixture.LocalCallsign,
             remoteCallsign: fixture.UnreachableCallsign,
-            bpqPortNumber: fixture.BpqPortIndex,
+            bearerPort: fixture.BearerPortIndex,
             stoppingToken: ctSource.Token);
 
         var ex = await act.Should().ThrowAsync<IOException>();

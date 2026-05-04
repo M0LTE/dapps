@@ -45,7 +45,7 @@ public sealed class RemainingControllersTests : IAsyncLifetime
             Callsign = "N0CALL",
             NodeHost = "localhost",
             AgwPort = 8000,
-            DefaultBpqPort = 0,
+            DefaultBearerPort = 0,
             MqttPort = 1883,
         });
         database = new Database(NullLogger<Database>.Instance, optionsMonitor);
@@ -67,13 +67,13 @@ public sealed class RemainingControllersTests : IAsyncLifetime
         var ctrl = new NeighboursController(database);
 
         // POST a neighbour with both bearer hints set.
-        var post = await ctrl.Upsert(new NeighbourModel("g7xyz-9", BpqPort: 1, UdpEndpoint: "10.0.0.1:1880"));
+        var post = await ctrl.Upsert(new NeighbourModel("g7xyz-9", BearerPort: 1, UdpEndpoint: "10.0.0.1:1880"));
         post.Should().BeOfType<NoContentResult>();
 
         var list = (await ctrl.List()).ToList();
         list.Should().ContainSingle();
         list[0].Callsign.Should().Be("G7XYZ-9", "callsigns are upper-cased server-side");
-        list[0].BpqPort.Should().Be(1);
+        list[0].BearerPort.Should().Be(1);
         list[0].UdpEndpoint.Should().Be("10.0.0.1:1880");
 
         var del = await ctrl.Remove("G7XYZ-9");
@@ -101,7 +101,7 @@ public sealed class RemainingControllersTests : IAsyncLifetime
     public async Task NeighboursController_PostBlankUdpEndpoint_TreatedAsNull()
     {
         var ctrl = new NeighboursController(database);
-        await ctrl.Upsert(new NeighbourModel("g7xyz-9", BpqPort: 1, UdpEndpoint: "   "));
+        await ctrl.Upsert(new NeighbourModel("g7xyz-9", BearerPort: 1, UdpEndpoint: "   "));
 
         var list = (await ctrl.List()).ToList();
         list.Single().UdpEndpoint.Should().BeNull(
@@ -119,7 +119,7 @@ public sealed class RemainingControllersTests : IAsyncLifetime
             c.Insert(new DbSystemOption { Option = "Callsign", Value = "M0LTE-9" });
             c.Insert(new DbSystemOption { Option = "NodeHost", Value = "bpq.local" });
             c.Insert(new DbSystemOption { Option = "AgwPort", Value = "8001" });
-            c.Insert(new DbSystemOption { Option = "DefaultBpqPort", Value = "2" });
+            c.Insert(new DbSystemOption { Option = "DefaultBearerPort", Value = "2" });
             c.Insert(new DbSystemOption { Option = "MqttPort", Value = "1884" });
         }
         var ctrl = new ConfigController(database, new AdminPasswordStore(NullLogger<AdminPasswordStore>.Instance));
@@ -129,7 +129,7 @@ public sealed class RemainingControllersTests : IAsyncLifetime
         got.Callsign.Should().Be("M0LTE-9");
         got.NodeHost.Should().Be("bpq.local");
         got.AgwPort.Should().Be(8001);
-        got.DefaultBpqPort.Should().Be(2);
+        got.DefaultBearerPort.Should().Be(2);
         got.MqttPort.Should().Be(1884);
     }
 
@@ -143,7 +143,7 @@ public sealed class RemainingControllersTests : IAsyncLifetime
             Callsign = "M0LTE-2",
             NodeHost = "127.0.0.1",
             AgwPort = 8000,
-            DefaultBpqPort = 0,
+            DefaultBearerPort = 0,
             MqttPort = 1883,
         });
         post.Should().BeOfType<OkResult>();

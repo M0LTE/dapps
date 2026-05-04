@@ -61,7 +61,7 @@ A remote node can `c <your-callsign>` and lands at the BPQ node prompt, but not 
 A fresh DAPPS install has **no discovery channels configured by default** - discovery is opt-in. Without a channel and an enabled beacon, you don't hear other nodes and they don't hear you. Two ways forward:
 
 - **Manual neighbour**: dashboard → Neighbours → add a row for the peer you want to talk to. This is the fastest path to "first message" - no discovery needed.
-- **Discovery channel**: dashboard → Discovery channels → add a channel for the BPQ port DAPPS should beacon on. Set a sensible cadence (10 minutes for VHF FM is a reasonable starting point) and a per-channel airtime budget if you're on a shared band.
+- **Discovery channel**: dashboard → Discovery channels → add a channel for the bearer port DAPPS should beacon on. Set a sensible cadence (10 minutes for VHF FM is a reasonable starting point) and a per-channel airtime budget if you're on a shared band.
 
 ### "I added a discovery channel but I'm not hearing anyone"
 
@@ -69,7 +69,7 @@ Check, in order:
 
 - Channel is **enabled** (the row's enabled flag).
 - Beacon cadence isn't unreasonably long (one beacon per hour means you hear nothing for an hour after start).
-- Other DAPPS nodes are actually transmitting on the same channel-key (same BPQ port byte). A node beaconing on port 1 won't be heard by a node listening on port 0.
+- Other DAPPS nodes are actually transmitting on the same channel-key (same bearer port). A node beaconing on port 1 won't be heard by a node listening on port 0.
 - Airtime budget isn't exhausted. Dashboard → Discovery channels heading shows trailing-hour consumption; if it's ≥ 100 % of the global cap, beacons will defer. Either raise the cap or wait.
 
 ### "Probes failing"

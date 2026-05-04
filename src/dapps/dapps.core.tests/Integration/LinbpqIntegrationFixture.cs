@@ -35,9 +35,9 @@ public sealed class LinbpqIntegrationFixture : IAsyncLifetime
     public string LocalCallsign => "N0CALL";
     public string UnreachableCallsign => "Q0XYZ";
 
-    /// <summary>BPQ port byte (0-indexed) corresponding to BPQ port 1, the
+    /// <summary>bearer port (0-indexed) corresponding to BPQ port 1, the
     /// only routable port in the single-instance config.</summary>
-    public int BpqPortIndex => 0;
+    public int BearerPortIndex => 0;
 
     private IContainer? _container;
 

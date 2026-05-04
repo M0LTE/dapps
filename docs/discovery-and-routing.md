@@ -17,7 +17,7 @@ Plus two derived stores:
 
 ## Discovery channels
 
-A discovery channel is the tuple `(bearer, channel-key)`. For AGW, the channel key is the BPQ port byte. For UDP datagram, it's the multicast endpoint. Each channel carries:
+A discovery channel is the tuple `(bearer, channel-key)`. For AGW, the channel key is the bearer port. For UDP datagram, it's the multicast endpoint. Each channel carries:
 
 - **Beacon cadence** - how often we transmit our own beacon on this channel.
 - **Advertised TTL** - how long peers should consider our beacon valid.
@@ -26,7 +26,7 @@ A discovery channel is the tuple `(bearer, channel-key)`. For AGW, the channel k
 - **Optional scheduled-solicit interval** - for HF NVIS where push-only beaconing is too expensive.
 - **Enabled flag** + free-form notes.
 
-There is **no default channel**. Operators add channels via the dashboard's **Discovery channels** section once they've thought about which BPQ port DAPPS should beacon on. Defaulting to "beacon on port 0" would silently put DAPPS chatter on whatever band that port happens to be - possibly a band the operator's licence class doesn't permit at the relevant power level. Explicit add is the right contract.
+There is **no default channel**. Operators add channels via the dashboard's **Discovery channels** section once they've thought about which bearer port DAPPS should beacon on. Defaulting to "beacon on port 0" would silently put DAPPS chatter on whatever band that port happens to be - possibly a band the operator's licence class doesn't permit at the relevant power level. Explicit add is the right contract.
 
 ## Beacons
 
@@ -61,7 +61,7 @@ The actual forwarding partners. Two ways a row lands here:
 - **Operator-added** via the dashboard's Neighbours panel or the `/Neighbours` REST endpoint.
 - **Auto-promoted** from a successful probe (when configured).
 
-Each neighbour row carries: callsign, BPQ port (for AGW), UDP endpoint (for the datagram bearer), and an optional cost override.
+Each neighbour row carries: callsign, bearer port (for AGW), UDP endpoint (for the datagram bearer), and an optional cost override.
 
 ## The two routing algorithms
 
@@ -88,7 +88,7 @@ A manual override. The `/RouteHints` endpoint (and dashboard panel) let you say 
 For most operators, the simplest workable setup is:
 
 1. Add **one or two manual neighbours** for the peers you actually want to talk to. This works without any discovery system at all.
-2. **Add a discovery channel** for the BPQ port your DAPPS beacon should go on, with a sensible cadence (e.g. every 10 minutes for VHF FM, longer for HF). Set a per-channel airtime budget.
+2. **Add a discovery channel** for the bearer port your DAPPS beacon should go on, with a sensible cadence (e.g. every 10 minutes for VHF FM, longer for HF). Set a per-channel airtime budget.
 3. Once you've heard from a few peers via beacons and have an idea of the on-air ecosystem, **enable probing** with the `Overnight` strategy so the connectivity matrix is verified during quiet hours.
 4. Decide whether you want **scheduled polling** on (you probably don't if your peers are well-behaved; opportunistic polling already covers the common case).
 

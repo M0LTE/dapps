@@ -8,7 +8,7 @@ namespace dapps.client.Discovery;
 
 /// <summary>
 /// Discovery over AGW UI (unconnected) frames. One AGW TCP socket
-/// monitors all configured AGW channels (one per BPQ port byte),
+/// monitors all configured AGW channels (one per bearer port),
 /// emits an `M` frame on whichever port the channel names, and
 /// yields parsed `U` frames stamped with the matching channel key.
 ///
@@ -18,7 +18,7 @@ namespace dapps.client.Discovery;
 ///   `M` - emit a UI frame on a port
 ///   `U` - inbound monitored UI frame (BPQ → us)
 ///
-/// Channels for this bearer have <c>ChannelKey</c> = the BPQ port
+/// Channels for this bearer have <c>ChannelKey</c> = the bearer port
 /// byte stringified ("0", "1", …). The bearer rejects any other key
 /// shape on start.
 /// </summary>
@@ -68,7 +68,7 @@ public sealed class AgwUiDiscoveryBearer : IDiscoveryBearer
             throw new ArgumentException("AgwUiDiscoveryBearer requires at least one channel", nameof(channels));
         }
 
-        // Channel-key parsing: all keys must be valid BPQ port bytes.
+        // Channel-key parsing: all keys must be valid bearer ports.
         _portToChannelKey.Clear();
         foreach (var ch in channels)
         {
@@ -215,7 +215,7 @@ public sealed class AgwUiDiscoveryBearer : IDiscoveryBearer
         if (!byte.TryParse(channelKey, NumberStyles.None, CultureInfo.InvariantCulture, out var b))
         {
             throw new FormatException(
-                $"AGW discovery channel-key must be a BPQ port byte (e.g. '0', '1'); got '{channelKey}'");
+                $"AGW discovery channel-key must be a bearer port (e.g. '0', '1'); got '{channelKey}'");
         }
         return b;
     }

@@ -36,7 +36,7 @@ public sealed class ProbeSchedulerServiceTests : IAsyncLifetime
         }
 
         database = new Database(NullLogger<Database>.Instance,
-            MakeOptions(new SystemOptions { Callsign = "N0US", DefaultBpqPort = 7 }));
+            MakeOptions(new SystemOptions { Callsign = "N0US", DefaultBearerPort = 7 }));
 
         return ValueTask.CompletedTask;
     }
@@ -53,18 +53,18 @@ public sealed class ProbeSchedulerServiceTests : IAsyncLifetime
     {
         var sched = MakeScheduler(new RecordingTransport());
 
-        var targets = await sched.EnumerateTargets(new SystemOptions { Callsign = "N0US", DefaultBpqPort = 7 });
+        var targets = await sched.EnumerateTargets(new SystemOptions { Callsign = "N0US", DefaultBearerPort = 7 });
 
         targets.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task EnumerateTargets_NeighbourWithBpqPort_UsesNeighbourPort()
+    public async Task EnumerateTargets_NeighbourWithBearerPort_UsesNeighbourPort()
     {
-        await database.UpsertNeighbour("N0THEM-9", bpqPort: 3);
+        await database.UpsertNeighbour("N0THEM-9", bearerPort: 3);
 
         var sched = MakeScheduler(new RecordingTransport());
-        var targets = await sched.EnumerateTargets(new SystemOptions { Callsign = "N0US", DefaultBpqPort = 7 });
+        var targets = await sched.EnumerateTargets(new SystemOptions { Callsign = "N0US", DefaultBearerPort = 7 });
 
         targets.Should().ContainSingle().Which.Should().BeEquivalentTo(
             new ProbeSchedulerService.ProbeTarget("N0THEM-9", 3));
@@ -76,23 +76,23 @@ public sealed class ProbeSchedulerServiceTests : IAsyncLifetime
         // UDP-routed neighbours can't be probed via AGW. Skipping them
         // here is the only signal the prober has - there's no AGW
         // alternative path to fall back to for a UDP-only neighbour.
-        await database.UpsertNeighbour("N0UDP-9", bpqPort: null, udpEndpoint: "127.0.0.1:1880");
+        await database.UpsertNeighbour("N0UDP-9", bearerPort: null, udpEndpoint: "127.0.0.1:1880");
 
         var sched = MakeScheduler(new RecordingTransport());
-        var targets = await sched.EnumerateTargets(new SystemOptions { Callsign = "N0US", DefaultBpqPort = 7 });
+        var targets = await sched.EnumerateTargets(new SystemOptions { Callsign = "N0US", DefaultBearerPort = 7 });
 
         targets.Should().BeEmpty();
     }
 
     [Fact]
-    public async Task EnumerateTargets_NeighbourWithoutBpqPort_FallsBackToDefault()
+    public async Task EnumerateTargets_NeighbourWithoutBearerPort_FallsBackToDefault()
     {
-        await database.UpsertNeighbour("N0NULL-9", bpqPort: null);
+        await database.UpsertNeighbour("N0NULL-9", bearerPort: null);
 
         var sched = MakeScheduler(new RecordingTransport());
-        var targets = await sched.EnumerateTargets(new SystemOptions { Callsign = "N0US", DefaultBpqPort = 7 });
+        var targets = await sched.EnumerateTargets(new SystemOptions { Callsign = "N0US", DefaultBearerPort = 7 });
 
-        targets.Should().ContainSingle().Which.BpqPort.Should().Be(7);
+        targets.Should().ContainSingle().Which.BearerPort.Should().Be(7);
     }
 
     [Fact]
@@ -103,7 +103,7 @@ public sealed class ProbeSchedulerServiceTests : IAsyncLifetime
             Callsign = "N0BCN-9",
             Bearer = "agw",
             ChannelKey = "1",
-            BpqPort = 1,
+            BearerPort = 1,
             LinkClass = LinkClass.VhfUhfFm,
             CostHint = 1,
             TtlSeconds = 600,
@@ -111,7 +111,7 @@ public sealed class ProbeSchedulerServiceTests : IAsyncLifetime
         });
 
         var sched = MakeScheduler(new RecordingTransport());
-        var targets = await sched.EnumerateTargets(new SystemOptions { Callsign = "N0US", DefaultBpqPort = 7 });
+        var targets = await sched.EnumerateTargets(new SystemOptions { Callsign = "N0US", DefaultBearerPort = 7 });
 
         targets.Should().ContainSingle().Which.Should().BeEquivalentTo(
             new ProbeSchedulerService.ProbeTarget("N0BCN-9", 1));
@@ -135,7 +135,7 @@ public sealed class ProbeSchedulerServiceTests : IAsyncLifetime
         });
 
         var sched = MakeScheduler(new RecordingTransport());
-        var targets = await sched.EnumerateTargets(new SystemOptions { Callsign = "N0US", DefaultBpqPort = 7 });
+        var targets = await sched.EnumerateTargets(new SystemOptions { Callsign = "N0US", DefaultBearerPort = 7 });
 
         targets.Should().BeEmpty();
     }
@@ -146,13 +146,13 @@ public sealed class ProbeSchedulerServiceTests : IAsyncLifetime
         // A manual /Neighbours add represents the operator's explicit
         // route; if a passing beacon also names that callsign on a
         // different port, we trust the operator.
-        await database.UpsertNeighbour("N0BOTH-9", bpqPort: 5);
+        await database.UpsertNeighbour("N0BOTH-9", bearerPort: 5);
         await database.UpsertDiscoveredPeer(new DbDiscoveredPeer
         {
             Callsign = "N0BOTH-9",
             Bearer = "agw",
             ChannelKey = "0",
-            BpqPort = 0,
+            BearerPort = 0,
             LinkClass = LinkClass.VhfUhfFm,
             CostHint = 1,
             TtlSeconds = 600,
@@ -160,19 +160,19 @@ public sealed class ProbeSchedulerServiceTests : IAsyncLifetime
         });
 
         var sched = MakeScheduler(new RecordingTransport());
-        var targets = await sched.EnumerateTargets(new SystemOptions { Callsign = "N0US", DefaultBpqPort = 7 });
+        var targets = await sched.EnumerateTargets(new SystemOptions { Callsign = "N0US", DefaultBearerPort = 7 });
 
-        targets.Should().ContainSingle().Which.BpqPort.Should().Be(5);
+        targets.Should().ContainSingle().Which.BearerPort.Should().Be(5);
     }
 
     [Fact]
     public async Task EnumerateTargets_OptOutRow_Excluded()
     {
-        await database.UpsertNeighbour("N0OUT-9", bpqPort: 1);
+        await database.UpsertNeighbour("N0OUT-9", bearerPort: 1);
         await database.UpsertProbedNode(new DbProbedNode { Callsign = "N0OUT-9", OptOut = true });
 
         var sched = MakeScheduler(new RecordingTransport());
-        var targets = await sched.EnumerateTargets(new SystemOptions { Callsign = "N0US", DefaultBpqPort = 7 });
+        var targets = await sched.EnumerateTargets(new SystemOptions { Callsign = "N0US", DefaultBearerPort = 7 });
 
         targets.Should().BeEmpty();
     }
@@ -180,9 +180,9 @@ public sealed class ProbeSchedulerServiceTests : IAsyncLifetime
     [Fact]
     public async Task SweepAsync_ProbesEveryTarget_RecordsResultPerCallsign()
     {
-        await database.UpsertNeighbour("N0AAA-9", bpqPort: 1);
-        await database.UpsertNeighbour("N0BBB-9", bpqPort: 2);
-        await database.UpsertNeighbour("N0CCC-9", bpqPort: 3);
+        await database.UpsertNeighbour("N0AAA-9", bearerPort: 1);
+        await database.UpsertNeighbour("N0BBB-9", bearerPort: 2);
+        await database.UpsertNeighbour("N0CCC-9", bearerPort: 3);
 
         var transport = new RecordingTransport(
             ("N0AAA-9", "DAPPSv1>\n"),
@@ -194,7 +194,7 @@ public sealed class ProbeSchedulerServiceTests : IAsyncLifetime
             maxInterProbeDelay: TimeSpan.FromMilliseconds(1));
 
         await sched.SweepAsync(
-            new SystemOptions { Callsign = "N0US", DefaultBpqPort = 7 },
+            new SystemOptions { Callsign = "N0US", DefaultBearerPort = 7 },
             CancellationToken.None);
 
         var rows = (await database.GetProbedNodes()).ToDictionary(r => r.Callsign);
@@ -202,7 +202,7 @@ public sealed class ProbeSchedulerServiceTests : IAsyncLifetime
         rows["N0AAA-9"].LastSuccessAt.Should().NotBeNull();
         rows["N0AAA-9"].SuccessCount.Should().Be(1);
         rows["N0AAA-9"].ConsecutiveFailures.Should().Be(0);
-        rows["N0AAA-9"].LastBpqPort.Should().Be(1);
+        rows["N0AAA-9"].LastBearerPort.Should().Be(1);
         rows["N0BBB-9"].LastSuccessAt.Should().BeNull();
         rows["N0BBB-9"].ConsecutiveFailures.Should().Be(1);
         rows["N0BBB-9"].LastError.Should().Contain("DAPPSv1>");
@@ -221,7 +221,7 @@ public sealed class ProbeSchedulerServiceTests : IAsyncLifetime
         // wipe OptOut when applying a result. (Belt-and-braces: the
         // sweep filter excludes OptOut rows up front, so this only
         // matters for an explicit on-demand run.)
-        await database.UpsertNeighbour("N0OUT-9", bpqPort: 1);
+        await database.UpsertNeighbour("N0OUT-9", bearerPort: 1);
         await database.UpsertProbedNode(new DbProbedNode { Callsign = "N0OUT-9", OptOut = true });
 
         var sched = MakeScheduler(new RecordingTransport(("N0OUT-9", "DAPPSv1>\n")),
@@ -238,15 +238,15 @@ public sealed class ProbeSchedulerServiceTests : IAsyncLifetime
     [Fact]
     public async Task SweepAsync_RepeatedFailures_BumpConsecutiveFailures()
     {
-        await database.UpsertNeighbour("N0DEAD-9", bpqPort: 1);
+        await database.UpsertNeighbour("N0DEAD-9", bearerPort: 1);
         var transport = new RecordingTransport(
             ("N0DEAD-9", "no prompt"),
             ("N0DEAD-9", "no prompt"));
         var sched = MakeScheduler(transport,
             minInterProbeDelay: TimeSpan.Zero, maxInterProbeDelay: TimeSpan.FromMilliseconds(1));
 
-        await sched.SweepAsync(new SystemOptions { Callsign = "N0US", DefaultBpqPort = 7 }, CancellationToken.None);
-        await sched.SweepAsync(new SystemOptions { Callsign = "N0US", DefaultBpqPort = 7 }, CancellationToken.None);
+        await sched.SweepAsync(new SystemOptions { Callsign = "N0US", DefaultBearerPort = 7 }, CancellationToken.None);
+        await sched.SweepAsync(new SystemOptions { Callsign = "N0US", DefaultBearerPort = 7 }, CancellationToken.None);
 
         var row = await database.GetProbedNode("N0DEAD-9");
         row.Should().NotBeNull();
@@ -264,12 +264,12 @@ public sealed class ProbeSchedulerServiceTests : IAsyncLifetime
         await database.UpsertProbedNode(new DbProbedNode
         {
             Callsign = "N0VIA-9",
-            LastBpqPort = 3,
+            LastBearerPort = 3,
             Source = "via:N0SRC-9",
         });
 
         var sched = MakeScheduler(new RecordingTransport());
-        var targets = await sched.EnumerateTargets(new SystemOptions { Callsign = "N0US", DefaultBpqPort = 7 });
+        var targets = await sched.EnumerateTargets(new SystemOptions { Callsign = "N0US", DefaultBearerPort = 7 });
 
         targets.Should().ContainSingle().Which.Should().BeEquivalentTo(
             new ProbeSchedulerService.ProbeTarget("N0VIA-9", 3));
@@ -281,20 +281,20 @@ public sealed class ProbeSchedulerServiceTests : IAsyncLifetime
         await database.UpsertProbedNode(new DbProbedNode
         {
             Callsign = "N0VIA-9",
-            LastBpqPort = null,
+            LastBearerPort = null,
             Source = "via:N0SRC-9",
         });
 
         var sched = MakeScheduler(new RecordingTransport());
-        var targets = await sched.EnumerateTargets(new SystemOptions { Callsign = "N0US", DefaultBpqPort = 7 });
+        var targets = await sched.EnumerateTargets(new SystemOptions { Callsign = "N0US", DefaultBearerPort = 7 });
 
-        targets.Should().ContainSingle().Which.BpqPort.Should().Be(7);
+        targets.Should().ContainSingle().Which.BearerPort.Should().Be(7);
     }
 
     [Fact]
     public async Task ProbeAndRecord_FetchPeersTrue_RecordsTransitiveCandidatesWithSource()
     {
-        await database.UpsertNeighbour("N0SRC-9", bpqPort: 1);
+        await database.UpsertNeighbour("N0SRC-9", bearerPort: 1);
         // The fake transport hands back a DAPPSv1> + a peers response
         // listing two callsigns; ProbeAndRecordAsync should both record
         // the probe success and persist the two peers as candidates.
@@ -313,12 +313,12 @@ public sealed class ProbeSchedulerServiceTests : IAsyncLifetime
 
         rows.Should().ContainKey("N0AAA-9");
         rows["N0AAA-9"].Source.Should().Be("via:N0SRC-9");
-        rows["N0AAA-9"].LastBpqPort.Should().Be(2);     // server-supplied port preferred
+        rows["N0AAA-9"].LastBearerPort.Should().Be(2);     // server-supplied port preferred
         rows["N0AAA-9"].LastProbedAt.Should().BeNull(); // candidate, not probed yet
 
         rows.Should().ContainKey("N0BBB-9");
         rows["N0BBB-9"].Source.Should().Be("via:N0SRC-9");
-        rows["N0BBB-9"].LastBpqPort.Should().Be(1);     // fell back to source's port
+        rows["N0BBB-9"].LastBearerPort.Should().Be(1);     // fell back to source's port
     }
 
     [Fact]
@@ -327,7 +327,7 @@ public sealed class ProbeSchedulerServiceTests : IAsyncLifetime
         // The remote will list us in its peers (we just sent traffic to
         // them). Recording ourselves as a probe target is meaningless
         // and would generate a self-probe - explicitly filtered.
-        await database.UpsertNeighbour("N0SRC-9", bpqPort: 1);
+        await database.UpsertNeighbour("N0SRC-9", bearerPort: 1);
         var sched = MakeScheduler(new RecordingTransport(("N0SRC-9",
             "DAPPSv1>\n" +
             "peer N0US source=n\n" +
@@ -348,8 +348,8 @@ public sealed class ProbeSchedulerServiceTests : IAsyncLifetime
         // If a remote tells us about a callsign we already track as a
         // direct neighbour, the existing row's Source must not get
         // rewritten as "via:...". We trust direct evidence over hearsay.
-        await database.UpsertNeighbour("N0SRC-9", bpqPort: 1);
-        await database.UpsertNeighbour("N0EXIST-9", bpqPort: 2);
+        await database.UpsertNeighbour("N0SRC-9", bearerPort: 1);
+        await database.UpsertNeighbour("N0EXIST-9", bearerPort: 2);
         // Run a probe of N0EXIST-9 first to establish a "neighbour" Source.
         var sched = MakeScheduler(new RecordingTransport(
             ("N0EXIST-9", "DAPPSv1>\nend\n"),     // probe of N0EXIST -- empty peers
@@ -373,7 +373,7 @@ public sealed class ProbeSchedulerServiceTests : IAsyncLifetime
         // response. Verifies that suppressing fetchPeers really avoids
         // the second exchange - otherwise the prober would hang on a
         // missing "end" line in the canned bytes.
-        await database.UpsertNeighbour("N0SRC-9", bpqPort: 1);
+        await database.UpsertNeighbour("N0SRC-9", bearerPort: 1);
         var transport = new RecordingTransport(("N0SRC-9", "DAPPSv1>\n"));
         var sched = MakeScheduler(transport);
 
@@ -390,15 +390,15 @@ public sealed class ProbeSchedulerServiceTests : IAsyncLifetime
     [Fact]
     public async Task SweepAsync_SuccessAfterFailure_ResetsCounter()
     {
-        await database.UpsertNeighbour("N0FLAP-9", bpqPort: 1);
+        await database.UpsertNeighbour("N0FLAP-9", bearerPort: 1);
         var transport = new RecordingTransport(
             ("N0FLAP-9", "no prompt"),
             ("N0FLAP-9", "DAPPSv1>\n"));
         var sched = MakeScheduler(transport,
             minInterProbeDelay: TimeSpan.Zero, maxInterProbeDelay: TimeSpan.FromMilliseconds(1));
 
-        await sched.SweepAsync(new SystemOptions { Callsign = "N0US", DefaultBpqPort = 7 }, CancellationToken.None);
-        await sched.SweepAsync(new SystemOptions { Callsign = "N0US", DefaultBpqPort = 7 }, CancellationToken.None);
+        await sched.SweepAsync(new SystemOptions { Callsign = "N0US", DefaultBearerPort = 7 }, CancellationToken.None);
+        await sched.SweepAsync(new SystemOptions { Callsign = "N0US", DefaultBearerPort = 7 }, CancellationToken.None);
 
         var row = await database.GetProbedNode("N0FLAP-9");
         row.Should().NotBeNull();
@@ -413,7 +413,7 @@ public sealed class ProbeSchedulerServiceTests : IAsyncLifetime
         TimeSpan? maxInterProbeDelay = null)
     {
         var prober = new NodeProber(transport, TimeProvider.System, NullLoggerFactory.Instance, NullLogger<NodeProber>.Instance);
-        var opts = MakeOptions(new SystemOptions { Callsign = "N0US", DefaultBpqPort = 7, ProbingEnabled = true });
+        var opts = MakeOptions(new SystemOptions { Callsign = "N0US", DefaultBearerPort = 7, ProbingEnabled = true });
         return new ProbeSchedulerService(prober, database, opts, TimeProvider.System, NullLogger<ProbeSchedulerService>.Instance)
         {
             // Tests skip the 15-minute startup grace; ExecuteAsync isn't
@@ -445,9 +445,9 @@ public sealed class ProbeSchedulerServiceTests : IAsyncLifetime
         private readonly Queue<(string Remote, string Reply)> _queue = new(cannedByCallsign);
         public List<(string Remote, int Port)> Connects { get; } = new();
 
-        public Task<IDappsConnection> ConnectAsync(string localCallsign, string remoteCallsign, int bpqPortNumber, CancellationToken stoppingToken)
+        public Task<IDappsConnection> ConnectAsync(string localCallsign, string remoteCallsign, int bearerPort, CancellationToken stoppingToken)
         {
-            Connects.Add((remoteCallsign, bpqPortNumber));
+            Connects.Add((remoteCallsign, bearerPort));
             // Best-effort: prefer the next-in-queue entry that matches
             // the requested remote, falling back to "no prompt" so the
             // prober reports failure rather than wedging on EOF.

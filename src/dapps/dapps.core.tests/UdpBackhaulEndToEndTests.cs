@@ -104,7 +104,7 @@ public sealed class UdpBackhaulEndToEndTests
 
         sender.CanHandle(new BackhaulRoute("N0DEST", UdpEndpoint: "127.0.0.1:1880"))
             .Should().BeTrue();
-        sender.CanHandle(new BackhaulRoute("N0DEST", BpqPort: 0))
+        sender.CanHandle(new BackhaulRoute("N0DEST", BearerPort: 0))
             .Should().BeFalse();
         await Task.CompletedTask;
     }

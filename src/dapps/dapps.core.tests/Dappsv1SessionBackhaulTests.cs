@@ -21,7 +21,7 @@ public sealed class Dappsv1SessionBackhaulTests
     public async Task CanHandle_NoUdpEndpoint_True()
     {
         var sb = MakeBackhaul([]);
-        sb.CanHandle(new BackhaulRoute("N0DEST", BpqPort: 0)).Should().BeTrue();
+        sb.CanHandle(new BackhaulRoute("N0DEST", BearerPort: 0)).Should().BeTrue();
     }
 
     [Fact]
@@ -30,7 +30,7 @@ public sealed class Dappsv1SessionBackhaulTests
         var sb = MakeBackhaul([]);
         // AGW must yield to UDP when both bearer hints are set so the
         // multi-backhaul dispatcher in OutboundMessageManager picks UDP.
-        sb.CanHandle(new BackhaulRoute("N0DEST", BpqPort: 0, UdpEndpoint: "127.0.0.1:1880"))
+        sb.CanHandle(new BackhaulRoute("N0DEST", BearerPort: 0, UdpEndpoint: "127.0.0.1:1880"))
             .Should().BeFalse();
         await Task.CompletedTask;
     }
@@ -44,7 +44,7 @@ public sealed class Dappsv1SessionBackhaulTests
 
         var result = await sb.SendAsync(
             new BackhaulMessage("mid0001", "app@N0DEST", Salt: 1L, Ttl: 60, Payload: "hi"u8.ToArray()),
-            new BackhaulRoute("N0DEST", BpqPort: 1),
+            new BackhaulRoute("N0DEST", BearerPort: 1),
             "N0SRC",
             CancellationToken.None);
 
@@ -132,7 +132,7 @@ public sealed class Dappsv1SessionBackhaulTests
 
         private CapturingStream? _stream;
 
-        public Task<IDappsConnection> ConnectAsync(string localCallsign, string remoteCallsign, int bpqPortNumber, CancellationToken stoppingToken)
+        public Task<IDappsConnection> ConnectAsync(string localCallsign, string remoteCallsign, int bearerPort, CancellationToken stoppingToken)
         {
             _stream = new CapturingStream(cannedReceiverBytes);
             return Task.FromResult<IDappsConnection>(new FakeConnection(_stream));
@@ -181,7 +181,7 @@ public sealed class Dappsv1SessionBackhaulTests
 
     private sealed class ThrowingTransport(Exception toThrow) : IDappsOutboundTransport
     {
-        public Task<IDappsConnection> ConnectAsync(string localCallsign, string remoteCallsign, int bpqPortNumber, CancellationToken stoppingToken)
+        public Task<IDappsConnection> ConnectAsync(string localCallsign, string remoteCallsign, int bearerPort, CancellationToken stoppingToken)
             => Task.FromException<IDappsConnection>(toThrow);
     }
 }

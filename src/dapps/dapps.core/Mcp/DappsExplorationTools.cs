@@ -46,13 +46,13 @@ public sealed class DappsExplorationTools(
             throw new InvalidOperationException(
                 $"{normalized} is not a configured neighbour. Add a /Neighbours row first.");
         }
-        if (neighbourRow.UdpEndpoint is not null && neighbourRow.BpqPort is null)
+        if (neighbourRow.UdpEndpoint is not null && neighbourRow.BearerPort is null)
         {
             throw new InvalidOperationException(
                 $"{normalized} has only a UDP endpoint - the peers exchange is AGW-session only.");
         }
 
-        var port = neighbourRow.BpqPort ?? options.CurrentValue.DefaultBpqPort;
+        var port = neighbourRow.BearerPort ?? options.CurrentValue.DefaultBearerPort;
         var (_, result) = await probeScheduler.ProbeAndRecordVerboseAsync(
             options.CurrentValue.Callsign, normalized, port, ct, fetchPeers: true,
             reason: "operator-triggered explore_via_neighbour (MCP)");
@@ -72,7 +72,7 @@ public sealed class DappsExplorationTools(
         var annotated = result.DiscoveredPeers
             .Select(p => new AnnotatedPeer(
                 Callsign: p.Callsign,
-                BpqPort: p.BpqPort,
+                BearerPort: p.BearerPort,
                 Status: IsKnown(p.Callsign) ? "known" : "new"))
             .ToList();
 
@@ -86,7 +86,7 @@ public sealed class DappsExplorationTools(
             Neighbour: normalized,
             ProbeSuccess: result.Success,
             ProbeError: result.Error,
-            BpqPort: port,
+            BearerPort: port,
             Peers: annotated,
             NewPeerCount: newCount,
             Summary: summary);
@@ -218,7 +218,7 @@ public sealed class DappsExplorationTools(
 
 public sealed record AnnotatedPeer(
     string Callsign,
-    int? BpqPort,
+    int? BearerPort,
     [property: Description("'known' if this node already tracks the callsign as a neighbour, discovered peer, or probed node; 'new' otherwise.")]
     string Status);
 
@@ -226,7 +226,7 @@ public sealed record NeighbourExploration(
     string Neighbour,
     bool ProbeSuccess,
     string ProbeError,
-    int BpqPort,
+    int BearerPort,
     IReadOnlyList<AnnotatedPeer> Peers,
     int NewPeerCount,
     string Summary);

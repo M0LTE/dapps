@@ -39,13 +39,13 @@ public sealed class DappsProtocolClientPeersTests
         var p = result.Single();
         p.Callsign.Should().Be("N0THEM-9");
         p.Source.Should().Be("n");
-        p.BpqPort.Should().Be(1);
+        p.BearerPort.Should().Be(1);
     }
 
     [Fact]
     public async Task RequestPeers_PeerWithoutPort_PortIsNull()
     {
-        // Discovered-via-beacon peers don't always know their BPQ port
+        // Discovered-via-beacon peers don't always know their bearer port
         // (UDP-bearer rows omit it entirely). Server may send "peer
         // CALL source=d" with no port=; client must tolerate the
         // absence rather than rejecting the line.
@@ -57,7 +57,7 @@ public sealed class DappsProtocolClientPeersTests
         result.Should().ContainSingle();
         result.Single().Callsign.Should().Be("N0BCN-7");
         result.Single().Source.Should().Be("d");
-        result.Single().BpqPort.Should().BeNull();
+        result.Single().BearerPort.Should().BeNull();
     }
 
     [Fact]
@@ -110,7 +110,7 @@ public sealed class DappsProtocolClientPeersTests
     [Fact]
     public async Task RequestPeers_PortValueOutOfRange_IgnoredForSafety()
     {
-        // BPQ port byte is one octet; reject anything outside 0..255.
+        // bearer port is one octet; reject anything outside 0..255.
         // Don't let a misbehaving server poison our probe scheduler with
         // negative or oversized port hints.
         var stream = new FakeDuplexStream("peer N0BAD-9 source=n port=999\nend\n"u8.ToArray());
@@ -120,6 +120,6 @@ public sealed class DappsProtocolClientPeersTests
 
         result.Should().ContainSingle();
         result.Single().Callsign.Should().Be("N0BAD-9");
-        result.Single().BpqPort.Should().BeNull();
+        result.Single().BearerPort.Should().BeNull();
     }
 }

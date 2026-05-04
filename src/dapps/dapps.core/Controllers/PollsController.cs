@@ -68,7 +68,7 @@ public class PollsController(
         return removed ? NoContent() : NotFound();
     }
 
-    /// <summary>Resolve the BPQ port byte for an on-demand poll. Only
+    /// <summary>Resolve the bearer port for an on-demand poll. Only
     /// considers manual neighbours (UDP-only excluded - F3 is AGW-only
     /// by design).</summary>
     private async Task<(int Port, bool HasRoute)> ResolvePort(string callsign)
@@ -76,9 +76,9 @@ public class PollsController(
         var neighbour = await database.GetNeighbour(callsign);
         if (neighbour is not null && neighbour.UdpEndpoint is null)
         {
-            return (neighbour.BpqPort ?? options.CurrentValue.DefaultBpqPort, true);
+            return (neighbour.BearerPort ?? options.CurrentValue.DefaultBearerPort, true);
         }
-        return (options.CurrentValue.DefaultBpqPort, false);
+        return (options.CurrentValue.DefaultBearerPort, false);
     }
 
     private static PolledNodeModel ToModel(DbPolledNode r) => new(

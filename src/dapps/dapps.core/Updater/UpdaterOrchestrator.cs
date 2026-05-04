@@ -24,8 +24,8 @@ public sealed class UpdaterOrchestrator
 {
     public TimeSpan HealthWindow { get; init; } = TimeSpan.FromSeconds(60);
     public TimeSpan HealthPollInterval { get; init; } = TimeSpan.FromSeconds(2);
-    /// <summary>BPQ release-asset RID. Defaults to the current OS/arch
-    /// pair the build system stamps; tests override.</summary>
+    /// <summary>Release-asset RID for picking the right binary. Defaults to
+    /// the current OS/arch pair the build system stamps; tests override.</summary>
     public string Rid { get; init; } = ResolveDefaultRid();
     public string ServiceName { get; init; } = "dapps.service";
 

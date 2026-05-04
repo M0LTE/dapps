@@ -27,9 +27,9 @@ public sealed class DappsActionTools(
     [McpServerTool(Name = "run_probe")]
     [Description(
         "Probe a single callsign now (B6.1). Bypasses the normal cadence + airtime budget - operator-triggered " +
-        "actions are explicit human decisions. The probe is over AGW; the BPQ port is resolved in this " +
-        "precedence order: (1) the configured neighbour's BpqPort, (2) the AGW-bearer discovered peer's " +
-        "observed port, (3) SystemOptions.DefaultBpqPort. Returns an error if the callsign is unknown on " +
+        "actions are explicit human decisions. The probe is over AGW; the bearer port is resolved in this " +
+        "precedence order: (1) the configured neighbour's BearerPort, (2) the AGW-bearer discovered peer's " +
+        "observed port, (3) SystemOptions.DefaultBearerPort. Returns an error if the callsign is unknown on " +
         "every surface - add a /Neighbours row first, or wait for a beacon.")]
     public async Task<DbProbedNode> RunProbeAsync(
         [Description("Target DAPPS callsign, case-insensitive (e.g. 'M0LTE-9').")] string callsign,
@@ -64,7 +64,7 @@ public sealed class DappsActionTools(
     [McpServerTool(Name = "run_poll")]
     [Description(
         "Poll a single callsign now (F3b - the rev-poll path that drains a peer's queued mail for us). " +
-        "AGW-only by design; UDP peers can't be polled. Looks up the peer's BPQ port the same way as " +
+        "AGW-only by design; UDP peers can't be polled. Looks up the peer's bearer port the same way as " +
         "run_probe. Mostly useful when an operator suspects a peer has mail queued for us that hasn't been " +
         "drained by F3a opportunistic poll-on-push.")]
     public async Task<DbPolledNode> RunPollAsync(
@@ -107,8 +107,8 @@ public sealed class DappsActionTools(
     public async Task<NodeProber.ProbeResult> ProbeViaNodeCallAsync(
         [Description("Target BPQ NODECALL, case-insensitive (e.g. 'GB7RDG', 'M0LTE'). NOT the DAPPS application callsign.")]
         string nodeCall,
-        [Description("BPQ port byte (0-indexed) to use for the connect.")]
-        int bpqPort,
+        [Description("bearer port (0-indexed) to use for the connect.")]
+        int bearerPort,
         CancellationToken ct,
         [Description("Application command to type at the node prompt. Default 'DAPPS' - operators with a different APPLICATIONS= name need to override.")]
         string applicationCommand = "DAPPS")
@@ -118,7 +118,7 @@ public sealed class DappsActionTools(
         return await prober.ProbeViaNodeCallAsync(
             options.CurrentValue.Callsign,
             nodeCall.Trim().ToUpperInvariant(),
-            bpqPort,
+            bearerPort,
             ct,
             applicationCommand: applicationCommand,
             fetchPeers: true);
@@ -132,7 +132,7 @@ public sealed class DappsActionTools(
         "during HF testing when scheduled beacons may have missed a propagation window.")]
     public async Task<string> RunSolicitAsync(
         [Description("Bearer name: 'agw' or 'udp'.")] string bearer,
-        [Description("Channel key - BPQ port byte stringified for AGW (e.g. '0'), or multicast endpoint for UDP (e.g. '239.0.0.1:54321').")] string channelKey,
+        [Description("Channel key - bearer port stringified for AGW (e.g. '0'), or multicast endpoint for UDP (e.g. '239.0.0.1:54321').")] string channelKey,
         CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(bearer)) throw new ArgumentException("bearer is required", nameof(bearer));
@@ -167,7 +167,7 @@ public sealed class DappsActionTools(
 
     /// <summary>Mirrors the precedence the scheduler + REST controllers
     /// use: explicit neighbour > AGW-bearer discovered peer > the
-    /// configured DefaultBpqPort. (port, true) when at least one
+    /// configured DefaultBearerPort. (port, true) when at least one
     /// surface knew about the callsign; (default, false) when the
     /// callsign is a stranger to us - caller must surface that as an
     /// error rather than blindly probing the default port.</summary>
@@ -176,7 +176,7 @@ public sealed class DappsActionTools(
         var neighbour = await database.GetNeighbour(callsign);
         if (neighbour is not null && neighbour.UdpEndpoint is null)
         {
-            return (neighbour.BpqPort ?? options.CurrentValue.DefaultBpqPort, true);
+            return (neighbour.BearerPort ?? options.CurrentValue.DefaultBearerPort, true);
         }
         var peers = await database.GetDiscoveredPeers();
         var match = peers.FirstOrDefault(p =>
@@ -184,8 +184,8 @@ public sealed class DappsActionTools(
             && string.Equals(p.Callsign, callsign, StringComparison.OrdinalIgnoreCase));
         if (match is not null)
         {
-            return (match.BpqPort ?? options.CurrentValue.DefaultBpqPort, true);
+            return (match.BearerPort ?? options.CurrentValue.DefaultBearerPort, true);
         }
-        return (options.CurrentValue.DefaultBpqPort, false);
+        return (options.CurrentValue.DefaultBearerPort, false);
     }
 }

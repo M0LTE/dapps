@@ -442,7 +442,7 @@ public class Database(
     /// exists for the same callsign. Idempotent: callers can re-POST
     /// the same neighbour without checking for prior existence.
     /// </summary>
-    internal async Task UpsertNeighbour(string callsign, int? bpqPort, string? udpEndpoint = null)
+    internal async Task UpsertNeighbour(string callsign, int? bearerPort, string? udpEndpoint = null)
     {
         var connection = DbInfo.GetAsyncConnection();
         var existing = await connection.FindWithQueryAsync<DbNeighbour>(
@@ -452,13 +452,13 @@ public class Database(
             await connection.InsertAsync(new DbNeighbour
             {
                 Callsign = callsign,
-                BpqPort = bpqPort,
+                BearerPort = bearerPort,
                 UdpEndpoint = udpEndpoint,
             });
         }
         else
         {
-            existing.BpqPort = bpqPort;
+            existing.BearerPort = bearerPort;
             existing.UdpEndpoint = udpEndpoint;
             await connection.UpdateAsync(existing);
         }
@@ -666,7 +666,7 @@ public class Database(
 
         await Upsert(connection, options, systemOptions.NodeHost, nameof(systemOptions.NodeHost));
         await Upsert(connection, options, systemOptions.AgwPort.ToString(), nameof(systemOptions.AgwPort));
-        await Upsert(connection, options, systemOptions.DefaultBpqPort.ToString(), nameof(systemOptions.DefaultBpqPort));
+        await Upsert(connection, options, systemOptions.DefaultBearerPort.ToString(), nameof(systemOptions.DefaultBearerPort));
         await Upsert(connection, options, systemOptions.Callsign, nameof(systemOptions.Callsign));
         await Upsert(connection, options, systemOptions.MqttPort.ToString(), nameof(systemOptions.MqttPort));
         await Upsert(connection, options, systemOptions.UpdateCheckEnabled.ToString(), nameof(systemOptions.UpdateCheckEnabled));
@@ -712,7 +712,7 @@ public class Database(
         {
             NodeHost = options[nameof(SystemOptions.NodeHost)],
             AgwPort = int.Parse(options[nameof(SystemOptions.AgwPort)]),
-            DefaultBpqPort = int.Parse(options[nameof(SystemOptions.DefaultBpqPort)]),
+            DefaultBearerPort = int.Parse(options[nameof(SystemOptions.DefaultBearerPort)]),
             Callsign = options[nameof(SystemOptions.Callsign)],
             MqttPort = int.Parse(options[nameof(SystemOptions.MqttPort)]),
             UpdateCheckEnabled = !options.TryGetValue(nameof(SystemOptions.UpdateCheckEnabled), out var uce)

@@ -35,7 +35,7 @@ public sealed class NodeProber(
     /// to fetch peers does not mark the probe itself as failed.</summary>
     public sealed record ProbeResult(
         string Callsign,
-        int BpqPort,
+        int BearerPort,
         bool Success,
         string Error,
         DateTime At,
@@ -43,7 +43,7 @@ public sealed class NodeProber(
 
     /// <summary>
     /// Connect to <paramref name="remoteCallsign"/> on
-    /// <paramref name="bpqPort"/>, look for the <c>DAPPSv1&gt;</c>
+    /// <paramref name="bearerPort"/>, look for the <c>DAPPSv1&gt;</c>
     /// banner, optionally ask the remote for its peers (Plan B6.1
     /// Phase 2), then disconnect. Captures the most common AGW
     /// failure modes (no socket, AGW reject, no prompt) into a stable
@@ -58,7 +58,7 @@ public sealed class NodeProber(
     public async Task<ProbeResult> ProbeAsync(
         string localCallsign,
         string remoteCallsign,
-        int bpqPort,
+        int bearerPort,
         CancellationToken ct,
         bool fetchPeers = false)
     {
@@ -69,14 +69,14 @@ public sealed class NodeProber(
             await using var connection = await transport.ConnectAsync(
                 localCallsign: localCallsign,
                 remoteCallsign: remoteCallsign,
-                bpqPortNumber: bpqPort,
+                bearerPort: bearerPort,
                 stoppingToken: ct);
 
             var protocol = new DappsProtocolClient(connection.Stream, loggerFactory);
 
             if (!await protocol.ReadInitialPromptAsync(ct))
             {
-                return new ProbeResult(remoteCallsign, bpqPort, false,
+                return new ProbeResult(remoteCallsign, bearerPort, false,
                     "no DAPPSv1> prompt", at, peers);
             }
 
@@ -86,20 +86,20 @@ public sealed class NodeProber(
                 {
                     peers = await protocol.RequestPeersAsync(ct);
                     logger.LogInformation("Probe ok: {0} on port {1} (got {2} peer record(s))",
-                        remoteCallsign, bpqPort, peers.Count);
+                        remoteCallsign, bearerPort, peers.Count);
                 }
                 catch (Exception ex)
                 {
                     logger.LogInformation(
                         "Probe ok but peers query failed: {0} on port {1} ({2})",
-                        remoteCallsign, bpqPort, ex.Message);
+                        remoteCallsign, bearerPort, ex.Message);
                 }
             }
             else
             {
-                logger.LogInformation("Probe ok: {0} on port {1}", remoteCallsign, bpqPort);
+                logger.LogInformation("Probe ok: {0} on port {1}", remoteCallsign, bearerPort);
             }
-            return new ProbeResult(remoteCallsign, bpqPort, true, "", at, peers);
+            return new ProbeResult(remoteCallsign, bearerPort, true, "", at, peers);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -110,7 +110,7 @@ public sealed class NodeProber(
         catch (TimeoutException ex)
         {
             logger.LogInformation("Probe timeout: {0} ({1})", remoteCallsign, ex.Message);
-            return new ProbeResult(remoteCallsign, bpqPort, false, $"timeout: {ex.Message}", at, peers);
+            return new ProbeResult(remoteCallsign, bearerPort, false, $"timeout: {ex.Message}", at, peers);
         }
         catch (Exception ex)
         {
@@ -118,7 +118,7 @@ public sealed class NodeProber(
             // not an exception to bubble. Log at info - failures are
             // expected and not actionable noise.
             logger.LogInformation("Probe failed: {0} ({1})", remoteCallsign, ex.Message);
-            return new ProbeResult(remoteCallsign, bpqPort, false, ex.Message, at, peers);
+            return new ProbeResult(remoteCallsign, bearerPort, false, ex.Message, at, peers);
         }
     }
 
@@ -139,7 +139,7 @@ public sealed class NodeProber(
     public async Task<ProbeResult> ProbeViaNodeCallAsync(
         string localCallsign,
         string remoteNodeCall,
-        int bpqPort,
+        int bearerPort,
         CancellationToken ct,
         string applicationCommand = "DAPPS",
         bool fetchPeers = true)
@@ -151,7 +151,7 @@ public sealed class NodeProber(
             await using var connection = await transport.ConnectAsync(
                 localCallsign: localCallsign,
                 remoteCallsign: remoteNodeCall,
-                bpqPortNumber: bpqPort,
+                bearerPort: bearerPort,
                 stoppingToken: ct);
 
             var stream = connection.Stream;
@@ -162,7 +162,7 @@ public sealed class NodeProber(
             var banner = await ReadUntilIdleAsync(stream, DefaultBannerTotal, DefaultBannerIdle, ct);
             if (banner.Length == 0)
             {
-                return new ProbeResult(remoteNodeCall, bpqPort, false,
+                return new ProbeResult(remoteNodeCall, bearerPort, false,
                     "no banner from node prompt", at, peers);
             }
             logger.LogDebug("Node banner from {0}: {1}", remoteNodeCall, banner.Replace('\n', ' ').Replace('\r', ' '));
@@ -176,7 +176,7 @@ public sealed class NodeProber(
             var protocol = new DappsProtocolClient(stream, loggerFactory);
             if (!await protocol.ReadInitialPromptAsync(ct))
             {
-                return new ProbeResult(remoteNodeCall, bpqPort, false,
+                return new ProbeResult(remoteNodeCall, bearerPort, false,
                     $"sent '{applicationCommand}' to node prompt but no DAPPSv1> reply (banner was: {Snippet(banner)})",
                     at, peers);
             }
@@ -188,22 +188,22 @@ public sealed class NodeProber(
                     peers = await protocol.RequestPeersAsync(ct);
                     logger.LogInformation(
                         "Node-prompt probe ok: {0} via '{1}' command on port {2} (got {3} peer record(s))",
-                        remoteNodeCall, applicationCommand, bpqPort, peers.Count);
+                        remoteNodeCall, applicationCommand, bearerPort, peers.Count);
                 }
                 catch (Exception ex)
                 {
                     logger.LogInformation(
                         "Node-prompt probe ok but peers query failed: {0} on port {1} ({2})",
-                        remoteNodeCall, bpqPort, ex.Message);
+                        remoteNodeCall, bearerPort, ex.Message);
                 }
             }
             else
             {
                 logger.LogInformation(
                     "Node-prompt probe ok: {0} via '{1}' command on port {2}",
-                    remoteNodeCall, applicationCommand, bpqPort);
+                    remoteNodeCall, applicationCommand, bearerPort);
             }
-            return new ProbeResult(remoteNodeCall, bpqPort, true, "", at, peers);
+            return new ProbeResult(remoteNodeCall, bearerPort, true, "", at, peers);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -212,7 +212,7 @@ public sealed class NodeProber(
         catch (Exception ex)
         {
             logger.LogInformation("Node-prompt probe failed: {0} ({1})", remoteNodeCall, ex.Message);
-            return new ProbeResult(remoteNodeCall, bpqPort, false, ex.Message, at, peers);
+            return new ProbeResult(remoteNodeCall, bearerPort, false, ex.Message, at, peers);
         }
     }
 

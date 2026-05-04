@@ -23,7 +23,7 @@ public sealed class IndexModel(
     public double DiscoveryAirtimeConsumedSecondsLastHour { get; private set; }
     public int DiscoveryAirtimeBudgetSecondsPerHour => airtime.BudgetSecondsPerHour;
 
-    public bool BpqAgwReachable { get; private set; }
+    public bool NodeReachable { get; private set; }
 
     public int NeighbourCount { get; private set; }
 
@@ -113,7 +113,7 @@ public sealed class IndexModel(
         DiscoveryChannels = await database.GetDiscoveryChannels();
         DiscoveryAirtimeConsumedSecondsLastHour = airtime.ConsumedSecondsLastHour;
 
-        BpqAgwReachable = await ProbeTcp(Options.NodeHost, Options.AgwPort);
+        NodeReachable = await ProbeTcp(Options.NodeHost, Options.AgwPort);
     }
 
     private static async Task<bool> ProbeTcp(string host, int port)

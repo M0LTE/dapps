@@ -14,7 +14,7 @@ namespace dapps.core.Services;
 /// both <c>/Operational</c> (operator-facing JSON) and
 /// <c>HeartbeatPublisher</c> (periodic MQTT publish).
 ///
-/// Composes liveness probes (BPQ, MQTT), counters from
+/// Composes liveness probes (node, MQTT), counters from
 /// <see cref="OperationalMetrics"/>, queue / peer / channel /
 /// neighbour counts from <see cref="Database"/>, and trailing-hour
 /// airtime usage from <see cref="AirtimeAccountant"/>. Plus a
@@ -57,7 +57,10 @@ public sealed class OperationalSnapshotBuilder(
 
         var callsignOk = !string.IsNullOrWhiteSpace(opts.Callsign)
             && !string.Equals(opts.Callsign, PlaceholderCallsign, StringComparison.OrdinalIgnoreCase);
-        var bpqOk = await ProbeTcp(opts.NodeHost, opts.AgwPort, TimeSpan.FromMilliseconds(500));
+        var nodePort = string.Equals(opts.NodeBearer, "rhpv2", StringComparison.OrdinalIgnoreCase)
+            ? (opts.RhpPort > 0 ? opts.RhpPort : 9000)
+            : opts.AgwPort;
+        var nodeOk = await ProbeTcp(opts.NodeHost, nodePort, TimeSpan.FromMilliseconds(500));
         var mqttOk = await ProbeTcp("127.0.0.1", opts.MqttPort, TimeSpan.FromMilliseconds(250));
 
         var counters = metrics.Take();
@@ -141,9 +144,9 @@ public sealed class OperationalSnapshotBuilder(
             GeneratedAt: timeProvider.GetUtcNow().UtcDateTime,
             UptimeSeconds: (long)Math.Max(0, (timeProvider.GetUtcNow().UtcDateTime - Process.GetCurrentProcess().StartTime.ToUniversalTime()).TotalSeconds),
 
-            Status: (callsignOk && bpqOk && mqttOk) ? "healthy" : "degraded",
+            Status: (callsignOk && nodeOk && mqttOk) ? "healthy" : "degraded",
             CallsignConfigured: callsignOk,
-            BpqAgwReachable: bpqOk,
+            NodeReachable: nodeOk,
             MqttBrokerUp: mqttOk,
             LastForwardSuccessAt: counters.LastForwardSuccessAt,
 
@@ -211,7 +214,7 @@ public sealed record OperationalSnapshot(
 
     string Status,
     bool CallsignConfigured,
-    bool BpqAgwReachable,
+    bool NodeReachable,
     bool MqttBrokerUp,
     DateTime? LastForwardSuccessAt,
 

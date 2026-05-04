@@ -23,12 +23,12 @@ public sealed class NodeProberTests
         var transport = new FakeOutboundTransport(Encoding.UTF8.GetBytes("DAPPSv1>\n"));
         var prober = MakeProber(transport);
 
-        var result = await prober.ProbeAsync("N0US", "N0THEM-9", bpqPort: 1, CancellationToken.None);
+        var result = await prober.ProbeAsync("N0US", "N0THEM-9", bearerPort: 1, CancellationToken.None);
 
         result.Success.Should().BeTrue();
         result.Error.Should().BeEmpty();
         result.Callsign.Should().Be("N0THEM-9");
-        result.BpqPort.Should().Be(1);
+        result.BearerPort.Should().Be(1);
         result.At.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
     }
 
@@ -90,7 +90,7 @@ public sealed class NodeProberTests
 
     private sealed class FakeOutboundTransport(byte[] cannedReceiverBytes) : IDappsOutboundTransport
     {
-        public Task<IDappsConnection> ConnectAsync(string localCallsign, string remoteCallsign, int bpqPortNumber, CancellationToken stoppingToken)
+        public Task<IDappsConnection> ConnectAsync(string localCallsign, string remoteCallsign, int bearerPort, CancellationToken stoppingToken)
             // FakeDuplexStream rather than a bare MemoryStream - the
             // prober may write back ("peers\n" on Phase 2 fetch-peers
             // probes), which would otherwise overwrite the canned read
@@ -106,13 +106,13 @@ public sealed class NodeProberTests
 
     private sealed class ThrowingTransport(Exception toThrow) : IDappsOutboundTransport
     {
-        public Task<IDappsConnection> ConnectAsync(string localCallsign, string remoteCallsign, int bpqPortNumber, CancellationToken stoppingToken)
+        public Task<IDappsConnection> ConnectAsync(string localCallsign, string remoteCallsign, int bearerPort, CancellationToken stoppingToken)
             => Task.FromException<IDappsConnection>(toThrow);
     }
 
     private sealed class BlockingTransport : IDappsOutboundTransport
     {
-        public Task<IDappsConnection> ConnectAsync(string localCallsign, string remoteCallsign, int bpqPortNumber, CancellationToken stoppingToken)
+        public Task<IDappsConnection> ConnectAsync(string localCallsign, string remoteCallsign, int bearerPort, CancellationToken stoppingToken)
         {
             var tcs = new TaskCompletionSource<IDappsConnection>();
             stoppingToken.Register(() => tcs.TrySetCanceled(stoppingToken));
