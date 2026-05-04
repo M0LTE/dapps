@@ -1,48 +1,42 @@
-# Connect via XRouter (AGW)
+# Connect via XRouter (RHPv2)
 
-This page is the AGW recipe for connecting DAPPS to XRouter. **For XRouter we now recommend the [RHPv2 bearer](rhp.md) instead** - it sidesteps an XRouter-specific AGW limitation around per-TCP-connection callsign authorisation that makes outbound forwards fragile. Use this page if you have a specific reason to stay on AGW (e.g. an older XRouter without RHPv2 support, or compatibility testing); use [RHPv2](rhp.md) for new deployments.
+This page is the full XRouter recipe for getting DAPPS on-air. If you're already running XRouter as your packet node, here's what you need to do to add DAPPS.
+
+DAPPS connects to XRouter over **RHPv2** (Remote Host Protocol v2). RHPv2 is required for DAPPS-on-XRouter; XRouter's AGW emulator is not usable as a DAPPS bearer because XRouter scopes the AGW callsign claim per-TCP-connection - DAPPS's per-outbound-fresh-connection pattern collides with its own standing inbound registration. RHPv2 has no equivalent constraint, multiplexes inbound and outbound over a single TCP connection, and is what XRouter ships natively. See [RHPv2](rhp.md) for the protocol-level overview.
 
 ## What we're wiring up
 
-DAPPS opens a TCP connection to XRouter's AGW emulator and registers a callsign for inbound dispatch. When a remote node L2-connects to that callsign, XRouter routes the session to the registered DAPPS client. Outbound is the mirror image: DAPPS asks XRouter to dial a remote callsign over a chosen port, the session is established at L2, DAPPS speaks DAPPSv1 over it.
+DAPPS opens one TCP connection to XRouter's RHPv2 listener and binds its callsign for inbound dispatch. When a remote node L2-connects to that callsign, XRouter routes the session to DAPPS over the same TCP connection, multiplexed by handle. Outbound is the mirror image: DAPPS asks XRouter to dial a remote callsign over a chosen port, the session is established at L2, DAPPS speaks DAPPSv1 over the per-handle byte stream.
 
-One TCP connection from DAPPS to XRouter (loopback or LAN). DAPPS does not need to be on the same host as XRouter, as long as it can reach XRouter's AGW port over TCP.
+DAPPS does not need to be on the same host as XRouter, as long as it can reach XRouter's RHPv2 port over TCP.
 
-## Step 1: enable XRouter's AGW emulator
+## Step 1: enable RHPv2 in XRouter
 
-XRouter's AGW emulator (the AGWHOST) is on by default, listening on TCP 8000 unless told otherwise. The relevant directive in `XROUTER.CFG`:
-
-```
-AGWPORT=8000
-```
-
-If port 8000 is already taken on your machine (an existing AGWPE installation, for instance), pick another:
+XRouter's RHPv2 listener is opt-in. Add the directive to `XROUTER.CFG`:
 
 ```
-AGWPORT=8001
+RHPPORT=9000
 ```
 
-You'll set `DAPPS_AGW_PORT` to match in step 4.
+Pick any free TCP port; 9000 is the convention. Restart XRouter.
 
-## Step 2: pick a callsign for DAPPS - and **don't** add an APPL block for it
+If you also have `AGWPORT=` set, you can leave it in place - it doesn't conflict, it just isn't used by DAPPS.
+
+## Step 2: pick a callsign for DAPPS
 
 DAPPS needs its own callsign with SSID. Convention is to use your own callsign with an unused SSID, e.g. `M0LTE-7`.
 
-**Important**: do **not** add an `APPL=N ... APPLCALL=M0LTE-7 ... ENDAPPL` block in `XROUTER.CFG` for the DAPPS callsign. APPL blocks claim a callsign for an *internal* XRouter application (TCP server, DEDHOST, WA8DED hostmode, etc.). When DAPPS connects via AGW and tries to register that callsign, XRouter refuses because it's already claimed.
-
-DAPPS registers its callsign dynamically via the AGW protocol's X-frame at startup; no config-file declaration is needed. Make sure your `NODECALL`, `CONSOLECALL`, `CHATCALL`, and any `APPL` blocks all use *different* callsigns from the one you'll give DAPPS.
-
-If you accidentally collide and the DAPPS startup log shows an AGW registration failure, change either the DAPPS callsign or the conflicting XRouter declaration and restart.
+Make sure your `NODECALL`, `CONSOLECALL`, `CHATCALL`, and any `APPL` blocks all use *different* callsigns from the one you'll give DAPPS. RHPv2 binds the callsign dynamically at runtime, so no `APPL` declaration is needed (and you should not add one - it would claim the callsign for an internal XRouter application before DAPPS could bind it).
 
 ## Step 3: ACCESS.SYS, if non-loopback
 
-If DAPPS runs on a different host from XRouter, your `ACCESS.SYS` needs to allow AGW connections from DAPPS's IP. The default file requires a password from `0.0.0.0/0` which would block DAPPS. Add a line for the subnet DAPPS connects from, with flag `1` (callsign-only, no password):
+If DAPPS runs on a different host from XRouter, your `ACCESS.SYS` needs to allow connections from DAPPS's IP. Add a line for the subnet DAPPS connects from, with flag `1` (callsign-only, no password):
 
 ```
 192.168.1.0/24    1
 ```
 
-If DAPPS is on the same host as XRouter (loopback), you don't need to touch `ACCESS.SYS` - XRouter doesn't gate loopback AGW connections.
+If DAPPS is on the same host as XRouter (loopback), you don't need to touch `ACCESS.SYS`.
 
 Restart XRouter to pick up `ACCESS.SYS` changes.
 
@@ -52,32 +46,45 @@ In DAPPS's environment (systemd unit, shell, etc.):
 
 ```
 DAPPS_CALLSIGN=M0LTE-7
+DAPPS_NODE_BEARER=rhpv2
 DAPPS_NODE_HOST=<xrouter-host>
-DAPPS_AGW_PORT=8000
+DAPPS_RHP_PORT=9000
 DAPPS_DEFAULT_BPQ_PORT=0
 ```
 
+`DAPPS_NODE_BEARER=rhpv2` flips DAPPS from its default AGW bearer to RHPv2.
+
 `DAPPS_NODE_HOST` is `localhost` (or `127.0.0.1`) if DAPPS shares a host with XRouter, otherwise the host XRouter runs on.
 
-`DAPPS_AGW_PORT` matches the `AGWPORT` you set in step 1.
+`DAPPS_RHP_PORT` matches the `RHPPORT` you set in step 1.
 
-`DAPPS_DEFAULT_BPQ_PORT` is the byte AGW uses to identify which radio port to originate sessions on. With XRouter, the byte numbering is 0-indexed against the order ports appear in `XROUTER.CFG`'s `PORT=N` blocks: `PORT=1` -> byte 0, `PORT=2` -> byte 1, etc. Pick the port you want DAPPS's outbound sessions to go over.
+`DAPPS_DEFAULT_BPQ_PORT` is the byte DAPPS uses to identify which radio port to originate sessions on. With XRouter, the byte numbering is 0-indexed against the order ports appear in `XROUTER.CFG`'s `PORT=N` blocks: `PORT=1` -> byte 0, `PORT=2` -> byte 1, etc. DAPPS adds 1 internally to derive RHPv2's 1-indexed port name. Pick the port you want DAPPS's outbound sessions to go over.
 
-## Step 5: start DAPPS, watch for AGW registration
+If your XRouter requires authentication on RHPv2, also set:
+
+```
+DAPPS_RHP_USER=<user>
+DAPPS_RHP_PASS=<pass>
+```
+
+These are skipped if `DAPPS_RHP_USER` is empty.
+
+## Step 5: start DAPPS, watch for the listener bind
 
 A successful DAPPS start logs:
 
 ```
-AGW: connected to <xrouter-host>:8000, registered M0LTE-7 for inbound dispatch
+RHP inbound: connecting to <xrouter-host>:9000
+RHP inbound: listener bound to M0LTE-7 on handle <N>
 ```
 
-If you see `AGW register M0LTE-7 failed`, the most likely cause is the APPL-block collision from step 2. Check `XROUTER.CFG` for any block that declares the DAPPS callsign and remove it.
-
-If you see repeated reconnect attempts, AGW isn't listening or isn't reachable from DAPPS's host - confirm with:
+If you see repeated reconnect attempts, RHPv2 isn't listening or isn't reachable from DAPPS's host - confirm with:
 
 ```bash
-nc -vz <xrouter-host> 8000
+nc -vz <xrouter-host> 9000
 ```
+
+If you see an authentication failure, double-check `DAPPS_RHP_USER` / `DAPPS_RHP_PASS` against your XRouter's RHPv2 credentials.
 
 ## Step 6: prove the inbound side
 
@@ -87,7 +94,7 @@ From any other node on the same air:
 c <your-DAPPS-callsign>
 ```
 
-You should land at the `DAPPSv1>` prompt. That's DAPPS having taken the inbound L2 dispatch from XRouter via AGW. Disconnect.
+You should land at the `DAPPSv1>` prompt. That's DAPPS having taken the inbound L2 dispatch from XRouter via RHPv2. Disconnect.
 
 ## Step 7: prove the outbound side
 
@@ -105,22 +112,28 @@ Send a test message via the dashboard's **Send a test message** form. The forwar
 
 If your XRouter has multiple radio ports (`PORT=1`, `PORT=2`, etc.), every neighbour record can specify which port to use. The dashboard's add-neighbour form has the field; the discovery system records the port a peer was heard on automatically.
 
-The byte numbering in DAPPS is 0-indexed against the order ports appear in `XROUTER.CFG`. `PORT=1` -> byte 0, `PORT=2` -> byte 1, and so on.
+The byte numbering in DAPPS is 0-indexed against the order ports appear in `XROUTER.CFG`. `PORT=1` -> byte 0, `PORT=2` -> byte 1, and so on. DAPPS handles the +1 conversion to RHPv2's port-name shape internally, so the same `BpqPort` value works for both AGW (BPQ) and RHPv2 (XRouter) neighbours.
 
 ## Sharing a callsign between XRouter and DAPPS
 
 The recommended pattern is to give DAPPS its own SSID under your callsign. XRouter's NODECALL / CONSOLECALL / CHATCALL / APPL blocks each consume one callsign+SSID; DAPPS consumes one more. Pick a free SSID for DAPPS (often `-7`, `-9`, or whatever else you have spare).
 
-Same-callsign-same-SSID with another XRouter declaration is **not** supported - XRouter will refuse the AGW registration as described in step 2.
+Same-callsign-same-SSID with another XRouter declaration is **not** supported - XRouter will refuse the bind because the callsign is already claimed.
 
 ## Troubleshooting
 
 | Symptom | Likely cause |
 |---------|--------------|
-| `AGW: connection refused` | XRouter isn't listening on `DAPPS_AGW_PORT`, or you've got a firewall in the way. Confirm with `nc -vz <host> <port>`. |
-| `AGW register <callsign> failed` | APPL-block / NODECALL / CONSOLECALL / CHATCALL collision on the DAPPS callsign. See step 2. |
-| Inbound `c <DAPPS-callsign>` lands at the XRouter node prompt instead of `DAPPSv1>` | DAPPS isn't successfully registered - either it's not running, or AGW registration failed. Check DAPPS logs. |
+| `RHP inbound: connection lost; reconnecting` repeatedly | XRouter isn't listening on `DAPPS_RHP_PORT`, or you've got a firewall in the way. Confirm with `nc -vz <host> <port>`. Check `RHPPORT=` is set in `XROUTER.CFG`. |
+| Authentication failure in the log | `DAPPS_RHP_USER` / `DAPPS_RHP_PASS` don't match XRouter's RHPv2 credentials. |
+| Inbound `c <DAPPS-callsign>` lands at the XRouter node prompt instead of `DAPPSv1>` | DAPPS isn't successfully bound - either it's not running, or the bind failed (callsign collision with NODECALL / CONSOLECALL / CHATCALL / APPL). Check DAPPS logs. |
 | Inbound `c <DAPPS-callsign>` fails with no L2 response | The remote node doesn't have a route to your DAPPS callsign. NetROM/AX.25 routing is XRouter's job, not DAPPS's. |
 | Outbound forwards never connect | DAPPS's neighbour has the wrong `BPQ port` byte - check the port-numbering note above. |
 
 For more general DAPPS troubleshooting, see the main [Troubleshooting](../troubleshooting.md) page.
+
+## Why not AGW on XRouter?
+
+Short version: XRouter's AGW emulator scopes the callsign claim per-TCP-connection. DAPPS opens a fresh TCP connection per outbound forward; the second connection's `X` register for the DAPPS callsign collides with the standing inbound registration owned by another connection, and XRouter silently drops the subsequent `C` frame. Symptoms: outbound forwards from a DAPPS-on-XR node never connect.
+
+There's no AGW-only fix that doesn't involve a substantial refactor of DAPPS's outbound transport (multiplexing onto a shared inbound socket). RHPv2 doesn't have the per-connection claim - it uses handle-based addressing - so the same multiplexing is what RHPv2 ships natively. That's why DAPPS-on-XRouter goes via RHPv2.

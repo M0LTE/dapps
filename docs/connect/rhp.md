@@ -2,14 +2,16 @@
 
 **Status: implemented.** RHPv2 (Remote Host Protocol v2) is a more modern host-to-node protocol than AGW. DAPPS speaks it via the [`RhpV2.Client` NuGet package](https://www.nuget.org/packages/RhpV2.Client) and selects between AGW and RHPv2 with a single env var.
 
-[XRouter](xrouter.md) supports RHPv2 natively, and that's the recommended bearer for DAPPS-on-XRouter today (XRouter's per-TCP-connection AGW callsign claim makes per-send-fresh-connection AGW outbound fragile in a way RHPv2 sidesteps). Mainline BPQ does not yet ship RHPv2; when it does, DAPPS will work over it without code changes.
+[XRouter](xrouter.md) supports RHPv2 natively, and **RHPv2 is required for DAPPS-on-XRouter** - XRouter's AGW emulator is not usable as a DAPPS bearer because XRouter scopes the AGW callsign claim per-TCP-connection, which collides with DAPPS's per-outbound-fresh-connection pattern. The XRouter operator guide is at [Connect via XRouter (RHPv2)](xrouter.md).
+
+Mainline BPQ does not yet ship RHPv2; when it does, DAPPS will work over it without code changes.
 
 ## Why RHPv2
 
-AGW is a 1990s protocol - it works fine for what it does, but it has limits that show up under modern use. RHPv2 addresses several of them:
+AGW is a 1990s protocol - it works fine on hosts that don't constrain callsign claims per connection (BPQ being the obvious one), but it has limits that show up under modern use. RHPv2 addresses several of them:
 
-- **Better session multiplexing.** AGW assumes one TCP connection per host application. RHPv2 multiplexes many sessions over one TCP connection, with handle-based addressing. DAPPS's inbound listener and per-outbound-forward sends share one socket, where the AGW path opens a fresh TCP connection per outbound forward.
-- **Cleaner inbound dispatch.** AGW's "register a callsign and receive every connect that matches" model has edge cases around shared callsigns and SSIDs. In particular, XRouter scopes the AGW callsign claim per-TCP-connection, so DAPPS's inbound listener and any concurrent outbound forwarder collide on the same callsign - the second connection is silently refused. RHPv2 has no equivalent claim and handles this naturally.
+- **Better session multiplexing.** AGW assumes one TCP connection per host application. RHPv2 multiplexes many sessions over one TCP connection, with handle-based addressing. DAPPS's inbound listener and per-outbound-forward sends share one socket on RHPv2; on AGW each outbound forward needs its own TCP connection.
+- **Cleaner inbound dispatch.** AGW's "register a callsign and receive every connect that matches" model has edge cases around shared callsigns and SSIDs. XRouter's per-TCP-connection AGW callsign claim is the most painful manifestation of this; RHPv2's handle-based binding sidesteps it entirely.
 - **Actually defined error semantics.** AGW's behaviour on TNC reconnect, port up/down events, etc., is empirically discovered; RHPv2 makes it part of the spec.
 
 ## Configure DAPPS to use RHPv2
@@ -18,18 +20,18 @@ In DAPPS's environment (systemd unit, shell, etc.):
 
 ```
 DAPPS_NODE_BEARER=rhpv2
-DAPPS_NODE_HOST=<xrouter-host>
-DAPPS_RHP_PORT=<xrouter rhp port>
+DAPPS_NODE_HOST=<host>
+DAPPS_RHP_PORT=<rhp port>
 DAPPS_DEFAULT_BPQ_PORT=0
 ```
 
 `DAPPS_NODE_BEARER=rhpv2` flips the bearer selector from AGW (the default) to RHPv2. The AGW knobs (`DAPPS_AGW_PORT`) are then unused.
 
-`DAPPS_RHP_PORT` matches XRouter's `RHPPORT=` directive in `XROUTER.CFG` (default 9000).
+`DAPPS_RHP_PORT` matches the host's RHPv2 listener port (XRouter's `RHPPORT=` directive; default 9000).
 
 `DAPPS_DEFAULT_BPQ_PORT` is the same 0-indexed port byte used in the AGW path. DAPPS adds 1 internally to derive the RHPv2 port name (which is 1-indexed in XRouter, matching `PORT=N` in `XROUTER.CFG`). So `DAPPS_DEFAULT_BPQ_PORT=0` -> RHPv2 port "1" -> `PORT=1` in XRouter's config.
 
-If RHPv2 requires authentication on your XRouter, also set:
+If RHPv2 requires authentication on your host, also set:
 
 ```
 DAPPS_RHP_USER=<user>
@@ -37,16 +39,6 @@ DAPPS_RHP_PASS=<pass>
 ```
 
 These are skipped if `DAPPS_RHP_USER` is empty.
-
-## Enable RHPv2 in XRouter
-
-Add the `RHPPORT=` directive to `XROUTER.CFG`:
-
-```
-RHPPORT=9000
-```
-
-Restart XRouter. No equivalent of AGW's APPL-block-collision hazard exists on the RHPv2 side - DAPPS binds its callsign with a passive listen at runtime, no config-file declaration is needed.
 
 ## What stays the same
 
