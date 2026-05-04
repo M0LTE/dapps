@@ -34,32 +34,72 @@ public sealed class Rhpv2InboundService(
     OperationalMetrics metrics) : BackgroundService
 {
     private static readonly TimeSpan ReconnectBackoff = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan IdleBackoff = TimeSpan.FromSeconds(2);
+
+    private CancellationTokenSource? cycleTokenSource;
+    private IDisposable? optionsChangeSubscription;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        while (!stoppingToken.IsCancellationRequested)
+        // Cancel the current connection-cycle on any SystemOptions change
+        // so a /Config save (callsign, RHP host/port/auth, bearer flip)
+        // takes effect on the next iteration without a daemon restart.
+        optionsChangeSubscription = options.OnChange((_, _) => cycleTokenSource?.Cancel());
+        try
         {
-            try
+            while (!stoppingToken.IsCancellationRequested)
             {
-                await RunOnce(stoppingToken);
-            }
-            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-            {
-                return;
-            }
-            catch (Exception ex)
-            {
-                logger.LogWarning(ex, "RHP inbound: connection lost; reconnecting in {0}s", ReconnectBackoff.TotalSeconds);
-            }
+                cycleTokenSource = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+                var cycleCt = cycleTokenSource.Token;
+                try
+                {
+                    await RunOnce(cycleCt);
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    return;
+                }
+                catch (OperationCanceledException)
+                {
+                    // Cycle cancelled by an options change; loop and reconnect.
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "RHP inbound: connection lost; reconnecting in {0}s", ReconnectBackoff.TotalSeconds);
+                }
 
-            try { await Task.Delay(ReconnectBackoff, stoppingToken); }
-            catch (OperationCanceledException) { return; }
+                try { await Task.Delay(ReconnectBackoff, stoppingToken); }
+                catch (OperationCanceledException) { return; }
+            }
+        }
+        finally
+        {
+            optionsChangeSubscription?.Dispose();
+            optionsChangeSubscription = null;
         }
     }
 
     private async Task RunOnce(CancellationToken stoppingToken)
     {
         var opts = options.CurrentValue;
+
+        // Bearer-active gate: only run when RHPv2 is configured.
+        // AgwInboundService runs alongside us with the matching gate on
+        // "agw"; OnChange fires when /Config flips the value.
+        if (!string.Equals(opts.NodeBearer, "rhpv2", StringComparison.OrdinalIgnoreCase))
+        {
+            await Task.Delay(IdleBackoff, stoppingToken);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(opts.Callsign)
+            || string.Equals(opts.Callsign, DbStartup.PlaceholderCallsign, StringComparison.OrdinalIgnoreCase))
+        {
+            logger.LogDebug("Callsign not configured; RHP inbound idle (waiting for /Setup or /Config)");
+            await Task.Delay(IdleBackoff, stoppingToken);
+            return;
+        }
+
         var host = string.IsNullOrEmpty(opts.NodeHost) ? "127.0.0.1" : opts.NodeHost;
         var port = opts.RhpPort > 0 ? opts.RhpPort : RhpClient.DefaultPort;
 

@@ -122,9 +122,10 @@ public sealed class RemainingControllersTests : IAsyncLifetime
             c.Insert(new DbSystemOption { Option = "DefaultBearerPort", Value = "2" });
             c.Insert(new DbSystemOption { Option = "MqttPort", Value = "1884" });
         }
-        var ctrl = new ConfigController(database, new AdminPasswordStore(NullLogger<AdminPasswordStore>.Instance));
+        var store = new SystemOptionsStore(NullLogger<SystemOptionsStore>.Instance);
+        var ctrl = new ConfigController(store, new AdminPasswordStore(NullLogger<AdminPasswordStore>.Instance));
 
-        var got = await ctrl.Get();
+        var got = ctrl.Get().Value!;
 
         got.Callsign.Should().Be("M0LTE-9");
         got.NodeHost.Should().Be("bpq.local");
@@ -136,7 +137,8 @@ public sealed class RemainingControllersTests : IAsyncLifetime
     [Fact]
     public async Task ConfigController_PostPersistsAndGetRoundtrips()
     {
-        var ctrl = new ConfigController(database, new AdminPasswordStore(NullLogger<AdminPasswordStore>.Instance));
+        var store = new SystemOptionsStore(NullLogger<SystemOptionsStore>.Instance);
+        var ctrl = new ConfigController(store, new AdminPasswordStore(NullLogger<AdminPasswordStore>.Instance));
 
         var post = await ctrl.Post(new SystemOptions
         {
@@ -148,7 +150,7 @@ public sealed class RemainingControllersTests : IAsyncLifetime
         });
         post.Should().BeOfType<OkResult>();
 
-        var got = await ctrl.Get();
+        var got = ctrl.Get().Value!;
         got.Callsign.Should().Be("M0LTE-2");
     }
 

@@ -21,7 +21,7 @@ namespace dapps.core.Mcp;
 /// than asking the operator to type `vim` once.
 /// </summary>
 [McpServerToolType]
-public sealed class DappsConfigTools(Database database)
+public sealed class DappsConfigTools(SystemOptionsStore optionsStore)
 {
     [McpServerTool(Name = "update_config")]
     [Description(
@@ -31,7 +31,7 @@ public sealed class DappsConfigTools(Database database)
         "use the /Config dashboard form for those). Returns the resolved SystemOptions row after the merge.")]
     public async Task<SystemOptions> UpdateConfigAsync(ConfigUpdate update)
     {
-        var current = await database.GetSystemOptions();
+        var current = optionsStore.CurrentValue;
 
         if (update.ProbingEnabled.HasValue) current.ProbingEnabled = update.ProbingEnabled.Value;
         if (update.ProbeIntervalHours.HasValue) current.ProbeIntervalHours = ClampPositive(update.ProbeIntervalHours.Value);
@@ -66,7 +66,7 @@ public sealed class DappsConfigTools(Database database)
         if (!string.IsNullOrEmpty(update.NodePromptApplicationCommand))
             current.NodePromptApplicationCommand = update.NodePromptApplicationCommand.Trim();
 
-        await database.SaveSystemOptions(current);
+        await optionsStore.SaveAsync(current);
         return current;
     }
 

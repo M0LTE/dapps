@@ -36,113 +36,16 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 builder.Services.AddControllers();
 builder.Services.AddRazorPages();
-// Sync - Configure expects an Action, so an `async` lambda would
-// compile as async-void, fire-and-forget the GetOptions read, and
-// hand callers a SystemOptions instance with un-populated values.
-// Block here so the first resolution is deterministic.
-builder.Services.AddOptions<SystemOptions>().Configure<OptionsRepo, ILogger<SystemOptions>>((o, db, logger) =>
-{
-    var options = db.GetOptions().GetAwaiter().GetResult();
-    o.NodeHost = options.Single(o => o.Option == "NodeHost").Value;
-    o.AgwPort = int.Parse(options.Single(o => o.Option == "AgwPort").Value);
-    o.DefaultBearerPort = int.Parse(options.Single(o => o.Option == "DefaultBearerPort").Value);
-    o.Callsign = options.Single(o => o.Option == "Callsign").Value;
-    o.MqttPort = int.Parse(options.Single(o => o.Option == "MqttPort").Value);
-    o.UdpListenPort = int.TryParse(
-        options.SingleOrDefault(opt => opt.Option == "UdpListenPort")?.Value, out var udpPort) ? udpPort : 0;
-    o.AuthRequired = bool.TryParse(
-        options.SingleOrDefault(opt => opt.Option == "AuthRequired")?.Value, out var auth) && auth;
-    o.UpdateCheckEnabled = !bool.TryParse(
-        options.SingleOrDefault(opt => opt.Option == "UpdateCheckEnabled")?.Value, out var uce) || uce;
-    o.RoutingAlgorithm = options.SingleOrDefault(opt => opt.Option == "RoutingAlgorithm")?.Value
-        is { Length: > 0 } ra
-        ? ra
-        : "passive-flood";
-    o.ProbingEnabled = bool.TryParse(
-        options.SingleOrDefault(opt => opt.Option == "ProbingEnabled")?.Value, out var probing) && probing;
-    o.ProbeIntervalHours = int.TryParse(
-        options.SingleOrDefault(opt => opt.Option == "ProbeIntervalHours")?.Value, out var probeInterval)
-        && probeInterval > 0
-        ? probeInterval
-        : 24;
-    o.FragmentThresholdBytes = int.TryParse(
-        options.SingleOrDefault(opt => opt.Option == "FragmentThresholdBytes")?.Value, out var fragThr)
-        && fragThr >= 0
-        ? fragThr
-        : 4096;
-    o.FragmentReassemblyTimeoutSeconds = int.TryParse(
-        options.SingleOrDefault(opt => opt.Option == "FragmentReassemblyTimeoutSeconds")?.Value, out var fragTimeout)
-        && fragTimeout > 0
-        ? fragTimeout
-        : 7 * 24 * 3600;
-    o.OpportunisticPollEnabled = !bool.TryParse(
-        options.SingleOrDefault(opt => opt.Option == "OpportunisticPollEnabled")?.Value, out var opp) || opp;
-    o.ScheduledPollEnabled = bool.TryParse(
-        options.SingleOrDefault(opt => opt.Option == "ScheduledPollEnabled")?.Value, out var sched) && sched;
-    o.PollIntervalHours = int.TryParse(
-        options.SingleOrDefault(opt => opt.Option == "PollIntervalHours")?.Value, out var pollHours)
-        && pollHours > 0
-        ? pollHours
-        : 6;
-    o.DiscoveryAirtimeBudgetSecondsPerHour = int.TryParse(
-        options.SingleOrDefault(opt => opt.Option == "DiscoveryAirtimeBudgetSecondsPerHour")?.Value, out var atb)
-        && atb >= 0
-        ? atb
-        : 0;
-    o.ProbeStrategy = Enum.TryParse<ProbeStrategy>(
-        options.SingleOrDefault(opt => opt.Option == "ProbeStrategy")?.Value, ignoreCase: true, out var ps)
-        ? ps
-        : ProbeStrategy.FixedInterval;
-    o.ProbeOvernightStartHour = int.TryParse(
-        options.SingleOrDefault(opt => opt.Option == "ProbeOvernightStartHour")?.Value, out var psh)
-        && psh is >= 0 and <= 23
-        ? psh
-        : 2;
-    o.ProbeOvernightEndHour = int.TryParse(
-        options.SingleOrDefault(opt => opt.Option == "ProbeOvernightEndHour")?.Value, out var peh)
-        && peh is >= 0 and <= 23
-        ? peh
-        : 6;
-    o.ProbeQuietWindowSeconds = int.TryParse(
-        options.SingleOrDefault(opt => opt.Option == "ProbeQuietWindowSeconds")?.Value, out var pqws)
-        && pqws > 0
-        ? pqws
-        : 300;
-    o.HeartbeatEnabled = !bool.TryParse(
-        options.SingleOrDefault(opt => opt.Option == "HeartbeatEnabled")?.Value, out var hb) || hb;
-    o.HeartbeatIntervalSeconds = int.TryParse(
-        options.SingleOrDefault(opt => opt.Option == "HeartbeatIntervalSeconds")?.Value, out var hbInt)
-        && hbInt >= 10
-        ? hbInt
-        : 60;
-    o.AutoDiscoverViaNodeCall = bool.TryParse(
-        options.SingleOrDefault(opt => opt.Option == "AutoDiscoverViaNodeCall")?.Value, out var advnc) && advnc;
-    o.NodePromptApplicationCommand = options.SingleOrDefault(opt => opt.Option == "NodePromptApplicationCommand")?.Value
-        is { Length: > 0 } npac
-        ? npac
-        : "DAPPS";
-    o.NodeBearer = options.SingleOrDefault(opt => opt.Option == "NodeBearer")?.Value
-        is { Length: > 0 } nb
-        ? nb.Trim().ToLowerInvariant()
-        : "agw";
-    o.RhpPort = int.TryParse(
-        options.SingleOrDefault(opt => opt.Option == "RhpPort")?.Value, out var rp) && rp > 0
-        ? rp
-        : 9000;
-    o.RhpUser = options.SingleOrDefault(opt => opt.Option == "RhpUser")?.Value ?? "";
-    o.RhpPass = options.SingleOrDefault(opt => opt.Option == "RhpPass")?.Value ?? "";
-
-    logger.LogInformation($"Callsign: {o.Callsign}");
-    logger.LogInformation($"Node bearer: {o.NodeBearer}");
-    logger.LogInformation($"Packet node: {o.NodeHost} (AGW :{o.AgwPort}, RHPv2 :{o.RhpPort}, default bearer port {o.DefaultBearerPort})");
-    logger.LogInformation($"MQTT broker: localhost:{o.MqttPort}");
-    logger.LogInformation($"UDP datagram listener: {(o.UdpListenPort > 0 ? $":{o.UdpListenPort}" : "disabled")}");
-    logger.LogInformation($"App-interface auth required: {o.AuthRequired}");
-    logger.LogInformation($"Update check: {(o.UpdateCheckEnabled ? "enabled" : "disabled")}");
-    logger.LogInformation($"Routing algorithm: {o.RoutingAlgorithm}");
-    logger.LogInformation($"Connected-mode probing: {(o.ProbingEnabled ? $"enabled (strategy={o.ProbeStrategy}, every {o.ProbeIntervalHours}h)" : "disabled")}");
-    logger.LogInformation($"Discovery airtime budget: {(o.DiscoveryAirtimeBudgetSecondsPerHour > 0 ? $"{o.DiscoveryAirtimeBudgetSecondsPerHour}s/hour" : "unlimited")}");
-});
+// SystemOptions: hot-reloadable IOptionsMonitor backed by the
+// systemoptions SQLite table. ConfigController.Post calls
+// store.SaveAsync(...) to persist + fire OnChange; bearer services
+// and the rest of the daemon react via OnChange listeners (mostly:
+// reread CurrentValue on the next tick). Replaces the earlier
+// one-shot AddOptions().Configure() callback that read once at host
+// build time and never re-read.
+builder.Services.AddSingleton<SystemOptionsStore>();
+builder.Services.AddSingleton<IOptionsMonitor<SystemOptions>>(
+    sp => sp.GetRequiredService<SystemOptionsStore>());
 
 builder.Services.AddHttpClient();
 
@@ -218,26 +121,16 @@ builder.Services.AddConnections();
 builder.Services.AddSingleton<MqttBrokerService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<MqttBrokerService>());
 
-// Bearer selector. Pick AGW (BPQ, Direwolf, AGWPE, ...) or RHPv2
-// (XRouter today; future BPQ versions). Read directly from the
-// DAPPS_NODE_BEARER env var here so we don't have to instantiate
-// the IOptionsMonitor service-provider mid-registration. The
-// persisted SystemOptions row picks up the same value via the
-// usual DbStartup env-var seed; restart required to change the
-// bearer either way.
-var nodeBearer = (Environment.GetEnvironmentVariable("DAPPS_NODE_BEARER") ?? "agw")
-    .Trim().ToLowerInvariant();
-if (nodeBearer == "rhpv2")
-{
-    builder.Services.AddHostedService<Rhpv2InboundService>();
-}
-else
-{
-    builder.Services.AddHostedService<AgwInboundService>();
-}
+// Both inbound bearer services are registered unconditionally. Each
+// gates itself on SystemOptions.NodeBearer at runtime - the active
+// bearer's service runs its connect-and-dispatch loop, the inactive
+// one idles. Switching bearers via /Config fires the OnChange handler
+// on each, which cancels the active connection cycle so the loop
+// re-evaluates with the new value (hot-reload, no restart).
+builder.Services.AddHostedService<AgwInboundService>();
+builder.Services.AddHostedService<Rhpv2InboundService>();
 builder.Services.AddHostedService<TtlSweeperService>();
 builder.Services.AddSingleton<Database>();
-builder.Services.AddSingleton<OptionsRepo>();
 builder.Services.AddSingleton<AppTokenStore>();
 builder.Services.AddSingleton<AdminPasswordStore>();
 builder.Services.AddSingleton<InboundEventBus>();
@@ -308,22 +201,12 @@ builder.Services.AddSingleton<IRoutingAlgorithm>(sp =>
 // Auto-forwarder: ticks DoRun on a short cadence so submitted messages
 // move without a manual /Message/dorun poke. Manual poke still works.
 builder.Services.AddHostedService<OutboundForwarderService>();
-builder.Services.AddSingleton<IDappsOutboundTransport>(sp =>
-{
-    var opts = sp.GetRequiredService<IOptionsMonitor<SystemOptions>>().CurrentValue;
-    var lf = sp.GetRequiredService<ILoggerFactory>();
-    if (string.Equals(opts.NodeBearer, "rhpv2", StringComparison.OrdinalIgnoreCase))
-    {
-        var port = opts.RhpPort > 0 ? opts.RhpPort : 9000;
-        var user = string.IsNullOrEmpty(opts.RhpUser) ? null : opts.RhpUser;
-        var pass = string.IsNullOrEmpty(opts.RhpPass) ? null : opts.RhpPass;
-        return new dapps.client.Transport.Rhp.Rhpv2OutboundTransport(
-            opts.NodeHost, port,
-            lf.CreateLogger<dapps.client.Transport.Rhp.Rhpv2OutboundTransport>(),
-            user, pass);
-    }
-    return new AgwOutboundTransport(opts.NodeHost, opts.AgwPort, lf);
-});
+// Outbound transport facade: dispatches each ConnectAsync to the
+// concrete impl matching SystemOptions.NodeBearer at the moment of
+// the call. Hot-reloadable - no need to invalidate / re-resolve when
+// the operator switches bearer; the next forwarder tick picks up the
+// new value automatically.
+builder.Services.AddSingleton<IDappsOutboundTransport, BearerSwitchingOutboundTransport>();
 // Order of registration matters: OutboundMessageManager picks the first
 // IDappsBackhaul whose CanHandle returns true for the route. UDP wins
 // when the neighbour has a UdpEndpoint set; AGW handles everything else.

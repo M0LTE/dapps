@@ -53,13 +53,21 @@ public sealed class DbStartupTests : IAsyncLifetime
     }
 
     [Fact]
-    public void EnsureSchemaAndSeed_NoEnvVars_ThrowsOnPlaceholderCallsign()
+    public void EnsureSchemaAndSeed_NoEnvVars_StartsWithPlaceholderCallsign()
     {
+        // Drop-the-binary-and-go-to-the-dashboard install flow: the
+        // daemon must start cleanly with no env vars and the seeded
+        // placeholder callsign. Inbound bearer services and the
+        // forwarder gate themselves on a real callsign at runtime;
+        // /Health reports CallsignConfigured=false until /Setup or
+        // /Config configures one.
         var act = () => DbStartup.EnsureSchemaAndSeed();
+        act.Should().NotThrow();
 
-        var ex = act.Should().Throw<InvalidOperationException>();
-        ex.Which.Message.Should().Contain("Callsign", "the error must point the operator at the actual missing config");
-        ex.Which.Message.Should().Contain("DAPPS_CALLSIGN");
+        using var c = DbInfo.GetConnection();
+        var row = c.Find<DbSystemOption>("Callsign");
+        row.Should().NotBeNull();
+        row!.Value.Should().Be("N0CALL");
     }
 
     [Fact]
@@ -113,10 +121,12 @@ public sealed class DbStartupTests : IAsyncLifetime
     }
 
     [Fact]
-    public void EnsureSchemaAndSeed_ExistingPlaceholderCallsign_StillThrows()
+    public void EnsureSchemaAndSeed_ExistingPlaceholderCallsign_StartsWithWarning()
     {
-        // Operator left N0CALL in the DB somehow - must still error,
-        // not silently transmit on it.
+        // Operator left N0CALL in the DB. Daemon starts (so the
+        // dashboard becomes reachable for /Setup); inbound bearer +
+        // forwarder gate themselves at runtime - frames stamped with
+        // the placeholder never go on the air.
         using (var c = DbInfo.GetConnection())
         {
             c.CreateTable<DbSystemOption>();
@@ -125,6 +135,6 @@ public sealed class DbStartupTests : IAsyncLifetime
 
         var act = () => DbStartup.EnsureSchemaAndSeed();
 
-        act.Should().Throw<InvalidOperationException>();
+        act.Should().NotThrow();
     }
 }
