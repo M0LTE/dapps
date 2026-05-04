@@ -195,6 +195,9 @@ public sealed class MeshCoreLikeRoutingAlgorithm(
         }
     }
 
+    public Task ObserveProbeOutcomeAsync(string askedPeerCallsign, IReadOnlyList<dapps.client.DappsProtocolClient.DiscoveredPeerInfo> peers, IRoutingContext ctx, CancellationToken ct)
+        => inner.ObserveProbeOutcomeAsync(askedPeerCallsign, peers, ctx, ct);
+
     public Task RunAsync(IRoutingContext ctx, CancellationToken ct)
         => inner.RunAsync(ctx, ct);
 

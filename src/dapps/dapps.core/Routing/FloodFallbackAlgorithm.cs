@@ -91,6 +91,9 @@ public sealed class FloodFallbackAlgorithm(
     public Task ObserveForwardOutcomeAsync(DbMessage message, BackhaulRoute attemptedRoute, BackhaulSendResult result, IRoutingContext ctx, CancellationToken ct)
         => inner.ObserveForwardOutcomeAsync(message, attemptedRoute, result, ctx, ct);
 
+    public Task ObserveProbeOutcomeAsync(string askedPeerCallsign, IReadOnlyList<dapps.client.DappsProtocolClient.DiscoveredPeerInfo> peers, IRoutingContext ctx, CancellationToken ct)
+        => inner.ObserveProbeOutcomeAsync(askedPeerCallsign, peers, ctx, ct);
+
     public Task RunAsync(IRoutingContext ctx, CancellationToken ct)
         => inner.RunAsync(ctx, ct);
 

@@ -300,6 +300,111 @@ public sealed class PassiveLearningAlgorithmTests : IAsyncLifetime
             .ConsecutiveFailures.Should().Be(0);
     }
 
+    // ── ObserveProbeOutcome - B6.1 follow-up ───────────────────────
+
+    private static dapps.client.DappsProtocolClient.DiscoveredPeerInfo Peer(string callsign, string source = "n", int? bearerPort = null)
+        => new(callsign, source, bearerPort);
+
+    [Fact]
+    public async Task ObserveProbeOutcome_TeachesLearnedRoute_ForEachReportedPeer()
+    {
+        var peers = new[]
+        {
+            Peer(DistantOriginator),
+            Peer("G0OTH-7"),
+        };
+
+        await algorithm.ObserveProbeOutcomeAsync(
+            DirectNeighbour, peers, context, TestContext.Current.CancellationToken);
+
+        var learnedDistant = await context.GetLearnedRouteAsync(DistantOriginatorBase, TestContext.Current.CancellationToken);
+        learnedDistant.Should().NotBeNull();
+        learnedDistant!.NextHopCallsign.Should().Be(DirectNeighbour);
+
+        var learnedOther = await context.GetLearnedRouteAsync("G0OTH", TestContext.Current.CancellationToken);
+        learnedOther.Should().NotBeNull();
+        learnedOther!.NextHopCallsign.Should().Be(DirectNeighbour);
+    }
+
+    [Fact]
+    public async Task ObserveProbeOutcome_SkipsAskedPeerThatIsntANeighbour()
+    {
+        // Hypothetical: the probe scheduler probed via a discovered
+        // peer that doesn't have a manual DbNeighbour row. Resolver
+        // would discard the learned route at use-time anyway, so we
+        // skip the insertion to avoid dead rows.
+        await algorithm.ObserveProbeOutcomeAsync(
+            "G0NONEIGH-1",
+            new[] { Peer(DistantOriginator) },
+            context, TestContext.Current.CancellationToken);
+
+        (await database.GetLearnedRoutesAsync()).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ObserveProbeOutcome_SkipsSelfReportedAsPeer()
+    {
+        // The asked peer always reports us as a peer (we just talked
+        // to them). Recording "to reach myself, send via the asked
+        // peer" would be wrong.
+        await algorithm.ObserveProbeOutcomeAsync(
+            DirectNeighbour,
+            new[] { Peer(OurCallsign) },
+            context, TestContext.Current.CancellationToken);
+
+        (await database.GetLearnedRoutesAsync()).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ObserveProbeOutcome_SkipsPeerThatIsTheAskedPeer()
+    {
+        // Peer's base callsign matches the asked peer's base. Single-
+        // hop self-loop - the direct-neighbour entry already covers
+        // this; learned-route would just duplicate.
+        await algorithm.ObserveProbeOutcomeAsync(
+            DirectNeighbour,
+            new[] { Peer(DirectNeighbour) },
+            context, TestContext.Current.CancellationToken);
+
+        (await database.GetLearnedRoutesAsync()).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ObserveProbeOutcome_EmptyPeers_NoOp()
+    {
+        await algorithm.ObserveProbeOutcomeAsync(
+            DirectNeighbour,
+            Array.Empty<dapps.client.DappsProtocolClient.DiscoveredPeerInfo>(),
+            context, TestContext.Current.CancellationToken);
+
+        (await database.GetLearnedRoutesAsync()).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ObserveProbeOutcome_OverwritesPreviousLearnedRoute_FreshEvidence()
+    {
+        // First, learn a route via a passive observation.
+        var altNeighbour = "G0ALT-1";
+        using (var c = DbInfo.GetConnection())
+        {
+            c.Insert(new DbNeighbour { Callsign = altNeighbour, UdpEndpoint = "127.0.0.1:65531" });
+        }
+        await algorithm.ObserveInboundAsync(
+            InboundFrom(DistantOriginator), altNeighbour, context, TestContext.Current.CancellationToken);
+
+        // Probe via DirectNeighbour returns the same originator as a
+        // peer. That's fresher evidence (we just talked to
+        // DirectNeighbour) - the next-hop should switch.
+        await algorithm.ObserveProbeOutcomeAsync(
+            DirectNeighbour,
+            new[] { Peer(DistantOriginator) },
+            context, TestContext.Current.CancellationToken);
+
+        var learned = await context.GetLearnedRouteAsync(DistantOriginatorBase, TestContext.Current.CancellationToken);
+        learned!.NextHopCallsign.Should().Be(DirectNeighbour,
+            "an active probe is fresher evidence than a passive observation; the next-hop should switch");
+    }
+
     private sealed class TestOptionsMonitor<T>(T value) : IOptionsMonitor<T>
     {
         public T CurrentValue { get; } = value;

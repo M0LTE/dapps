@@ -388,6 +388,65 @@ public sealed class ProbeSchedulerServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task ProbeAndRecord_SuccessfulProbeWithPeers_FeedsRoutingAlgorithm()
+    {
+        // B6.1 follow-up: a successful probe whose `peers` response
+        // carries transitive callsigns should hand them to the routing
+        // algorithm via ObserveProbeOutcomeAsync, not just stash them
+        // in DbProbedNode. Verifies the wiring in
+        // ProbeAndRecordVerboseAsync; the algorithm's own filters and
+        // learned-route effects are tested in PassiveLearningAlgorithmTests.
+        await database.UpsertNeighbour("N0SRC-9", bearerPort: 1);
+        var captured = new RecordingRoutingAlgorithm();
+        var sched = MakeScheduler(
+            new RecordingTransport(("N0SRC-9",
+                "DAPPSv1>\n" +
+                "peer N0AAA-9 source=n port=2\n" +
+                "peer N0BBB-9 source=d\n" +
+                "end\n")),
+            routingAlgorithm: captured,
+            routingContext: new StubRoutingContext());
+
+        await sched.ProbeAndRecordAsync("N0US", "N0SRC-9", 1, CancellationToken.None);
+
+        captured.Calls.Should().ContainSingle();
+        var call = captured.Calls[0];
+        call.AskedPeer.Should().Be("N0SRC-9");
+        call.Peers.Select(p => p.Callsign).Should().BeEquivalentTo(new[] { "N0AAA-9", "N0BBB-9" });
+    }
+
+    [Fact]
+    public async Task ProbeAndRecord_SuccessfulProbeNoPeers_DoesNotCallRoutingAlgorithm()
+    {
+        await database.UpsertNeighbour("N0EMPTY-9", bearerPort: 1);
+        var captured = new RecordingRoutingAlgorithm();
+        var sched = MakeScheduler(
+            new RecordingTransport(("N0EMPTY-9", "DAPPSv1>\nend\n")),
+            routingAlgorithm: captured,
+            routingContext: new StubRoutingContext());
+
+        await sched.ProbeAndRecordAsync("N0US", "N0EMPTY-9", 1, CancellationToken.None);
+
+        captured.Calls.Should().BeEmpty(
+            "no peers means nothing to teach the routing algorithm; the hook fires only when there's at least one transitive callsign");
+    }
+
+    [Fact]
+    public async Task ProbeAndRecord_FailedProbe_DoesNotCallRoutingAlgorithm()
+    {
+        await database.UpsertNeighbour("N0DEAD-9", bearerPort: 1);
+        var captured = new RecordingRoutingAlgorithm();
+        var sched = MakeScheduler(
+            new RecordingTransport(("N0DEAD-9", "no prompt")),
+            routingAlgorithm: captured,
+            routingContext: new StubRoutingContext());
+
+        await sched.ProbeAndRecordAsync("N0US", "N0DEAD-9", 1, CancellationToken.None);
+
+        captured.Calls.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task SweepAsync_SuccessAfterFailure_ResetsCounter()
     {
         await database.UpsertNeighbour("N0FLAP-9", bearerPort: 1);
@@ -410,11 +469,16 @@ public sealed class ProbeSchedulerServiceTests : IAsyncLifetime
     private ProbeSchedulerService MakeScheduler(
         IDappsOutboundTransport transport,
         TimeSpan? minInterProbeDelay = null,
-        TimeSpan? maxInterProbeDelay = null)
+        TimeSpan? maxInterProbeDelay = null,
+        dapps.core.Routing.IRoutingAlgorithm? routingAlgorithm = null,
+        dapps.core.Routing.IRoutingContext? routingContext = null)
     {
         var prober = new NodeProber(transport, TimeProvider.System, NullLoggerFactory.Instance, NullLogger<NodeProber>.Instance);
         var opts = MakeOptions(new SystemOptions { Callsign = "N0US", DefaultBearerPort = 7, ProbingEnabled = true });
-        return new ProbeSchedulerService(prober, database, opts, TimeProvider.System, NullLogger<ProbeSchedulerService>.Instance)
+        return new ProbeSchedulerService(
+            prober, database, opts, TimeProvider.System, NullLogger<ProbeSchedulerService>.Instance,
+            routingAlgorithm: routingAlgorithm,
+            routingContext: routingContext)
         {
             // Tests skip the 15-minute startup grace; ExecuteAsync isn't
             // exercised here, but if it were, this lets the loop fire
@@ -467,5 +531,61 @@ public sealed class ProbeSchedulerServiceTests : IAsyncLifetime
             public Stream Stream { get; } = stream;
             public ValueTask DisposeAsync() { Stream.Dispose(); return ValueTask.CompletedTask; }
         }
+    }
+
+    /// <summary>Stub routing algorithm that records every
+    /// <see cref="dapps.core.Routing.IRoutingAlgorithm.ObserveProbeOutcomeAsync"/>
+    /// call for assertion. Other hooks are noops - the wiring tests
+    /// don't exercise them.</summary>
+    private sealed class RecordingRoutingAlgorithm : dapps.core.Routing.IRoutingAlgorithm
+    {
+        public List<(string AskedPeer, IReadOnlyList<dapps.client.DappsProtocolClient.DiscoveredPeerInfo> Peers)> Calls { get; } = new();
+
+        public Task<dapps.core.Routing.RouteDecision> ResolveAsync(DbMessage message, dapps.core.Routing.IRoutingContext ctx, CancellationToken ct)
+            => Task.FromResult<dapps.core.Routing.RouteDecision>(new dapps.core.Routing.RouteDecision.Unreachable());
+
+        public Task ObserveInboundAsync(dapps.client.Backhaul.BackhaulMessage message, string linkSourceCallsign, dapps.core.Routing.IRoutingContext ctx, CancellationToken ct)
+            => Task.CompletedTask;
+
+        public Task ObserveForwardOutcomeAsync(DbMessage message, dapps.client.Backhaul.BackhaulRoute attemptedRoute, dapps.client.Backhaul.BackhaulSendResult result, dapps.core.Routing.IRoutingContext ctx, CancellationToken ct)
+            => Task.CompletedTask;
+
+        public Task ObserveProbeOutcomeAsync(string askedPeerCallsign, IReadOnlyList<dapps.client.DappsProtocolClient.DiscoveredPeerInfo> peers, dapps.core.Routing.IRoutingContext ctx, CancellationToken ct)
+        {
+            Calls.Add((askedPeerCallsign, peers));
+            return Task.CompletedTask;
+        }
+
+        public Task RunAsync(dapps.core.Routing.IRoutingContext ctx, CancellationToken ct)
+            => Task.CompletedTask;
+    }
+
+    /// <summary>Minimal in-memory routing context that satisfies the
+    /// <see cref="dapps.core.Routing.IRoutingContext"/> interface for
+    /// the wiring tests. Every method that the
+    /// <see cref="RecordingRoutingAlgorithm"/> doesn't touch is a noop.</summary>
+    private sealed class StubRoutingContext : dapps.core.Routing.IRoutingContext
+    {
+        public string LocalCallsign => "N0US";
+        public int DefaultBearerPort => 0;
+
+        public Task<IReadOnlyList<DbNeighbour>> GetNeighboursAsync(CancellationToken ct)
+            => Task.FromResult<IReadOnlyList<DbNeighbour>>(Array.Empty<DbNeighbour>());
+
+        public Task<IReadOnlyList<DbDiscoveredPeer>> GetDiscoveredPeersAsync(CancellationToken ct)
+            => Task.FromResult<IReadOnlyList<DbDiscoveredPeer>>(Array.Empty<DbDiscoveredPeer>());
+
+        public Task<DbNeighbour?> ResolveRouteHintAsync(string destinationBaseCallsign, CancellationToken ct) => Task.FromResult<DbNeighbour?>(null);
+        public Task<DbNeighbour?> GetNeighbourByCallsignAsync(string callsign, CancellationToken ct) => Task.FromResult<DbNeighbour?>(null);
+        public Task UpsertLearnedRouteAsync(string destinationBaseCallsign, string nextHopCallsign, CancellationToken ct) => Task.CompletedTask;
+        public Task<DbLearnedRoute?> GetLearnedRouteAsync(string destinationBaseCallsign, CancellationToken ct) => Task.FromResult<DbLearnedRoute?>(null);
+        public Task RecordLearnedRouteSuccessAsync(string destinationBaseCallsign, CancellationToken ct) => Task.CompletedTask;
+        public Task<int> RecordLearnedRouteFailureAsync(string destinationBaseCallsign, int invalidationThreshold, CancellationToken ct) => Task.FromResult(0);
+        public Task<bool> HasSeenFloodAsync(string messageId, string linkSourceCallsign, CancellationToken ct) => Task.FromResult(false);
+        public Task RecordFloodSeenAsync(string messageId, string linkSourceCallsign, CancellationToken ct) => Task.CompletedTask;
+        public Task UpsertDiscoveredPathAsync(string destinationBaseCallsign, IReadOnlyList<string> intermediates, CancellationToken ct) => Task.CompletedTask;
+        public Task<DbDiscoveredPath?> GetDiscoveredPathAsync(string destinationBaseCallsign, CancellationToken ct) => Task.FromResult<DbDiscoveredPath?>(null);
+        public Task RecordDiscoveredPathSuccessAsync(string destinationBaseCallsign, CancellationToken ct) => Task.CompletedTask;
+        public Task<int> RecordDiscoveredPathFailureAsync(string destinationBaseCallsign, int invalidationThreshold, CancellationToken ct) => Task.FromResult(0);
     }
 }

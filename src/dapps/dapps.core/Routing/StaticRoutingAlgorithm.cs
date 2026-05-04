@@ -94,6 +94,9 @@ public sealed class StaticRoutingAlgorithm(ILogger<StaticRoutingAlgorithm> logge
     public Task ObserveForwardOutcomeAsync(DbMessage message, BackhaulRoute attemptedRoute, BackhaulSendResult result, IRoutingContext ctx, CancellationToken ct)
         => Task.CompletedTask;
 
+    public Task ObserveProbeOutcomeAsync(string askedPeerCallsign, IReadOnlyList<dapps.client.DappsProtocolClient.DiscoveredPeerInfo> peers, IRoutingContext ctx, CancellationToken ct)
+        => Task.CompletedTask;
+
     public Task RunAsync(IRoutingContext ctx, CancellationToken ct)
         => Task.CompletedTask;
 }

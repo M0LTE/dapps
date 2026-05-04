@@ -1,5 +1,6 @@
 using dapps.client.Discovery;
 using dapps.core.Models;
+using dapps.core.Routing;
 using Microsoft.Extensions.Options;
 
 namespace dapps.core.Services;
@@ -31,7 +32,9 @@ public sealed class ProbeSchedulerService(
     AirtimeAccountant? airtime = null,
     OutboundActivityTracker? activityTracker = null,
     OperationalMetrics? metrics = null,
-    TransmissionAuditService? transmissionAudit = null) : BackgroundService
+    TransmissionAuditService? transmissionAudit = null,
+    IRoutingAlgorithm? routingAlgorithm = null,
+    IRoutingContext? routingContext = null) : BackgroundService
 {
     /// <summary>
     /// Plan B7 - clock the strategy dispatcher consults for "what time
@@ -281,6 +284,29 @@ public sealed class ProbeSchedulerService(
         if (result.Success && result.DiscoveredPeers.Count > 0)
         {
             await PersistTransitiveDiscoveriesAsync(result);
+
+            // B6.1 follow-up: feed the (peer, asked-peer) signal into
+            // the routing algorithm's learned-route graph too. The
+            // probe scheduler stores transitive discoveries as
+            // DbProbedNode candidates; without this hook, the routing
+            // resolver wouldn't see them until a future inbound
+            // message taught the same fact passively. The algorithm
+            // applies its own filters (next-hop must be a manual
+            // neighbour, etc.) and is a noop on Static.
+            if (routingAlgorithm is not null && routingContext is not null)
+            {
+                try
+                {
+                    await routingAlgorithm.ObserveProbeOutcomeAsync(
+                        result.Callsign, result.DiscoveredPeers, routingContext, ct);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogDebug(ex,
+                        "Routing algorithm rejected probe-outcome observation for {0}",
+                        result.Callsign);
+                }
+            }
         }
         if (transmissionAudit is { } ta)
         {
