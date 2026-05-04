@@ -135,6 +135,8 @@ When enabled:
 
 Not PKI-grade by design (no TLS, OAuth, JWT, 2FA). For TLS, sysops front the REST API with a reverse proxy.
 
+**Browser support (MQTT-over-WebSocket).** The embedded broker now runs alongside Kestrel via MQTTnet.AspNetCore - the same broker instance backs the TCP listener on `:MqttPort` AND a WebSocket endpoint at `/mqtt` on the dashboard's HTTP listener. Browser apps subscribe to `dapps/in/<app>` and publish to `dapps/out/<app>/<dest>` directly; no REST proxy needed for real-time delivery. CONNECT-time auth + topic-scope interceptors are shared between transports. WebSocket has no CORS preflight, so a browser app served from `file://`, a static server, or a different host can speak to a DAPPS daemon without operator-side CORS configuration.
+
 ## Phase B - peer discovery and routing evolution
 
 **Goal:** DAPPS nodes find each other on a shared frequency without the sysop hand-coding neighbour tables, and route learning evolves toward a transport-agnostic automatic-routing model.

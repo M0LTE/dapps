@@ -5,6 +5,8 @@ using dapps.core.Routing;
 using dapps.core.Services;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using MQTTnet;
+using MQTTnet.Server;
 using SQLite;
 
 namespace dapps.core.tests;
@@ -67,8 +69,9 @@ public sealed class MeshCoreSourceRoutedForwardingTests : IAsyncLifetime
         capture = new CapturingBackhaul();
 
         var tokens = new AppTokenStore(NullLogger<AppTokenStore>.Instance);
+        var mqttServer = new MqttFactory().CreateMqttServer(new MqttServerOptionsBuilder().Build());
         var broker = new MqttBrokerService(
-            NullLogger<MqttBrokerService>.Instance, optionsMonitor, database, tokens);
+            NullLogger<MqttBrokerService>.Instance, optionsMonitor, database, tokens, mqttServer);
         var events = new InboundEventBus();
         var routingContext = new DatabaseRoutingContext(database, optionsMonitor);
         var staticAlg = new StaticRoutingAlgorithm(NullLogger<StaticRoutingAlgorithm>.Instance);

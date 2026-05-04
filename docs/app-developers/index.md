@@ -24,6 +24,7 @@ It does **not** suit:
 DAPPS exposes two parallel interfaces for local apps. They share the same queue; pick whichever suits your language and runtime.
 
 - **MQTT** (embedded broker, default port 1883). Subscribe to `dapps/in/<app>` for inbound, publish to `dapps/out/<app>/<dest>` for outbound, publish the message id to `dapps/ack/<app>` to acknowledge. Push model, real-time delivery.
+- **MQTT-over-WebSocket** at `/mqtt` on the dashboard's HTTP listener. Same broker, same topics, same auth as the TCP MQTT - browsers (where raw TCP isn't available) can subscribe and publish directly. Sub-protocol `mqtt`. The on-tree `examples/file-transfer/` browser app is a worked example.
 - **REST** (`/AppApi/*` on the dashboard's HTTP listener). `POST /AppApi/outbound` to submit, `GET /AppApi/inbound/{app}` to poll, `POST /AppApi/inbound/{app}/{id}/ack` to acknowledge. Pull model, easy to test with `curl`.
 
 A single app picks one. Different apps on the same node can pick different ones independently.

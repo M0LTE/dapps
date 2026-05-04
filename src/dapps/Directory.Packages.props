@@ -25,6 +25,12 @@
     <!-- Storage / messaging -->
     <PackageVersion Include="sqlite-net-pcl" Version="1.9.172" />
     <PackageVersion Include="MQTTnet" Version="4.3.7.1207" />
+    <!-- MQTTnet's ASP.NET Core integration. Hosts the same MQTT broker
+         instance under Kestrel so a /mqtt WebSocket endpoint shares
+         auth + topic state with the TCP listener on :1883. Browsers
+         can then speak MQTT directly (no REST round-trip per-message).
+         Locked to the same 4.3.7.1207 patch as MQTTnet itself. -->
+    <PackageVersion Include="MQTTnet.AspNetCore" Version="4.3.7.1207" />
 
     <!-- Testing - xunit.v3 + Microsoft Testing Platform native runner.
          Replaces xunit + xunit.runner.visualstudio + Microsoft.NET.Test.Sdk. -->

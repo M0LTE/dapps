@@ -7,6 +7,8 @@ using dapps.core.Services;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
+using MQTTnet;
+using MQTTnet.Server;
 using SQLite;
 
 namespace dapps.core.tests;
@@ -247,11 +249,13 @@ public sealed class F2FragmentationTests : IAsyncLifetime
         });
         var routingContext = new DatabaseRoutingContext(database, optionsMonitor);
         var routingAlgorithm = new StaticRoutingAlgorithm(NullLogger<StaticRoutingAlgorithm>.Instance);
+        var mqttServer = new MqttFactory().CreateMqttServer(new MqttServerOptionsBuilder().Build());
         var brokerStub = new MqttBrokerService(
             NullLogger<MqttBrokerService>.Instance,
             optionsMonitor,
             database,
-            new AppTokenStore(NullLogger<AppTokenStore>.Instance));
+            new AppTokenStore(NullLogger<AppTokenStore>.Instance),
+            mqttServer);
         // We never call StartAsync - InjectInboundMessage is a no-op
         // when the broker isn't started, which is exactly what these
         // shape tests want (they assert against DbMessage / DbFragment
