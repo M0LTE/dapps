@@ -22,6 +22,11 @@ namespace dapps.core.Routing;
 /// <item><see cref="ObserveForwardOutcomeAsync"/> - once per actual
 ///   send, with success/failure result. Algorithms invalidate stale
 ///   routes on failure and confirm liveness on success.</item>
+/// <item><see cref="ObserveProbeOutcomeAsync"/> - once per successful
+///   B6.1 probe whose <c>peers</c> response carries one or more
+///   transitively-discovered callsigns. Algorithms can teach themselves
+///   reachability for those callsigns (the asked peer is a working
+///   next-hop to each).</item>
 /// <item><see cref="RunAsync"/> - long-running background loop. Empty
 ///   for purely-reactive algorithms; populated for proactive ones
 ///   (Babel-style periodic announcements, B6.1 probe-and-map, etc.).
@@ -59,6 +64,19 @@ public interface IRoutingAlgorithm
     /// routes and bumping success counters on routes that did work.
     /// </summary>
     Task ObserveForwardOutcomeAsync(DbMessage message, BackhaulRoute attemptedRoute, BackhaulSendResult result, IRoutingContext ctx, CancellationToken ct);
+
+    /// <summary>
+    /// Hook called by <see cref="dapps.core.Services.ProbeSchedulerService"/>
+    /// after a successful probe whose <c>peers</c> exchange returned at
+    /// least one peer. The algorithm can teach itself "to reach
+    /// <paramref name="peers"/>[i].Callsign, send via
+    /// <paramref name="askedPeerCallsign"/>" - the same shape as
+    /// <see cref="ObserveInboundAsync"/>'s reverse-route teach, but
+    /// triggered by an active probe rather than passive observation.
+    /// Without this hook the probe-derived knowledge would only live in
+    /// <c>DbProbedNode</c> and never reach the routing graph.
+    /// </summary>
+    Task ObserveProbeOutcomeAsync(string askedPeerCallsign, IReadOnlyList<dapps.client.DappsProtocolClient.DiscoveredPeerInfo> peers, IRoutingContext ctx, CancellationToken ct);
 
     /// <summary>
     /// Optional long-running loop. Purely reactive algorithms return

@@ -4,16 +4,16 @@ Living planning document. Aim is to get DAPPS into the hands of node operators w
 
 ## Where we are now
 
-The protocol is fully specified (`README.md`'s "On-air protocol" section, including F4 versioning policy). The implementation matches the spec; the on-air format is byte-validated against real BPQ in CI via `m0lte/linbpq` (Testcontainers-managed). Local apps talk to DAPPS via MQTT (durable, idempotent on `dapps-id`) or REST. TTL forwarding works across multi-hop topologies. F1 end-to-end source tracking, F2 multi-part messages, F3 `rev` polling (opportunistic + scheduled) all done. B5 passive-learning routing + B5.1 MeshCore-flavoured DSR alternative both shipped. B6.1 connected-mode probe-and-map with transitive `peers` discovery, B6.2 HF-NVIS solicit-and-listen (on-demand + scheduled cadence), B7 single-counter discovery airtime budget with probe strategies, all live. C1 single-file native binaries publish via CI on five platforms; C2 env-var seeding plus `dapps --show-config`; C3 `/Health`, `/Operational`, decision-events ring + structured journal mirror, MQTT heartbeat; C4 install/upgrade docs in the README; C5.1 update-availability banner + C5.2 triggered self-update via privileged `dapps-updater.service`. D1-D4 dashboard MVP. E1-E4 developer guide complete. Phase M (#81-#85) - MCP server at `/mcp` with 26 operator-facing tools.
+The protocol is fully specified (`README.md`'s "On-air protocol" section, including F4 versioning policy). The implementation matches the spec; the on-air format is byte-validated against real BPQ in CI via `m0lte/linbpq` (Testcontainers-managed). Local apps talk to DAPPS via MQTT (durable, idempotent on `dapps-id`) or REST. TTL forwarding works across multi-hop topologies. F1 end-to-end source tracking, F2 multi-part messages, F3 `rev` polling (opportunistic + scheduled) all done. B5 passive-learning routing + B5.1 MeshCore-flavoured DSR alternative both shipped. B6.1 connected-mode probe-and-map with transitive `peers` discovery (probe results now feed B5's learned-route graph too), B6.2 HF-NVIS solicit-and-listen (on-demand + scheduled cadence), B7 single-counter discovery airtime budget with probe strategies, all live. **H3 RHPv2 bearer** for XRouter is done (DAPPS_NODE_BEARER=rhpv2; mainline BPQ RHP still awaiting upstream support). C1 single-file native binaries publish via CI on five platforms; C2 env-var seeding plus `dapps --show-config`; C3 `/Health`, `/Operational`, decision-events ring + structured journal mirror, MQTT heartbeat; C4 install/upgrade docs in the README; C5.1 update-availability banner + C5.2 triggered self-update via privileged `dapps-updater.service`. D1-D4 dashboard MVP. E1-E4 developer guide complete. Phase M (#81-#85) - MCP server at `/mcp` with 26 operator-facing tools.
 
-What's left is in the "Suggested ordering" near the bottom plus the open H bearer-integration phase. The biggest remaining items are external-blocked (H1/H2 MeshCore hardware, H3 RHP awaiting BPQ support), parked (C5.3 scheduled auto-update - banner + one-click + `trigger_update` MCP cover today's operator population; F5 signing - design parked, see the F5 section for the recommended shape when it gets pulled forward), or not-yet-prioritised (Phase G second-language reference impl, scratchpad phone messenger app).
+What's left is in the "Suggested ordering" near the bottom plus the open H bearer-integration phase. The biggest remaining items are external-blocked (H1/H2 MeshCore hardware; H3 mainline-BPQ RHP awaiting upstream support - the XRouter half of H3 has shipped), parked (C5.3 scheduled auto-update - banner + one-click + `trigger_update` MCP cover today's operator population; F5 signing - design parked, see the F5 section for the recommended shape when it gets pulled forward), or not-yet-prioritised (Phase G second-language reference impl, scratchpad phone messenger app).
 
 ## Tom's scratchpad of ideas
 
 - ~~when looking at long distance routing what about looking into the routing implementation in Meshcore?~~ *(actioned - see B5.1; selectable alongside the default passive-flood stack)*
 - what about using Meshcore as a transport? *(separate question; tracked under Phase H1)*
 - I think we should look at shipping an actual usable app, ideally an actual phone app, maybe a messenger app. Or maybe a long form mail app so as not to conflict with whatsapp.
-- RHP (v2?) support
+- ~~RHP (v2?) support~~ *(done for XRouter via `RhpV2.Client` 0.2.2; mainline BPQ RHP still upstream-blocked)*
 - ~~MCP server endpoint exposing some DAPPS surface to LLMs~~ *(in progress - see Phase M)*
 - ~~**Global airtime budget for discovery.**~~ *(actioned - see B7 below)*
 - ~~**Probe strategies, not bare intervals.**~~ *(actioned - see B7 below)*
@@ -150,7 +150,7 @@ B5 doesn't depend on H, and H doesn't gate B5. A future DAPPS deployment could s
 
 ### B1. Discovery seam *(done - channels are first-class)*
 
-A bearer (AGW, UDP multicast, future MeshCore) can serve many *channels*: AGW BPQ port 1 (VHF) and BPQ port 3 (AXIP) share one AGW socket; future MeshCore radios are per-channel; UDP can hold multiple multicast groups. The seam:
+A bearer (AGW, UDP multicast, future MeshCore) can serve many *channels*: AGW bearer port 1 (VHF) and bearer port 3 (AXIP) share one AGW socket; future MeshCore radios are per-channel; UDP can hold multiple multicast groups. The seam:
 
 ```csharp
 public interface IDiscoveryBearer : IAsyncDisposable
@@ -169,7 +169,7 @@ public interface IDiscoveryBearer : IAsyncDisposable
 `DbDiscoveryChannel` table - one row per channel - is the authoritative configuration. Fields:
 
 - `Bearer` (`agw` / `udp` / future `meshcore`)
-- `ChannelKey` (bearer-specific: BPQ port byte, multicast endpoint, MeshCore radio+channel)
+- `ChannelKey` (bearer-specific: bearer port for AGW, multicast endpoint for UDP, MeshCore radio+channel for that bearer)
 - `LinkClass` enum: `InternetIp` / `LanMulticast` / `VhfUhfFm` / `Hf` / `MeshCore` / `Unknown`
 - `BeaconIntervalSeconds`, `AdvertisedTtlSeconds`, `CostHint` - default per `LinkClass`, operator-overridable
 - `Enabled`, `Notes`
@@ -244,8 +244,8 @@ Phase 2 adds a new **`peers` command on the DAPPSv1 protocol** (`who` aliased) a
 
 **Phase 2b - node-prompt-then-`DAPPS` discovery primitive:** `NodeProber.ProbeViaNodeCallAsync` connects to a BPQ NODECALL (not a DAPPS APPLICATION callsign), reads the node banner using a generic "data-then-idle" heuristic (no banner-text pattern-matching - wait until the wire is silent for 500 ms after at least one byte arrived, treat that as "prompt waiting for input"), sends `{applicationCommand}\r` (default `DAPPS`), then runs the regular DAPPSv1 handshake + peers query. Banner-text-agnostic so it works against any BPQ-style prompt regardless of the operator's banner config. MCP tool `probe_via_nodecall(nodeCall, bearerPort, applicationCommand?)` for operator-triggered probing. Three new unit tests pin the idle-detection contract (empty stream → empty result; data + EOF → return data; data + delay + more data → return first batch only).
 
-**Phase 2b auto-discovery wiring:** `SystemOptions.AutoDiscoverViaNodeCall` (off by default) and `NodePromptApplicationCommand` (default `DAPPS`). When the toggle is on, every inbound AGW DAPPS beacon causes `DiscoveryService.UpsertAsync` to derive the BASE callsign of the source (e.g. heard `M0LTE-9` → seed `M0LTE`) and insert a `DbProbedNode` row with `Source = node-prompt:<source-callsign>` and the BPQ port hint from the beacon. The scheduler picks these up alongside regular probes; `ProbeAndRecordVerboseAsync` looks up the existing row first and dispatches to `ProbeViaNodeCallAsync` when the source flag matches, falling back to the standard DAPPS-callsign path otherwise. Self-callsign filter prevents seeding our own NODECALL. Existing probe rows are never clobbered - auto-seed only fires when no row exists. Both knobs surfaced via `update_config` MCP and the `/Config` form. UDP beacons are skipped (UDP isn't AGW-routable).
-**Still queued:** feeding probe results into B5's learned-route graph (currently they live in `DbProbedNode` only).
+**Phase 2b auto-discovery wiring:** `SystemOptions.AutoDiscoverViaNodeCall` (off by default) and `NodePromptApplicationCommand` (default `DAPPS`). When the toggle is on, every inbound AGW DAPPS beacon causes `DiscoveryService.UpsertAsync` to derive the BASE callsign of the source (e.g. heard `M0LTE-9` → seed `M0LTE`) and insert a `DbProbedNode` row with `Source = node-prompt:<source-callsign>` and the bearer port hint from the beacon. The scheduler picks these up alongside regular probes; `ProbeAndRecordVerboseAsync` looks up the existing row first and dispatches to `ProbeViaNodeCallAsync` when the source flag matches, falling back to the standard DAPPS-callsign path otherwise. Self-callsign filter prevents seeding our own NODECALL. Existing probe rows are never clobbered - auto-seed only fires when no row exists. Both knobs surfaced via `update_config` MCP and the `/Config` form. UDP beacons are skipped (UDP isn't AGW-routable).
+**Probe → learned-route wiring:** `IRoutingAlgorithm` grew an `ObserveProbeOutcomeAsync(askedPeer, peers, ctx)` hook. `ProbeSchedulerService.ProbeAndRecordVerboseAsync` calls it after every successful probe-with-peers, alongside the existing `DbProbedNode` candidate persistence. `PassiveLearningAlgorithm`'s implementation upserts a learned route `(peerBase → askedPeer)` per reported peer, using the same filters as `ObserveInboundAsync` (skip self, skip single-hop self-loop, require asked-peer to be a manual neighbour - resolver discards the row otherwise). Static / FloodFallback / MeshCoreLike implementations are noop / pass-through. 9 new tests covering the algorithm filters and the wiring (`PassiveLearningAlgorithmTests`, `ProbeSchedulerServiceTests`).
 
 **Convention:** "DAPPS lives here" = an `APPLICATION` line whose alias is `DAPPS` (typing `DAPPS` at the node prompt connects to the local DAPPSv1 instance). Already what we recommend; documented in the install README. Phase 2b leans on this.
 
@@ -393,7 +393,7 @@ Both pages link from the dashboard header. AdminAuthMiddleware gates them behind
 
 ### D3. Configuration UI *(done)*
 
-`/Config` `<details>` block on the dashboard exposes every operator-tunable knob: callsign, BPQ AGW host/port, MQTT port, UDP listener, default BPQ port, auth-required, update-check, probing toggles + cadence + strategy + overnight window + quiet window, scheduled-poll toggle + interval, opportunistic poll, F2 fragment threshold + reassembly timeout, B7 discovery airtime budget, C3 heartbeat toggle + interval, B5 routing algorithm. Restart-required fields are flagged in the form blurb. Save POSTs the full SystemOptions row to `/Config`.
+`/Config` `<details>` block on the dashboard exposes every operator-tunable knob: callsign, packet-node host/port (AGW + RHPv2), MQTT port, UDP listener, default bearer port, auth-required, update-check, probing toggles + cadence + strategy + overnight window + quiet window, scheduled-poll toggle + interval, opportunistic poll, F2 fragment threshold + reassembly timeout, B7 discovery airtime budget, C3 heartbeat toggle + interval, B5 routing algorithm. Restart-required fields are flagged in the form blurb. Save POSTs the full SystemOptions row to `/Config`.
 
 ### D4. Auth on the UI *(done)*
 
@@ -544,9 +544,9 @@ Use a MeshCore companion radio (e.g. Heltec / TTGO LoRa boards running the MeshC
 
 Same hardware as H1 but via the MeshCore KISS interface - raw frames rather than companion-level datagrams. Trades convenience for control. Same `BackhaulMessage` codec; same packetiser. Probably done after H1 once H1 has shaken out the wire-shape questions.
 
-### H3. RHP (Routed Host Protocol) bearer
+### H3. RHPv2 (Remote Host Protocol v2) bearer *(XRouter half done)*
 
-When BPQ adds RHP UI-frame support, port the AGW UI bearer over to RHP as a sibling. Today RHP doesn't expose UI frames in BPQ's implementation; the discovery seam is shaped to accept it as soon as it does.
+XRouter half **done** (PR #107): `Rhpv2OutboundTransport` + `Rhpv2InboundService` against `RhpV2.Client` 0.2.2. `DAPPS_NODE_BEARER=rhpv2` flips the bearer selector. Required (not optional) for DAPPS-on-XRouter because XRouter scopes the AGW callsign claim per-TCP-connection, breaking DAPPS's per-outbound-fresh-connection pattern; RHPv2 multiplexes inbound and outbound over a single connection with handle-based addressing, sidestepping the collision. Mainline BPQ does not yet ship RHPv2; the bearer is in place for it whenever it does. Discovery over RHPv2 (UI-frame-equivalent) is still pending - DAPPS uses AGW for discovery beacons today and RHPv2 for sessions; needs follow-up if XRouter exposes a UI-frame surface on RHPv2.
 
 ### H4. Other bearers as they show up
 

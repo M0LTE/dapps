@@ -142,6 +142,53 @@ public sealed class PassiveLearningAlgorithm(
         }
     }
 
+    /// <summary>
+    /// B6.1 follow-up: turn a probe's <c>peers</c> response into learned
+    /// routes. For each peer Y that the asked peer X returned, teach
+    /// "to reach Y, send via X" - same shape as the passive-learning
+    /// teach but driven by an active probe rather than inbound traffic.
+    ///
+    /// Filter set mirrors <see cref="ObserveInboundAsync"/>:
+    /// <list type="bullet">
+    /// <item>Skip Y == us (the asked peer always reports us as a peer
+    ///   since we just talked to them; that's noise).</item>
+    /// <item>Skip Y base == X base (single-hop self-loop - we'd just
+    ///   duplicate the direct-neighbour entry).</item>
+    /// <item>Require X to be a manual neighbour - the resolver re-checks
+    ///   the next-hop in <see cref="DbNeighbour"/> at use-time, so a
+    ///   learned route through a non-neighbour next-hop is dead weight.</item>
+    /// </list>
+    /// </summary>
+    public async Task ObserveProbeOutcomeAsync(
+        string askedPeerCallsign,
+        IReadOnlyList<dapps.client.DappsProtocolClient.DiscoveredPeerInfo> peers,
+        IRoutingContext ctx,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrEmpty(askedPeerCallsign) || peers.Count == 0) return;
+
+        var ourBase = ctx.LocalCallsign.Split('-')[0];
+        var askedBase = askedPeerCallsign.Split('-')[0];
+
+        // Resolver discards learned routes whose next-hop isn't a
+        // neighbour. No point inserting in that case.
+        var nextHopNeighbour = await ctx.GetNeighbourByCallsignAsync(askedPeerCallsign, ct);
+        if (nextHopNeighbour is null) return;
+
+        foreach (var peer in peers)
+        {
+            if (string.IsNullOrWhiteSpace(peer.Callsign)) continue;
+            var peerBase = peer.Callsign.Split('-')[0];
+            if (string.Equals(peerBase, ourBase, StringComparison.OrdinalIgnoreCase)) continue;
+            if (string.Equals(peerBase, askedBase, StringComparison.OrdinalIgnoreCase)) continue;
+
+            await ctx.UpsertLearnedRouteAsync(peerBase, askedPeerCallsign, ct);
+            logger.LogDebug(
+                "Learned route from probe peers: {0} reachable via {1}",
+                peerBase, askedPeerCallsign);
+        }
+    }
+
     public Task RunAsync(IRoutingContext ctx, CancellationToken ct)
         => Task.CompletedTask;
 }
