@@ -1,0 +1,734 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DAPPS letters</title>
+<!-- mqtt.js v5. Vendor it next to this file (see README) for offline use. -->
+<script src="https://unpkg.com/mqtt@5/dist/mqtt.min.js"></script>
+<style>
+  :root {
+    --bg: #1c1f24;
+    --panel: #25292f;
+    --panel-2: #2c3037;
+    --border: #353a42;
+    --fg: #d8dbe1;
+    --muted: #8a8f99;
+    --accent: #5fb3ff;
+    --ok: #6cc070;
+    --warn: #d97c4e;
+    --err: #e25b5b;
+    --unread-bg: #2d3540;
+    --mono: ui-monospace, "Cascadia Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body {
+    background: var(--bg); color: var(--fg);
+    font-family: var(--sans); line-height: 1.45;
+    height: 100vh; display: flex; flex-direction: column;
+  }
+  button {
+    cursor: pointer;
+    background: var(--accent); color: #0c1014;
+    border: 1px solid var(--accent); border-radius: 4px;
+    padding: 0.4rem 0.8rem; font: inherit; font-weight: 600;
+  }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  button.secondary {
+    background: var(--panel); color: var(--fg);
+    border-color: var(--border); font-weight: 400;
+  }
+  input, textarea {
+    background: #1a1d21; color: var(--fg);
+    border: 1px solid var(--border); border-radius: 4px;
+    padding: 0.4rem 0.6rem; font: inherit;
+  }
+  textarea { font-family: var(--sans); resize: vertical; min-height: 6rem; }
+  .mono { font-family: var(--mono); font-size: 0.9rem; }
+  .muted { color: var(--muted); }
+  a { color: var(--accent); }
+
+  /* ── Top bar ─────────────────────────────────────────────────── */
+  header {
+    display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;
+    background: var(--panel); border-bottom: 1px solid var(--border);
+    padding: 0.6rem 1rem;
+  }
+  header h1 { font-size: 1.05rem; margin: 0; font-weight: 600; }
+  header h1 .muted { font-weight: 400; font-size: 0.82rem; }
+  header .me {
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 4px;
+    padding: 0.2rem 0.5rem; font-size: 0.85rem;
+  }
+  header .me .mono { font-size: 0.85rem; }
+  header .spacer { flex: 1; }
+  header .conn { font-size: 0.85rem; }
+  .dot {
+    display: inline-block; width: 0.7rem; height: 0.7rem; border-radius: 50%;
+    background: var(--border); margin-right: 0.3rem; vertical-align: -1px;
+  }
+  .dot.ok { background: var(--ok); }
+  .dot.warn { background: var(--warn); }
+  .dot.err { background: var(--err); }
+
+  /* ── Main layout ─────────────────────────────────────────────── */
+  main { flex: 1; display: grid; grid-template-columns: 320px 1fr; min-height: 0; }
+  @media (max-width: 700px) { main { grid-template-columns: 1fr; } }
+
+  #convList {
+    background: var(--panel); border-right: 1px solid var(--border);
+    overflow-y: auto; min-height: 0;
+  }
+  #convList .header-row {
+    display: flex; align-items: center; gap: 0.4rem;
+    padding: 0.6rem 0.8rem; border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; background: var(--panel); z-index: 1;
+  }
+  #convList .header-row h2 { margin: 0; font-size: 0.95rem; font-weight: 600; flex: 1; }
+  #convList .empty { padding: 1rem; color: var(--muted); font-style: italic; font-size: 0.9rem; }
+  .conv-row {
+    padding: 0.7rem 0.9rem; border-bottom: 1px solid var(--border);
+    cursor: pointer; user-select: none;
+    display: grid; grid-template-columns: 1fr auto; gap: 0.3rem 0.6rem; align-items: baseline;
+  }
+  .conv-row:hover { background: var(--panel-2); }
+  .conv-row.active { background: var(--panel-2); }
+  .conv-row.unread { background: var(--unread-bg); }
+  .conv-row.unread:hover { background: var(--unread-bg); }
+  .conv-row .peer { font-family: var(--mono); font-weight: 600; }
+  .conv-row .ts { color: var(--muted); font-size: 0.78rem; }
+  .conv-row .preview {
+    grid-column: 1 / span 2;
+    color: var(--muted); font-size: 0.85rem;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .conv-row.unread .preview { color: var(--fg); }
+  .conv-row .badge {
+    background: var(--accent); color: #0c1014; font-size: 0.7rem; font-weight: 700;
+    padding: 0.05rem 0.4rem; border-radius: 999px; margin-left: 0.4rem;
+  }
+
+  #threadView { display: flex; flex-direction: column; min-height: 0; }
+  #threadView .empty {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    color: var(--muted); font-style: italic; padding: 2rem;
+  }
+  #threadHeader {
+    display: flex; align-items: center; gap: 0.6rem;
+    padding: 0.6rem 1rem; border-bottom: 1px solid var(--border);
+    background: var(--panel);
+  }
+  #threadHeader .peer { font-family: var(--mono); font-weight: 600; flex: 1; }
+  #threadHeader .back { display: none; }
+  @media (max-width: 700px) { #threadHeader .back { display: inline-block; } }
+
+  #threadList {
+    flex: 1; overflow-y: auto; padding: 1rem; min-height: 0;
+    display: flex; flex-direction: column; gap: 0.8rem;
+  }
+  .letter {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
+    padding: 0.8rem 1rem; max-width: 720px;
+  }
+  .letter.out { align-self: flex-end; border-color: var(--accent); background: var(--panel-2); }
+  .letter .letter-meta {
+    display: flex; gap: 0.6rem; align-items: baseline; flex-wrap: wrap;
+    font-size: 0.85rem; color: var(--muted); margin-bottom: 0.3rem;
+  }
+  .letter .letter-meta .from { font-family: var(--mono); color: var(--accent); font-weight: 600; }
+  .letter .subject { font-size: 1rem; font-weight: 600; margin-bottom: 0.4rem; }
+  .letter .subject.empty { font-style: italic; color: var(--muted); font-weight: 400; }
+  .letter .body { white-space: pre-wrap; word-wrap: break-word; }
+
+  #composer {
+    background: var(--panel); border-top: 1px solid var(--border);
+    padding: 0.8rem 1rem; display: flex; flex-direction: column; gap: 0.5rem;
+  }
+  #composer .row { display: flex; gap: 0.5rem; align-items: center; }
+  #composer .row.peer-row label { display: flex; flex-direction: column; gap: 0.2rem; flex: 1; font-size: 0.8rem; color: var(--muted); }
+  #composer input[name="subject"] { flex: 1; }
+  #composer textarea { width: 100%; }
+  #composer .footer {
+    display: flex; align-items: center; gap: 0.6rem;
+    font-size: 0.8rem; color: var(--muted);
+  }
+  #composer .footer .counter { flex: 1; }
+  #composer .footer .warn { color: var(--warn); }
+
+  /* ── Modal (first-run callsign + connect form + new conversation) */
+  .modal-back {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+    display: flex; align-items: center; justify-content: center; z-index: 10;
+  }
+  .modal {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    padding: 1.5rem; min-width: 320px; max-width: 480px;
+    display: flex; flex-direction: column; gap: 0.8rem;
+  }
+  .modal h3 { margin: 0; }
+  .modal label { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.85rem; }
+  .modal label span { color: var(--muted); }
+  .modal .actions { display: flex; gap: 0.6rem; justify-content: flex-end; margin-top: 0.4rem; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>DAPPS letters <span class="muted">long-form messenger</span></h1>
+  <span class="me" id="meBadge" hidden>you: <span class="mono" id="meCall">?</span> <a href="#" id="changeMe" class="muted" style="margin-left: 0.4rem; font-size: 0.78rem;">change</a></span>
+  <span class="spacer"></span>
+  <span class="conn">
+    <span class="dot" id="connDot"></span>
+    <span id="connText">disconnected</span>
+    <button id="connBtn" class="secondary" style="margin-left: 0.4rem;">Connect</button>
+  </span>
+</header>
+
+<main>
+
+  <aside id="convList">
+    <div class="header-row">
+      <h2>Conversations</h2>
+      <button id="newConvBtn" disabled>New letter</button>
+    </div>
+    <div id="convListBody">
+      <div class="empty">Connect to your DAPPS node to load.</div>
+    </div>
+  </aside>
+
+  <section id="threadView">
+    <div class="empty" id="threadEmpty">
+      Pick a conversation, or start a new letter.
+    </div>
+    <div id="threadHeader" hidden>
+      <button class="back secondary" id="backBtn">←</button>
+      <span class="peer" id="threadPeer">?</span>
+    </div>
+    <div id="threadList" hidden></div>
+    <div id="composer" hidden>
+      <div class="row peer-row" id="composerPeerRow" hidden>
+        <label>To<input id="composerPeer" type="text" placeholder="M0LTE-1" /></label>
+      </div>
+      <div class="row">
+        <input id="composerSubject" type="text" placeholder="Subject (optional)" />
+      </div>
+      <textarea id="composerBody" placeholder="Type your letter…" rows="6"></textarea>
+      <div class="footer">
+        <span class="counter" id="composerCounter">0 chars · 0 bytes</span>
+        <button id="sendBtn" disabled>Send</button>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+"use strict";
+
+// ── Constants ──────────────────────────────────────────────────────────
+const APP = "letters";
+const TTL_SECONDS = 7 * 24 * 60 * 60;          // 7 days
+const FRAGMENT_SOFT_LIMIT = 4096;              // operator-tunable in DAPPS; default
+const ENVELOPE_VERSION = 1;
+const DB_NAME = "dapps-letters";
+const DB_VERSION = 1;
+
+// ── State ──────────────────────────────────────────────────────────────
+let db = null;                  // IndexedDB connection
+let myCallsign = null;          // operator's full callsign with SSID
+let client = null;              // mqtt.js client
+let activePeer = null;          // currently-selected peer in the UI
+let composeMode = "new";        // "new" - peer field shown; "reply" - peer is activePeer
+const seen = new Set();         // dedup against broker-side replay (in-memory; IDB is the source of truth)
+
+// ── DOM handles ────────────────────────────────────────────────────────
+const $ = (id) => document.getElementById(id);
+const meBadge = $("meBadge"), meCall = $("meCall"), changeMe = $("changeMe");
+const connDot = $("connDot"), connText = $("connText"), connBtn = $("connBtn");
+const newConvBtn = $("newConvBtn"), convListBody = $("convListBody");
+const threadEmpty = $("threadEmpty"), threadHeader = $("threadHeader"), threadList = $("threadList");
+const threadPeer = $("threadPeer"), backBtn = $("backBtn");
+const composer = $("composer"), composerPeerRow = $("composerPeerRow");
+const composerPeer = $("composerPeer"), composerSubject = $("composerSubject"), composerBody = $("composerBody");
+const composerCounter = $("composerCounter"), sendBtn = $("sendBtn");
+
+// ── IndexedDB ──────────────────────────────────────────────────────────
+function openDb() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = () => {
+      const d = req.result;
+      // letters: keyed on dapps-id (or local UUID for outbound).
+      // peer-index lets us fetch one conversation efficiently.
+      if (!d.objectStoreNames.contains("letters")) {
+        const s = d.createObjectStore("letters", { keyPath: "id" });
+        s.createIndex("by-peer", "peer");
+      }
+      // meta: KV store (myCallsign, dashboardUrl, etc).
+      if (!d.objectStoreNames.contains("meta")) {
+        d.createObjectStore("meta", { keyPath: "key" });
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+function tx(stores, mode = "readonly") {
+  return db.transaction(stores, mode);
+}
+function metaGet(key) {
+  return new Promise((resolve, reject) => {
+    const r = tx("meta").objectStore("meta").get(key);
+    r.onsuccess = () => resolve(r.result ? r.result.value : null);
+    r.onerror = () => reject(r.error);
+  });
+}
+function metaSet(key, value) {
+  return new Promise((resolve, reject) => {
+    const r = tx("meta", "readwrite").objectStore("meta").put({ key, value });
+    r.onsuccess = () => resolve();
+    r.onerror = () => reject(r.error);
+  });
+}
+function letterPut(letter) {
+  return new Promise((resolve, reject) => {
+    const r = tx("letters", "readwrite").objectStore("letters").put(letter);
+    r.onsuccess = () => resolve();
+    r.onerror = () => reject(r.error);
+  });
+}
+function letterGetByPeer(peer) {
+  return new Promise((resolve, reject) => {
+    const out = [];
+    const idx = tx("letters").objectStore("letters").index("by-peer");
+    const req = idx.openCursor(IDBKeyRange.only(peer));
+    req.onsuccess = () => {
+      const c = req.result;
+      if (c) { out.push(c.value); c.continue(); }
+      else { out.sort((a, b) => a.ts.localeCompare(b.ts)); resolve(out); }
+    };
+    req.onerror = () => reject(req.error);
+  });
+}
+function letterGetAll() {
+  return new Promise((resolve, reject) => {
+    const r = tx("letters").objectStore("letters").getAll();
+    r.onsuccess = () => resolve(r.result || []);
+    r.onerror = () => reject(r.error);
+  });
+}
+async function markPeerRead(peer) {
+  const all = await letterGetByPeer(peer);
+  const t = tx("letters", "readwrite").objectStore("letters");
+  for (const l of all) {
+    if (l.direction === "in" && !l.read) {
+      l.read = true;
+      t.put(l);
+    }
+  }
+}
+
+// ── Conversations / threads rendering ──────────────────────────────────
+async function rebuildConversations() {
+  const all = await letterGetAll();
+  // Group by peer; track latest ts and unread count.
+  const groups = new Map();
+  for (const l of all) {
+    let g = groups.get(l.peer);
+    if (!g) { g = { peer: l.peer, last: l, unread: 0 }; groups.set(l.peer, g); }
+    if (l.ts > g.last.ts) g.last = l;
+    if (l.direction === "in" && !l.read) g.unread += 1;
+  }
+  const list = [...groups.values()].sort((a, b) => b.last.ts.localeCompare(a.last.ts));
+  if (list.length === 0) {
+    convListBody.innerHTML = '<div class="empty">No conversations yet. Click <em>New letter</em> to start one.</div>';
+    return;
+  }
+  convListBody.innerHTML = "";
+  for (const g of list) {
+    const row = document.createElement("div");
+    row.className = "conv-row" + (g.unread > 0 ? " unread" : "") + (g.peer === activePeer ? " active" : "");
+    row.dataset.peer = g.peer;
+    const subjectText = g.last.subject || "(no subject)";
+    const previewText = g.last.body.replace(/\s+/g, " ").trim().slice(0, 80);
+    row.innerHTML =
+      `<span class="peer">${escapeHtml(g.peer)}${g.unread > 0 ? `<span class="badge">${g.unread}</span>` : ""}</span>` +
+      `<span class="ts">${formatRelative(g.last.ts)}</span>` +
+      `<span class="preview">${escapeHtml(subjectText)} — ${escapeHtml(previewText)}</span>`;
+    row.addEventListener("click", () => openThread(g.peer));
+    convListBody.appendChild(row);
+  }
+}
+
+async function openThread(peer) {
+  activePeer = peer;
+  composeMode = "reply";
+  threadEmpty.hidden = true;
+  threadHeader.hidden = false;
+  threadList.hidden = false;
+  composer.hidden = false;
+  composerPeerRow.hidden = true;
+  threadPeer.textContent = peer;
+  await markPeerRead(peer);
+  await renderThread(peer);
+  await rebuildConversations();
+  composerSubject.value = "";
+  composerBody.value = "";
+  updateComposerCounter();
+}
+
+async function renderThread(peer) {
+  const all = await letterGetByPeer(peer);
+  threadList.innerHTML = "";
+  for (const l of all) {
+    const div = document.createElement("div");
+    div.className = "letter " + (l.direction === "out" ? "out" : "in");
+    const who = l.direction === "out" ? "you" : peer;
+    const subjectHtml = l.subject
+      ? `<div class="subject">${escapeHtml(l.subject)}</div>`
+      : `<div class="subject empty">(no subject)</div>`;
+    div.innerHTML =
+      `<div class="letter-meta"><span class="from">${escapeHtml(who)}</span>` +
+      `<span>${formatTimestamp(l.ts)}</span></div>` +
+      subjectHtml +
+      `<div class="body">${escapeHtml(l.body)}</div>`;
+    threadList.appendChild(div);
+  }
+  threadList.scrollTop = threadList.scrollHeight;
+}
+
+// ── Compose / send ─────────────────────────────────────────────────────
+function openNewLetter() {
+  activePeer = null;
+  composeMode = "new";
+  threadEmpty.hidden = true;
+  threadHeader.hidden = false;
+  threadList.hidden = false;
+  composer.hidden = false;
+  composerPeerRow.hidden = false;
+  threadPeer.textContent = "(new letter)";
+  threadList.innerHTML = "";
+  composerPeer.value = "";
+  composerSubject.value = "";
+  composerBody.value = "";
+  updateComposerCounter();
+  composerPeer.focus();
+}
+
+function updateComposerCounter() {
+  const text = composerBody.value;
+  const bytes = new TextEncoder().encode(text).length;
+  const warn = bytes > FRAGMENT_SOFT_LIMIT;
+  composerCounter.classList.toggle("warn", warn);
+  composerCounter.textContent =
+    `${text.length} chars · ${bytes} bytes` +
+    (warn ? ` (over ${FRAGMENT_SOFT_LIMIT}-byte fragment threshold; will be split on the wire)` : "");
+  sendBtn.disabled = !text.trim() || (composeMode === "new" && !composerPeer.value.trim()) || !client || !client.connected;
+}
+
+async function sendLetter() {
+  const peer = (composeMode === "new" ? composerPeer.value : activePeer).trim().toUpperCase();
+  if (!peer) return;
+  const subject = composerSubject.value.trim();
+  const body = composerBody.value;   // preserve internal whitespace
+  if (!body.trim()) return;
+  if (!client || !client.connected) return;
+
+  const envelope = {
+    v: ENVELOPE_VERSION,
+    subject,
+    body,
+    ts: new Date().toISOString(),
+  };
+  const payload = new TextEncoder().encode(JSON.stringify(envelope));
+
+  try {
+    await new Promise((resolve, reject) => {
+      client.publish(`dapps/out/${APP}/${peer}`, payload, {
+        qos: 1,
+        properties: { userProperties: { "dapps-ttl": String(TTL_SECONDS) } },
+      }, (err) => err ? reject(err) : resolve());
+    });
+  } catch (err) {
+    alert("Send failed: " + err.message);
+    return;
+  }
+
+  // Optimistic local persist. We can't predict the server's dapps-id
+  // (it depends on the daemon's submission timestamp), so we use a
+  // local UUID. If the message comes back via dapps/in/letters - which
+  // happens on self-loopback - we drop it on dapps-source match (see
+  // handleInbound). Cross-peer sends never echo, so no duplicate.
+  const localId = "local-" + crypto.randomUUID();
+  const letter = {
+    id: localId,
+    peer,
+    direction: "out",
+    subject,
+    body,
+    ts: envelope.ts,
+    receivedAt: new Date().toISOString(),
+    read: true,
+  };
+  await letterPut(letter);
+
+  if (composeMode === "new") {
+    await openThread(peer);
+  } else {
+    composerSubject.value = "";
+    composerBody.value = "";
+    updateComposerCounter();
+    await renderThread(peer);
+    await rebuildConversations();
+  }
+}
+
+// ── MQTT ───────────────────────────────────────────────────────────────
+async function connect() {
+  if (client) return;
+  const url = await metaGet("dashboardUrl") || "http://localhost:5000";
+  const token = await metaGet("token") || "";
+  const wsUri = deriveWsUri(url);
+  setConn("connecting…", "warn");
+  connBtn.disabled = true;
+
+  const opts = {
+    protocolVersion: 5,
+    clientId: `letters-${crypto.randomUUID()}`,
+    reconnectPeriod: 0,
+  };
+  if (token) {
+    opts.username = APP;
+    opts.password = token;
+  }
+  client = mqtt.connect(wsUri, opts);
+
+  client.on("connect", () => {
+    setConn(`connected to ${wsUri}`, "ok");
+    connBtn.textContent = "Disconnect";
+    connBtn.disabled = false;
+    newConvBtn.disabled = false;
+    updateComposerCounter();
+    client.subscribe(`dapps/in/${APP}`, { qos: 1 }, (err) => {
+      if (err) setConn(`subscribe failed: ${err.message}`, "err");
+    });
+  });
+  client.on("message", (topic, payload, packet) => handleInbound(packet));
+  client.on("error", (err) => setConn(`error: ${err.message}`, "err"));
+  client.on("close", () => {
+    setConn("disconnected", null);
+    connBtn.textContent = "Connect";
+    connBtn.disabled = false;
+    newConvBtn.disabled = true;
+    sendBtn.disabled = true;
+    client = null;
+  });
+}
+function disconnect() {
+  if (client) client.end(true);
+}
+function setConn(text, dotClass) {
+  connText.textContent = text;
+  connDot.className = "dot" + (dotClass ? " " + dotClass : "");
+}
+function deriveWsUri(httpUrl) {
+  const u = new URL(httpUrl);
+  return `${u.protocol === "https:" ? "wss:" : "ws:"}//${u.host}/mqtt`;
+}
+
+async function handleInbound(packet) {
+  const props = (packet && packet.properties && packet.properties.userProperties) || {};
+  const dappsId = oneOf(props["dapps-id"]) || "?";
+  const source = (oneOf(props["dapps-source"]) || "?").toUpperCase();
+
+  // Self-loopback dedup: when sending to our own callsign for testing,
+  // the receive path delivers the message back. We already rendered
+  // the optimistic outbound row in sendLetter(); drop the echo.
+  if (myCallsign && source.toUpperCase() === myCallsign.toUpperCase()) {
+    if (client && client.connected) client.publish(`dapps/ack/${APP}`, dappsId, { qos: 1 });
+    return;
+  }
+
+  if (seen.has(dappsId)) {
+    if (client && client.connected) client.publish(`dapps/ack/${APP}`, dappsId, { qos: 1 });
+    return;
+  }
+  seen.add(dappsId);
+
+  let envelope;
+  try {
+    const text = new TextDecoder().decode(packet.payload);
+    envelope = JSON.parse(text);
+  } catch (err) {
+    console.warn("letters: malformed envelope", err);
+    if (client && client.connected) client.publish(`dapps/ack/${APP}`, dappsId, { qos: 1 });
+    return;
+  }
+  if (envelope.v !== ENVELOPE_VERSION) {
+    console.warn(`letters: ignoring v=${envelope.v} (expect ${ENVELOPE_VERSION})`);
+    if (client && client.connected) client.publish(`dapps/ack/${APP}`, dappsId, { qos: 1 });
+    return;
+  }
+
+  const letter = {
+    id: dappsId,
+    peer: source,
+    direction: "in",
+    subject: typeof envelope.subject === "string" ? envelope.subject : "",
+    body: typeof envelope.body === "string" ? envelope.body : "",
+    ts: typeof envelope.ts === "string" ? envelope.ts : new Date().toISOString(),
+    receivedAt: new Date().toISOString(),
+    read: activePeer === source,
+  };
+  await letterPut(letter);
+  if (client && client.connected) client.publish(`dapps/ack/${APP}`, dappsId, { qos: 1 });
+  if (activePeer === source) await renderThread(source);
+  await rebuildConversations();
+}
+
+function oneOf(v) {
+  if (v === undefined || v === null) return null;
+  return Array.isArray(v) ? v[0] : v;
+}
+
+// ── First-run + connection modal ───────────────────────────────────────
+function showCallsignModal(initial) {
+  return new Promise((resolve) => {
+    const back = document.createElement("div");
+    back.className = "modal-back";
+    back.innerHTML =
+      `<div class="modal">` +
+        `<h3>Your callsign</h3>` +
+        `<p class="muted" style="margin: 0; font-size: 0.85rem;">` +
+        `The full callsign with SSID this DAPPS instance uses (e.g. <code class="mono">M0LTE-1</code>). ` +
+        `Used to label your outgoing letters and to filter loopback echoes.` +
+        `</p>` +
+        `<label><span>Callsign</span><input id="modalCall" type="text" pattern="[A-Za-z0-9\\-]{3,15}" required /></label>` +
+        `<div class="actions">` +
+        `<button id="modalCancel" class="secondary">Cancel</button>` +
+        `<button id="modalSave">Save</button>` +
+        `</div>` +
+      `</div>`;
+    document.body.appendChild(back);
+    const inp = back.querySelector("#modalCall");
+    inp.value = initial || "";
+    inp.focus();
+    const close = (val) => { document.body.removeChild(back); resolve(val); };
+    back.querySelector("#modalCancel").addEventListener("click", () => close(null));
+    back.querySelector("#modalSave").addEventListener("click", () => {
+      const v = inp.value.trim().toUpperCase();
+      if (!v) return;
+      close(v);
+    });
+    inp.addEventListener("keydown", (e) => { if (e.key === "Enter") back.querySelector("#modalSave").click(); });
+  });
+}
+
+function showConnectModal() {
+  return new Promise(async (resolve) => {
+    const url = await metaGet("dashboardUrl") || "http://localhost:5000";
+    const token = await metaGet("token") || "";
+    const back = document.createElement("div");
+    back.className = "modal-back";
+    back.innerHTML =
+      `<div class="modal">` +
+        `<h3>Connect to DAPPS</h3>` +
+        `<label><span>Dashboard URL</span><input id="modalUrl" type="text" /></label>` +
+        `<label><span>Token <span class="muted">(only if AuthRequired is on)</span></span><input id="modalToken" type="password" placeholder="(blank if auth is off)" /></label>` +
+        `<div class="actions">` +
+        `<button id="modalCancel" class="secondary">Cancel</button>` +
+        `<button id="modalConnect">Connect</button>` +
+        `</div>` +
+      `</div>`;
+    document.body.appendChild(back);
+    const u = back.querySelector("#modalUrl"), t = back.querySelector("#modalToken");
+    u.value = url; t.value = token; u.focus();
+    const close = (saved) => { document.body.removeChild(back); resolve(saved); };
+    back.querySelector("#modalCancel").addEventListener("click", () => close(false));
+    back.querySelector("#modalConnect").addEventListener("click", async () => {
+      await metaSet("dashboardUrl", u.value.trim());
+      await metaSet("token", t.value);
+      close(true);
+    });
+  });
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+function formatTimestamp(iso) {
+  try { return new Date(iso).toLocaleString(); }
+  catch { return iso; }
+}
+function formatRelative(iso) {
+  try {
+    const d = new Date(iso);
+    const ms = Date.now() - d.getTime();
+    const m = Math.round(ms / 60000);
+    if (m < 1) return "just now";
+    if (m < 60) return `${m}m ago`;
+    const h = Math.round(m / 60);
+    if (h < 24) return `${h}h ago`;
+    const days = Math.round(h / 24);
+    if (days < 7) return `${days}d ago`;
+    return d.toLocaleDateString();
+  } catch { return iso; }
+}
+
+// ── Wire-up ────────────────────────────────────────────────────────────
+async function main() {
+  db = await openDb();
+  myCallsign = await metaGet("myCallsign");
+  if (!myCallsign) {
+    myCallsign = await showCallsignModal();
+    if (myCallsign) await metaSet("myCallsign", myCallsign);
+  }
+  if (myCallsign) {
+    meBadge.hidden = false;
+    meCall.textContent = myCallsign;
+  }
+
+  await rebuildConversations();
+
+  changeMe.addEventListener("click", async (e) => {
+    e.preventDefault();
+    const v = await showCallsignModal(myCallsign);
+    if (v) {
+      myCallsign = v;
+      await metaSet("myCallsign", v);
+      meCall.textContent = v;
+    }
+  });
+
+  connBtn.addEventListener("click", async () => {
+    if (client && client.connected) { disconnect(); return; }
+    const ok = await showConnectModal();
+    if (ok) connect();
+  });
+
+  newConvBtn.addEventListener("click", () => openNewLetter());
+  backBtn.addEventListener("click", () => {
+    activePeer = null;
+    threadEmpty.hidden = false;
+    threadHeader.hidden = true;
+    threadList.hidden = true;
+    composer.hidden = true;
+  });
+  composerBody.addEventListener("input", updateComposerCounter);
+  composerPeer.addEventListener("input", updateComposerCounter);
+  sendBtn.addEventListener("click", sendLetter);
+}
+
+main().catch((err) => {
+  console.error("letters: init failed", err);
+  alert("letters: failed to initialise — " + err.message);
+});
+</script>
+
+</body>
+</html>
