@@ -152,26 +152,48 @@ start_service() {
     systemctl enable --now dapps-updater.timer
 }
 
+# Block until the HTTP listener is actually accepting connections, so
+# the URL we print at the end is clickable rather than a "wait a few
+# seconds and try again" surprise. Self-contained dotnet binaries
+# can take a few seconds to JIT to ready on first start, especially
+# on Pi-class hardware.
+#
+# Probes loopback regardless of HTTP_BIND - the listener binds to
+# the configured iface, but loopback always works once it's up.
+wait_for_http() {
+    local port="${HTTP_BIND##*:}"
+    local timeout=30
+    say "Waiting for HTTP listener on :$port (up to ${timeout}s)"
+    local i=0
+    while (( i < timeout )); do
+        if (echo > /dev/tcp/127.0.0.1/"$port") 2>/dev/null; then
+            return 0
+        fi
+        sleep 1
+        ((i++))
+    done
+    warn "HTTP listener didn't respond within ${timeout}s. Check 'journalctl -u dapps.service -e' - the daemon may still be starting, or have hit a config error."
+    return 0   # don't abort the install; still print the URL.
+}
+
 print_next_steps() {
     local host
     host=$(hostname -f 2>/dev/null || hostname)
     local port="${HTTP_BIND##*:}"
     cat <<EOF
 
-╭───────────────────────────────────────────────────────────────╮
-│  DAPPS is running.                                            │
-│                                                               │
-│    Open  http://$host:$port/  in a browser.                   │
-│                                                               │
-│  The first request lands on /Setup - a two-step wizard that   │
-│  asks for an admin password, then your callsign and which     │
-│  packet-node bearer (BPQ AGW or XRouter RHPv2) to use. The    │
-│  daemon picks up your config without a restart.               │
-│                                                               │
-│  Logs:    journalctl -u dapps.service -f                      │
-│  Update:  click "Apply update" on the dashboard, or wait for  │
-│           the dapps-updater.timer to pick up future releases. │
-╰───────────────────────────────────────────────────────────────╯
+DAPPS is running.
+
+  Open  http://$host:$port/  in a browser.
+
+The first request lands on /Setup - a two-step wizard that asks for
+an admin password, then your callsign and which packet-node bearer
+(BPQ AGW or XRouter RHPv2) to use. The daemon picks up your config
+without a restart.
+
+  Logs:    journalctl -u dapps.service -f
+  Update:  click "Apply update" on the dashboard, or wait for the
+           dapps-updater.timer to pick up future releases.
 EOF
 }
 
@@ -188,4 +210,5 @@ download_binary "$rid"
 write_unit
 write_updater_units
 start_service
+wait_for_http
 print_next_steps
