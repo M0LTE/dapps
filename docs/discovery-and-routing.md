@@ -79,9 +79,23 @@ Works well on small meshes. The trade-off is no proactive route discovery - dest
 
 DSR-flavoured. The sender stamps the path on the message; intermediate nodes follow it. Adds a few bytes per message; works better when the topology is volatile, when you want explicit per-message path control, or when you're emulating MeshCore-on-AX.25 for testing.
 
+## Route gossip
+
+Once two DAPPS nodes have a session open for real work (a push, a probe, a reverse poll), they piggyback a `routes` exchange to share what they know about further-reach destinations. The receiver writes each gossiped route into its `learnedroutes` table marked `source=gossip`; the existing failure-counter machinery invalidates anything that turns out not to work.
+
+Bounded by a per-(local, remote) staleness gate: at most one pull per `RouteGossipStalenessHours` (default 6h) per neighbour, regardless of session frequency. No scheduled transmission - if there's no traffic and no probes, no gossip exchange happens. Setting `RouteGossipStalenessHours=0` disables it entirely.
+
+The advertiser filters: only routes whose failure counter is zero, only routes the daemon itself has actually traversed, never gossip-imported routes (don't re-export hearsay). Manual neighbours are always advertised since they're the most-trusted class.
+
+The dashboard's learned-routes view marks gossip-sourced rows distinctly from traffic-learned ones. Resolution priority unchanged: hint → neighbour → discovered → learned (gossip and traffic share the learned tier).
+
 ## Route hints
 
 A manual override. The `/RouteHints` endpoint (and dashboard panel) let you say "for messages destined for X, always try Y first." Useful for steering around a known-broken link, or for asymmetric routing where the natural route in one direction differs from the other.
+
+## Reaching nodes through non-DAPPS intermediates
+
+When the only path to a peer runs through bare packet nodes that don't speak DAPPS or NET/ROM, DAPPS supports a **connect-script** on the neighbour row - a series of `(send, expect)` steps the daemon plays before falling into the DAPPS prompt. Same use case as the operator's manual `C node1 / C node2 / ... / DAPPS` chain, automated. See [Multi-hop via non-DAPPS nodes](multi-hop.md).
 
 ## What you actually do
 

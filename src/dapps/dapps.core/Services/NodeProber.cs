@@ -1,5 +1,6 @@
 using System.Text;
 using dapps.client;
+using dapps.client.Backhaul;
 using dapps.client.Transport;
 using Microsoft.Extensions.Logging;
 
@@ -22,7 +23,8 @@ public sealed class NodeProber(
     IDappsOutboundTransport transport,
     TimeProvider timeProvider,
     ILoggerFactory loggerFactory,
-    ILogger<NodeProber> logger)
+    ILogger<NodeProber> logger,
+    IRouteGossipPort? routeGossip = null)
 {
     /// <summary>Outcome of a single probe attempt. <see cref="Success"/>
     /// is true iff the prompt was observed end-to-end. <see cref="Error"/>
@@ -60,7 +62,8 @@ public sealed class NodeProber(
         string remoteCallsign,
         int bearerPort,
         CancellationToken ct,
-        bool fetchPeers = false)
+        bool fetchPeers = false,
+        ConnectScript? connectScript = null)
     {
         var at = timeProvider.GetUtcNow().UtcDateTime;
         IReadOnlyList<DappsProtocolClient.DiscoveredPeerInfo> peers = [];
@@ -74,7 +77,24 @@ public sealed class NodeProber(
 
             var protocol = new DappsProtocolClient(connection.Stream, loggerFactory);
 
-            if (!await protocol.ReadInitialPromptAsync(ct))
+            // Connect-script: when the neighbour row carries one, drive
+            // the chain of intermediate-node connects before falling
+            // into the DAPPSv1 prompt. The script's final step reads
+            // the prompt itself, so on success we skip the regular
+            // ReadInitialPromptAsync.
+            if (connectScript is not null)
+            {
+                try
+                {
+                    await ConnectScriptRunner.RunAsync(connection.Stream, connectScript, logger, ct);
+                }
+                catch (Exception ex) when (ex is ConnectScriptException or EndOfStreamException)
+                {
+                    return new ProbeResult(remoteCallsign, bearerPort, false,
+                        $"connect-script: {ex.Message}", at, peers);
+                }
+            }
+            else if (!await protocol.ReadInitialPromptAsync(ct))
             {
                 return new ProbeResult(remoteCallsign, bearerPort, false,
                     "no DAPPSv1> prompt", at, peers);
@@ -99,6 +119,28 @@ public sealed class NodeProber(
             {
                 logger.LogInformation("Probe ok: {0} on port {1}", remoteCallsign, bearerPort);
             }
+
+            // Route gossip: piggyback when the staleness gate allows.
+            // Probes are infrequent and the exchange is small; safe
+            // to add unconditionally on success.
+            if (routeGossip is not null)
+            {
+                try
+                {
+                    if (await routeGossip.ShouldPullAsync(remoteCallsign, ct))
+                    {
+                        var gossiped = await protocol.RequestRoutesAsync(ct);
+                        await routeGossip.ImportAsync(remoteCallsign, gossiped, ct);
+                        await routeGossip.RecordPulledAsync(remoteCallsign, ct);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logger.LogInformation(
+                        "Probe ok but routes gossip failed: {0} ({1})", remoteCallsign, ex.Message);
+                }
+            }
+
             return new ProbeResult(remoteCallsign, bearerPort, true, "", at, peers);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)

@@ -23,7 +23,8 @@ public sealed class NodePoller(
     IBackhaulInbox inbox,
     TimeProvider timeProvider,
     ILoggerFactory loggerFactory,
-    ILogger<NodePoller> logger)
+    ILogger<NodePoller> logger,
+    IRouteGossipPort? routeGossip = null)
 {
     /// <summary>Outcome of a single poll. Failure is captured rather
     /// than thrown - the scheduler catches per-callsign failures so
@@ -39,7 +40,8 @@ public sealed class NodePoller(
         string localCallsign,
         string remoteCallsign,
         int bearerPort,
-        CancellationToken ct)
+        CancellationToken ct,
+        ConnectScript? connectScript = null)
     {
         var at = timeProvider.GetUtcNow().UtcDateTime;
         try
@@ -52,7 +54,18 @@ public sealed class NodePoller(
 
             var protocol = new DappsProtocolClient(connection.Stream, loggerFactory);
 
-            if (!await protocol.ReadInitialPromptAsync(ct))
+            if (connectScript is not null)
+            {
+                try
+                {
+                    await ConnectScriptRunner.RunAsync(connection.Stream, connectScript, logger, ct);
+                }
+                catch (Exception ex) when (ex is ConnectScriptException or EndOfStreamException)
+                {
+                    return new PollResult(remoteCallsign, false, 0, $"connect-script: {ex.Message}", at);
+                }
+            }
+            else if (!await protocol.ReadInitialPromptAsync(ct))
             {
                 return new PollResult(remoteCallsign, false, 0, "no DAPPSv1> prompt", at);
             }
@@ -78,6 +91,28 @@ public sealed class NodePoller(
             }
 
             logger.LogInformation("Poll ok: {0} drained {1} message(s)", remoteCallsign, drained);
+
+            // Route gossip: piggyback when the staleness gate allows.
+            // Poll sessions are infrequent (scheduled or operator-
+            // triggered); a small `routes` exchange on top is fine.
+            if (routeGossip is not null)
+            {
+                try
+                {
+                    if (await routeGossip.ShouldPullAsync(remoteCallsign, ct))
+                    {
+                        var gossiped = await protocol.RequestRoutesAsync(ct);
+                        await routeGossip.ImportAsync(remoteCallsign, gossiped, ct);
+                        await routeGossip.RecordPulledAsync(remoteCallsign, ct);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logger.LogInformation(
+                        "Poll ok but routes gossip failed: {0} ({1})", remoteCallsign, ex.Message);
+                }
+            }
+
             return new PollResult(remoteCallsign, true, drained, "", at);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)

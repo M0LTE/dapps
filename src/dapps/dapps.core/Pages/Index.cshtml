@@ -772,16 +772,19 @@ else
                 <th>Callsign</th>
                 <th>Bearer port</th>
                 <th>UDP endpoint</th>
+                <th>Connect script</th>
                 <th></th>
             </tr>
         </thead>
         <tbody>
         @foreach (var n in Model.Neighbours)
         {
+            var scriptStepCount = dapps.client.ConnectScript.FromJson(n.ConnectScriptJson)?.Steps.Count ?? 0;
             <tr>
                 <td>@n.Callsign</td>
                 <td class="numeric">@(n.BearerPort?.ToString() ?? "-")</td>
                 <td>@(n.UdpEndpoint ?? "-")</td>
+                <td>@(scriptStepCount > 0 ? $"{scriptStepCount} step(s)" : "-")</td>
                 <td><button class="link-btn" onclick="dappsDeleteNeighbour('@n.Callsign')">remove</button></td>
             </tr>
         }
@@ -789,11 +792,16 @@ else
     </table>
 }
 <details class="edit-block">
-    <summary>Add neighbour</summary>
+    <summary>Add / update neighbour</summary>
     <form class="edit-form" onsubmit="dappsAddNeighbour(event)">
         <label>Callsign <input name="callsign" required placeholder="GB7XYZ" /></label>
         <label>Bearer port <input name="bearerPort" type="number" min="0" max="255" placeholder="0" /></label>
         <label>UDP endpoint (optional) <input name="udpEndpoint" placeholder="host:port" /></label>
+        <label>
+            Connect script (optional)
+            <textarea name="connectScript" rows="5" placeholder="C G0NODE2|Connected to G0NODE2&#10;C G0NODE3|Connected to G0NODE3&#10;DAPPS|DAPPSv1>|60" style="width: 100%; font-family: var(--font-code, monospace); font-size: 0.85rem;"></textarea>
+            <small class="muted">One step per line, <code>send|expect</code> or <code>send|expect|timeoutSeconds</code>. Use to reach a peer through a chain of intermediate non-DAPPS packet nodes (operator's manual <code>C node1 / C node2 / ... / DAPPS</code> sequence). The final step's expect must contain <code>DAPPSv1&gt;</code>. Re-submitting with an empty box clears the script.</small>
+        </label>
         <button type="submit">Add / update</button>
     </form>
 </details>
@@ -1302,6 +1310,7 @@ else
             Callsign: f.callsign.value,
             BearerPort: f.bearerPort.value === '' ? null : parseInt(f.bearerPort.value, 10),
             UdpEndpoint: f.udpEndpoint.value || null,
+            ConnectScript: f.connectScript.value || null,
         };
         if (await dappsPostJson('/Neighbours', body)) location.reload();
     }

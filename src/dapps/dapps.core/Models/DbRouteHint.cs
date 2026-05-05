@@ -28,9 +28,19 @@ public class DbNeighbour
 
     /// <summary>
     /// Optional UDP endpoint (<c>host:port</c>) for the datagram
-    /// backhaul (Plan A0.4 stand-in for MeshCore-style bearers). When
-    /// set, the UDP backhaul handles forwarding to this neighbour and
-    /// the AGW path is not used. Null = use AGW.
+    /// backhaul (stand-in for MeshCore-style bearers). When set, the
+    /// UDP backhaul handles forwarding to this neighbour and the AGW
+    /// path is not used. Null = use AGW.
     /// </summary>
     public string? UdpEndpoint { get; set; }
+
+    /// <summary>
+    /// Optional connect-script for reaching this neighbour through a
+    /// chain of intermediate non-DAPPS packet nodes. JSON shape:
+    /// <c>{"steps":[{"send":"C G0NODE2","expect":"Connected to G0NODE2"},...]}</c>.
+    /// When non-null, the AGW backhaul plays the script after the
+    /// initial connect, before falling into the DAPPSv1 prompt. Null =
+    /// direct connection (the usual case). See <see cref="dapps.client.ConnectScript"/>.
+    /// </summary>
+    public string? ConnectScriptJson { get; set; }
 }

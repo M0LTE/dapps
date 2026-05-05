@@ -7,7 +7,7 @@ The reference implementation in this repo is the canonical source of truth. Wher
 The page is in two parts:
 
 - [**Bare essentials**](#bare-essentials) - the smallest set of behaviours that lets two implementations exchange a message and not deadlock. If you implement only this, you get a node that pushes messages, accepts inbound messages, and is invisible to discovery / routing optimisations.
-- [**Full interoperability**](#full-interoperability) - feature by feature, what to add to that minimum to be fully indistinguishable from the reference daemon: end-to-end source tracking, multi-part fragmentation, opt-in ordering, polling, peer exchange, discovery beacons, and the datagram codec.
+- [**Full interoperability**](#full-interoperability) - feature by feature, what to add to that minimum to be fully indistinguishable from the reference daemon: end-to-end source tracking, multi-part fragmentation, opt-in ordering, polling, peer exchange, route gossip, discovery beacons, and the datagram codec.
 
 ## Bare essentials
 
@@ -257,6 +257,36 @@ Why `rev` exists: a node behind asymmetric connectivity (RF-only inbound, can't 
 A receiver that doesn't implement `rev` should respond `eh?\n` to the command. Senders should treat `eh?` as "this peer doesn't poll" and stop trying.
 
 Reference: [InboundConnectionHandler.cs:275-343](https://github.com/M0LTE/dapps/blob/master/src/dapps/dapps.core/Services/InboundConnectionHandler.cs#L275-L343), [DappsProtocolClient.cs:283-369](https://github.com/M0LTE/dapps/blob/master/src/dapps/dapps.client/DappsProtocolClient.cs#L283-L369).
+
+### `routes` exchange
+
+```
+C: routes\n
+S: route M0LTE-9 hops=1\n
+S: route GB7RDG hops=2 ageSeconds=300\n
+S: route G7VVK hops=2 ageSeconds=900\n
+S: end\n
+```
+
+The connecting peer asks "what destinations can you reach?"; the server emits one `route` line per known-good destination, then `end\n`.
+
+Per-line format:
+
+```
+route <destBaseCallsign> [hops=<int>] [ageSeconds=<int>]
+```
+
+- `destBaseCallsign`: the destination's base callsign (no SSID).
+- `hops` (optional): a hint for the receiver's cost calculation. The reference daemon emits `1` for direct neighbours, `2` for traffic-learned routes (via one intermediate). Receivers that don't care about hops ignore it.
+- `ageSeconds` (optional): how long ago the responder last saw evidence the route works. Helps the receiver decide whether to trust it.
+
+Receivers import each row as a learned route via the responding peer, marked as gossip-sourced. Failures invalidate via the same per-row failure counter the daemon already maintains for traffic-learned routes; gossip-sourced rows don't get re-exported (only direct observation gets advertised, to avoid distance-vector loops).
+
+The reference daemon's emitter filters: only routes whose failure counter is zero, and only routes the daemon itself has actually used (not just heard about). Manual neighbours are always advertised; traffic-learned routes are advertised only when proven; gossip-imported routes are never advertised (don't re-export hearsay).
+
+Implementations that don't care about route gossip should respond `eh?\n` to the command. Senders treat `eh?` as "this peer doesn't gossip" and stop trying.
+
+Reference: [InboundConnectionHandler.HandleRoutes](https://github.com/M0LTE/dapps/blob/master/src/dapps/dapps.core/Services/InboundConnectionHandler.cs), [DappsProtocolClient.RequestRoutesAsync](https://github.com/M0LTE/dapps/blob/master/src/dapps/dapps.client/DappsProtocolClient.cs).
 
 ### Quit / help
 

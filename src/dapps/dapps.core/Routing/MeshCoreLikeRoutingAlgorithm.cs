@@ -253,7 +253,7 @@ public sealed class MeshCoreLikeRoutingAlgorithm(
             message.Id, message.Destination, nextHop.Callsign, string.Join(',', downstream));
 
         return new RouteDecision.NextHop(
-            new BackhaulRoute(nextHop.Callsign, nextHop.BearerPort ?? ctx.DefaultBearerPort, nextHop.UdpEndpoint),
+            RouteBuilder.FromNeighbour(nextHop, ctx.DefaultBearerPort),
             SourceRoute: downstream);
     }
 
@@ -327,7 +327,7 @@ public sealed class MeshCoreLikeRoutingAlgorithm(
             string.Join(',', downstream), path.LastSeenAt);
 
         return new RouteDecision.NextHop(
-            new BackhaulRoute(nextHop.Callsign, nextHop.BearerPort ?? ctx.DefaultBearerPort, nextHop.UdpEndpoint),
+            RouteBuilder.FromNeighbour(nextHop, ctx.DefaultBearerPort),
             SourceRoute: downstream);
     }
 
@@ -346,10 +346,7 @@ public sealed class MeshCoreLikeRoutingAlgorithm(
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         return neighbours
             .Where(n => !traversedBases.Contains(n.Callsign.Split('-')[0]))
-            .Select(n => new BackhaulRoute(
-                n.Callsign,
-                BearerPort: n.BearerPort ?? ctx.DefaultBearerPort,
-                UdpEndpoint: n.UdpEndpoint))
+            .Select(n => RouteBuilder.FromNeighbour(n, ctx.DefaultBearerPort))
             .ToList();
     }
 }

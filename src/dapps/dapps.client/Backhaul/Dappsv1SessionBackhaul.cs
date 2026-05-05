@@ -21,9 +21,10 @@ public sealed class Dappsv1SessionBackhaul : IDappsBackhaul
     private readonly ILogger logger;
     private readonly IBackhaulInbox? opportunisticInbox;
     private readonly Func<bool>? opportunisticEnabled;
+    private readonly IRouteGossipPort? routeGossip;
 
     public Dappsv1SessionBackhaul(IDappsOutboundTransport transport, ILoggerFactory loggerFactory)
-        : this(transport, loggerFactory, opportunisticInbox: null, opportunisticEnabled: null)
+        : this(transport, loggerFactory, opportunisticInbox: null, opportunisticEnabled: null, routeGossip: null)
     {
     }
 
@@ -31,12 +32,14 @@ public sealed class Dappsv1SessionBackhaul : IDappsBackhaul
         IDappsOutboundTransport transport,
         ILoggerFactory loggerFactory,
         IBackhaulInbox? opportunisticInbox,
-        Func<bool>? opportunisticEnabled)
+        Func<bool>? opportunisticEnabled,
+        IRouteGossipPort? routeGossip = null)
     {
         this.transport = transport;
         this.loggerFactory = loggerFactory;
         this.opportunisticInbox = opportunisticInbox;
         this.opportunisticEnabled = opportunisticEnabled;
+        this.routeGossip = routeGossip;
         logger = loggerFactory.CreateLogger<Dappsv1SessionBackhaul>();
     }
 
@@ -65,7 +68,25 @@ public sealed class Dappsv1SessionBackhaul : IDappsBackhaul
 
             var protocol = new DappsProtocolClient(connection.Stream, loggerFactory);
 
-            if (!await protocol.ReadInitialPromptAsync(ct))
+            // Connect-script: when the route carries one, the script
+            // drives a chain of node-to-node connects through
+            // intermediate non-DAPPS packet nodes and consumes the
+            // final DAPPSv1> prompt itself, so we skip
+            // ReadInitialPromptAsync. Direct connections (no script)
+            // take the regular path where the protocol client reads
+            // the prompt.
+            if (route.ConnectScript is { } script)
+            {
+                try
+                {
+                    await ConnectScriptRunner.RunAsync(connection.Stream, script, logger, ct);
+                }
+                catch (Exception ex) when (ex is ConnectScriptException or EndOfStreamException)
+                {
+                    return BackhaulSendResult.Fail($"connect-script failed for {route.Callsign}: {ex.Message}");
+                }
+            }
+            else if (!await protocol.ReadInitialPromptAsync(ct))
             {
                 return BackhaulSendResult.Fail($"no DAPPSv1> prompt from {route.Callsign}");
             }
@@ -94,12 +115,33 @@ public sealed class Dappsv1SessionBackhaul : IDappsBackhaul
                 return BackhaulSendResult.Fail($"payload rejected for {message.Id}");
             }
 
-            // Plan F3 - opportunistic poll. The session is open, the
-            // ack just landed; if the operator's enabled the feature
-            // and we have a place to deliver inbound, send `rev` and
-            // drain anything the remote has queued for us. Failures
-            // here don't flip the SendResult to fail - the push was
-            // the actual ask, the drain is a bonus.
+            // Route gossip: piggyback a `routes` pull when the
+            // staleness gate allows. Same shape as opportunistic poll -
+            // the session is already open, the ack just landed, the
+            // exchange is small. Failures don't flip the SendResult.
+            if (routeGossip is not null)
+            {
+                try
+                {
+                    if (await routeGossip.ShouldPullAsync(route.Callsign, ct))
+                    {
+                        var routes = await protocol.RequestRoutesAsync(ct);
+                        await routeGossip.ImportAsync(route.Callsign, routes, ct);
+                        await routeGossip.RecordPulledAsync(route.Callsign, ct);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Route gossip pull from {0} failed (push already succeeded)", route.Callsign);
+                }
+            }
+
+            // Opportunistic poll. The session is open, the ack just
+            // landed; if the operator's enabled the feature and we
+            // have a place to deliver inbound, send `rev` and drain
+            // anything the remote has queued for us. Failures here
+            // don't flip the SendResult to fail - the push was the
+            // actual ask, the drain is a bonus.
             if (opportunisticInbox is not null && (opportunisticEnabled?.Invoke() ?? false))
             {
                 try

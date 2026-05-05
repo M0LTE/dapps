@@ -249,6 +249,70 @@ public class DappsProtocolClient(Stream stream, ILoggerFactory loggerFactory)
     /// peer.</summary>
     public sealed record DiscoveredPeerInfo(string Callsign, string Source, int? BearerPort);
 
+    /// <summary>One row of a <c>routes</c> response. The remote is
+    /// asserting it can reach <see cref="DestinationBaseCallsign"/>;
+    /// the receiver's gossip importer adds this as a learned route
+    /// via the responding neighbour.</summary>
+    public sealed record GossipedRoute(string DestinationBaseCallsign, int? Hops, int? AgeSeconds);
+
+    /// <summary>
+    /// Send <c>routes\n</c> and read <c>route &lt;dest&gt; ...</c>
+    /// lines until <c>end</c>. Reusable shape with
+    /// <see cref="RequestPeersAsync"/>: unknown lines are skipped
+    /// (forward-compat with future fields), unparseable rows are
+    /// dropped silently rather than aborting the parse.
+    ///
+    /// <para>
+    /// Wire form per row:
+    /// </para>
+    /// <code>
+    /// route &lt;destBaseCallsign&gt; [hops=&lt;int&gt;] [ageSeconds=&lt;int&gt;]
+    /// </code>
+    /// <para>
+    /// terminated by <c>end\n</c>. Receivers ignore unknown KVs.
+    /// </para>
+    /// </summary>
+    public async Task<IReadOnlyList<GossipedRoute>> RequestRoutesAsync(CancellationToken ct)
+    {
+        await stream.WriteAsync(Encoding.UTF8.GetBytes("routes\n"), ct);
+        await stream.FlushAsync(ct);
+
+        var results = new List<GossipedRoute>();
+        while (true)
+        {
+            var line = await ReadLineAsync(ct);
+            if (line.Length == 0)
+            {
+                logger.LogWarning("EOF reading routes response after {0} record(s)", results.Count);
+                break;
+            }
+            if (string.Equals(line, "end", StringComparison.OrdinalIgnoreCase)) break;
+
+            var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length < 2 || !string.Equals(parts[0], "route", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+            var dest = parts[1];
+            int? hops = null;
+            int? ageSeconds = null;
+            for (var i = 2; i < parts.Length; i++)
+            {
+                var kv = parts[i];
+                var eq = kv.IndexOf('=');
+                if (eq <= 0) continue;
+                var key = kv[..eq];
+                var value = kv[(eq + 1)..];
+                if (string.Equals(key, "hops", StringComparison.OrdinalIgnoreCase)
+                    && int.TryParse(value, out var h)) hops = h;
+                else if (string.Equals(key, "ageSeconds", StringComparison.OrdinalIgnoreCase)
+                    && int.TryParse(value, out var a)) ageSeconds = a;
+            }
+            results.Add(new GossipedRoute(dest, hops, ageSeconds));
+        }
+        return results;
+    }
+
     /// <summary>One message yielded by the rev drain. Captures the
     /// fields a caller's <see cref="Backhaul.IBackhaulInbox"/>
     /// would need to deliver as if the message had arrived via push.

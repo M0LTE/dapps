@@ -67,10 +67,7 @@ public sealed class PassiveLearningAlgorithm(
             "Routing {0} for {1} via learned route → {2} (last seen {3:o}, failures={4})",
             message.Id, message.Destination, nextHop.Callsign, learned.LastSeenAt, learned.ConsecutiveFailures);
 
-        return new RouteDecision.NextHop(new BackhaulRoute(
-            nextHop.Callsign,
-            BearerPort: nextHop.BearerPort ?? ctx.DefaultBearerPort,
-            UdpEndpoint: nextHop.UdpEndpoint));
+        return new RouteDecision.NextHop(RouteBuilder.FromNeighbour(nextHop, ctx.DefaultBearerPort));
     }
 
     public async Task ObserveInboundAsync(BackhaulMessage message, string linkSourceCallsign, IRoutingContext ctx, CancellationToken ct)

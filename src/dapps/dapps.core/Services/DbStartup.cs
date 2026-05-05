@@ -66,6 +66,7 @@ public static class DbStartup
         db.CreateTable<DbTransmission>();
         db.CreateTable<DbStreamSendState>();
         db.CreateTable<DbStreamRecvState>();
+        db.CreateTable<DbRouteGossipState>();
 
         var optionsTable = db.Table<DbSystemOption>().Table.TableName;
         var options = db.Query<DbSystemOption>($"select * from {optionsTable};");
@@ -87,6 +88,7 @@ public static class DbStartup
         InsertIfNotPresent(db, options, "ProbeIntervalHours", "24", logger);
         InsertIfNotPresent(db, options, "FragmentThresholdBytes", "4096", logger);
         InsertIfNotPresent(db, options, "FragmentReassemblyTimeoutSeconds", "604800", logger);
+        InsertIfNotPresent(db, options, "RouteGossipStalenessHours", "6", logger);
         InsertIfNotPresent(db, options, "OpportunisticPollEnabled", "true", logger);
         InsertIfNotPresent(db, options, "ScheduledPollEnabled", "false", logger);
         InsertIfNotPresent(db, options, "PollIntervalHours", "6", logger);

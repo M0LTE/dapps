@@ -137,6 +137,22 @@ public class SystemOptions
     public int FragmentReassemblyTimeoutSeconds { get; set; } = 7 * 24 * 3600;
 
     /// <summary>
+    /// Route gossip: minimum hours between consecutive <c>routes</c>
+    /// pulls from the same neighbour. The piggyback gate skips the
+    /// gossip step on a session if the previous pull is younger than
+    /// this. Default 6 hours; <c>0</c> disables gossip entirely
+    /// (no <c>routes</c> command exchanged either way).
+    ///
+    /// <para>
+    /// Pulls only happen on a session that's already opened for real
+    /// work (a push, a probe, an opportunistic poll). The staleness
+    /// floor bounds airtime cost without adding any scheduled
+    /// transmission.
+    /// </para>
+    /// </summary>
+    public int RouteGossipStalenessHours { get; set; } = 6;
+
+    /// <summary>
     /// Plan F3 - opportunistic poll on every successful push. After
     /// <see cref="dapps.client.Backhaul.Dappsv1SessionBackhaul"/>
     /// finishes pushing a message, send <c>rev</c> on the same session

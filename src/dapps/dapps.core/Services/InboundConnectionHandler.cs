@@ -121,6 +121,11 @@ public class InboundConnectionHandler(
                     logger.LogInformation("Client is asking for queued mail (rev)");
                     await HandleRev(stream, command, stoppingToken);
                 }
+                else if (cmd == Command.Routes)
+                {
+                    logger.LogInformation("Client is asking for our known routes (gossip)");
+                    await HandleRoutes(stream, stoppingToken);
+                }
             }
         }
         finally
@@ -144,13 +149,24 @@ public class InboundConnectionHandler(
         /// </summary>
         Peers,
         /// <summary>
-        /// Plan F3 - reverse forwarding. Client asks "got mail for me?";
+        /// Reverse forwarding. Client asks "got mail for me?";
         /// we drain matching outbound queue entries via the same
         /// ihave/send/data/ack pattern we'd use to push, then re-emit
         /// the <c>DAPPSv1&gt;</c> prompt to signal we're done. Optional
         /// trailing id list for selective drain (<c>rev id1 id2 …</c>).
         /// </summary>
         Rev,
+        /// <summary>
+        /// Route gossip. Client asks "what destinations can you reach?";
+        /// we emit one <c>route &lt;dest&gt; ...</c> line per
+        /// known-good destination (filtered to those we'd actually
+        /// attempt a forward to), then <c>end</c>. Receivers import
+        /// each row into their <c>learnedroutes</c> table with
+        /// <c>Source = "gossip"</c>; the existing failure-counter
+        /// machinery handles invalidation if the imported route turns
+        /// out not to work.
+        /// </summary>
+        Routes,
     }
 
     private static readonly string[] exitCommands = ["q", "bye", "quit", "exit"];
@@ -197,9 +213,14 @@ public class InboundConnectionHandler(
 
         if (parts[0] == "rev")
         {
-            // F3 reverse forward: bare "rev" drains everything for the
+            // Reverse forward: bare "rev" drains everything for the
             // caller; "rev id1 id2 …" drains the named subset.
             return Command.Rev;
+        }
+
+        if (command == "routes")
+        {
+            return Command.Routes;
         }
 
         return null;
@@ -257,6 +278,62 @@ public class InboundConnectionHandler(
         await stream.WriteAsync(Encoding.UTF8.GetBytes(sb.ToString()), ct);
         await stream.FlushAsync(ct);
         logger.LogInformation("Sent {0} peer record(s) to {1}", emitted.Count, sourceCallsign);
+    }
+
+    /// <summary>
+    /// Route gossip - emit one <c>route &lt;dest&gt;</c> line per
+    /// destination this node believes it can reach, then <c>end</c>.
+    /// Receivers import each row as a learned route (with
+    /// <c>Source = "gossip"</c>) and use the existing failure-counter
+    /// invalidation if it turns out not to work.
+    ///
+    /// <para>
+    /// Filter: only routes whose <see cref="DbLearnedRoute.ConsecutiveFailures"/>
+    /// is zero. Skips rows we ourselves think are broken; an
+    /// imported-via-gossip row is suppressed too (we don't re-export
+    /// hearsay - that's how distance-vector loops form).
+    /// </para>
+    /// </summary>
+    private async Task HandleRoutes(Stream stream, CancellationToken ct)
+    {
+        var sb = new StringBuilder();
+        var now = DateTime.UtcNow;
+        var emitted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // Manual neighbours - the most trusted class. Highest priority
+        // in the gossip output too. Gossip-importers will re-validate
+        // by attempting forwards; a poisoned advert here is bounded by
+        // their own ConsecutiveFailures threshold.
+        var neighbours = await database.GetNeighbours();
+        foreach (var n in neighbours)
+        {
+            if (string.IsNullOrWhiteSpace(n.Callsign)) continue;
+            var baseCall = n.Callsign.Split('-')[0];
+            if (!emitted.Add(baseCall)) continue;
+            sb.Append("route ").Append(baseCall).Append(" hops=1\n");
+        }
+
+        // Traffic-learned routes. Only export rows we ourselves trust:
+        // ConsecutiveFailures = 0 AND not gossip-imported (don't
+        // re-export hearsay). LastUsedAt unset means we've never
+        // actually traversed it; suppress those too.
+        var learned = await database.GetLearnedRoutesAsync();
+        foreach (var r in learned)
+        {
+            if (r.ConsecutiveFailures > 0) continue;
+            if (string.Equals(r.Source, "gossip", StringComparison.OrdinalIgnoreCase)) continue;
+            if (r.LastUsedAt == DateTime.MinValue) continue;
+            if (string.IsNullOrWhiteSpace(r.DestinationBaseCallsign)) continue;
+            if (!emitted.Add(r.DestinationBaseCallsign)) continue;
+            var ageSeconds = (int)Math.Max(0, (now - r.LastSeenAt).TotalSeconds);
+            sb.Append("route ").Append(r.DestinationBaseCallsign)
+              .Append(" hops=2 ageSeconds=").Append(ageSeconds).Append('\n');
+        }
+
+        sb.Append("end\n");
+        await stream.WriteAsync(Encoding.UTF8.GetBytes(sb.ToString()), ct);
+        await stream.FlushAsync(ct);
+        logger.LogInformation("Sent {0} route record(s) to {1}", emitted.Count, sourceCallsign);
     }
 
     /// <summary>

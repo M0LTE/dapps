@@ -273,12 +273,24 @@ public sealed class ProbeSchedulerService(
         var useNodePrompt = existing is not null
             && existing.Source.StartsWith("node-prompt:", StringComparison.OrdinalIgnoreCase);
 
+        // If the operator's configured a connect-script for this peer
+        // (via a manually-added neighbour row), use it for the probe.
+        // The probe replays the same chain the forwarder would, so a
+        // green probe accurately reflects forwarder reachability.
+        dapps.client.ConnectScript? connectScript = null;
+        if (!useNodePrompt)
+        {
+            var nb = await database.GetNeighbour(remoteCallsign);
+            connectScript = dapps.client.ConnectScript.FromJson(nb?.ConnectScriptJson);
+        }
+
         var sw = System.Diagnostics.Stopwatch.StartNew();
         var result = useNodePrompt
             ? await prober.ProbeViaNodeCallAsync(localCallsign, remoteCallsign, bearerPort, ct,
                 applicationCommand: options.CurrentValue.NodePromptApplicationCommand,
                 fetchPeers: fetchPeers)
-            : await prober.ProbeAsync(localCallsign, remoteCallsign, bearerPort, ct, fetchPeers);
+            : await prober.ProbeAsync(localCallsign, remoteCallsign, bearerPort, ct, fetchPeers,
+                connectScript: connectScript);
         sw.Stop();
         var row = await RecordResultAsync(result);
         if (result.Success && result.DiscoveredPeers.Count > 0)
