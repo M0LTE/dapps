@@ -1,8 +1,8 @@
 # Implement DAPPS
 
-This page is for people writing a second-source DAPPS implementation - a node, a relay, a stripped-down embedded build, or anything else that needs to interoperate with the C# reference daemon. App developers writing client apps should read [App developers](app-developers/index.md) instead; this page is about the protocol on the wire between nodes.
+This page is for people writing a second-source DAPPS implementation - a node, a relay, a stripped-down embedded build, or anything else that needs to interoperate with the C# reference daemon. App developers writing client apps should read [App developers](app-developers/index.md) instead; this page is about the protocol on the air between nodes.
 
-The reference implementation in this repo is the canonical source of truth. Where this page is ambiguous, the code wins - file:line citations are given for every behaviour. The current wire-format families are stable enough that breaking changes get version bumps (`DAPPSv1>` prompt, `Version=7` codec byte) rather than silent edits.
+The reference implementation in this repo is the canonical source of truth. Where this page is ambiguous, the code wins - file:line citations are given for every behaviour. The current on-air-format families are stable enough that breaking changes get version bumps (`DAPPSv1>` prompt, `Version=7` codec byte) rather than silent edits.
 
 The page is in two parts:
 
