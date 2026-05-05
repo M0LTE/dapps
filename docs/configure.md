@@ -71,7 +71,7 @@ The admin password (for the dashboard cookie) is set on `/Setup` first-run flow,
 | Poll interval (hours)      | `DAPPS_POLL_INTERVAL_HOURS`      | `6`     | Sweep cadence when scheduled polling is on.                   |
 | Opportunistic poll enabled | `DAPPS_OPPORTUNISTIC_POLL_ENABLED` | `true`  | Drains a peer's queued mail at the end of every push session. |
 
-### Multi-part messages (F2)
+### Multi-part messages
 
 | Name                              | Env var                                  | Default     | What it does                                                                            |
 |-----------------------------------|------------------------------------------|-------------|-----------------------------------------------------------------------------------------|

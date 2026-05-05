@@ -133,7 +133,7 @@ Open `index.html` directly from disk; no static server needed. The app speaks MQ
 **What this glosses over**:
 
 - The `seen` set is in-memory; if you reload the receive tab while a message is unacked, you'll see it again. A real app would persist `seen` (e.g. IndexedDB).
-- No app-layer chunking / progressive UX. F2 fragments under the hood and reassembles before delivery, so the receiver gets the whole file in one event - no "I've got 30% of it" intermediate state. If you wanted progressive render, you'd split the source into N independent DAPPS messages at the app layer.
+- No app-layer chunking / progressive UX. DAPPS fragments under the hood and reassembles before delivery, so the receiver gets the whole file in one event - no "I've got 30% of it" intermediate state. If you wanted progressive render, you'd split the source into N independent DAPPS messages at the app layer.
 - Auth-required mode is supported by pasting a token into the form, but there's no operator-friendly first-run flow for minting / sharing the token.
 
 ## Long-form messenger (browser) - `examples/letters/`

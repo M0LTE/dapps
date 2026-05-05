@@ -1,6 +1,6 @@
 # Connect via MeshCore
 
-**Status: planned.** MeshCore as a backhaul bearer for DAPPS is in the [Phase H roadmap](https://github.com/M0LTE/dapps/blob/master/plan.md#phase-h--concrete-bearer-integrations) and not yet implemented in shipping code. This page exists so you can see the shape of the integration and plan around it.
+**Status: planned.** MeshCore as a backhaul bearer for DAPPS is on the roadmap but not yet implemented in shipping code. This page exists so you can see the shape of the integration and plan around it.
 
 ## Why MeshCore
 
@@ -55,6 +55,6 @@ A separate design note covering the MeshCore-as-a-bearer trade-offs is in [docs/
 
 ## When?
 
-Tracking issue: see [Phase H in plan.md](https://github.com/M0LTE/dapps/blob/master/plan.md#phase-h--concrete-bearer-integrations). It's blocked on hardware availability for testing - we want a real two-radio setup in the loop before declaring it shippable rather than relying on emulation.
+Currently blocked on hardware availability for testing - we want a real two-radio setup in the loop before declaring it shippable rather than relying on emulation.
 
 If you've got a MeshCore radio and want to be a tester, [open an issue](https://github.com/M0LTE/dapps/issues).

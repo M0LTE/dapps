@@ -9,10 +9,10 @@ Every site where the daemon puts bytes on a bearer:
 | Kind                | What it covers                                                                            |
 |---------------------|-------------------------------------------------------------------------------------------|
 | `beacon`            | Discovery channel beacon broadcasts.                                                      |
-| `solicit`           | B6.2 solicit transmissions (scheduled or operator-triggered).                             |
+| `solicit`           | Solicit transmissions (scheduled or operator-triggered).                                  |
 | `solicit-reply`     | Replying to a solicit we received.                                                        |
-| `probe`             | Connected-mode probe sessions (Phase 1, Phase 2 transitive).                              |
-| `probe-nodeprompt`  | Probe via node prompt (Phase 2b).                                                         |
+| `probe`             | Connected-mode probe sessions (direct or transitive).                                     |
+| `probe-nodeprompt`  | Probe via node prompt.                                                                    |
 | `forward`           | Outbound forwarder shipping a message to a neighbour.                                     |
 | `forward-flood`     | Per-recipient transmission of a flood-routed message.                                     |
 | `poll`              | Reverse-poll request to a peer (scheduled or operator-triggered).                         |
