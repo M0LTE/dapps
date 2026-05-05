@@ -14,4 +14,5 @@ namespace dapps.client.Backhaul;
 public sealed record BackhaulRoute(
     string Callsign,
     int? BearerPort = null,
-    string? UdpEndpoint = null);
+    string? UdpEndpoint = null,
+    ConnectScript? ConnectScript = null);

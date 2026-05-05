@@ -103,7 +103,11 @@ public sealed class PollSchedulerService(
         string reason = "scheduled poll sweep")
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        var result = await poller.PollAsync(localCallsign, remoteCallsign, bearerPort, ct);
+        // Pass any configured connect-script so a multi-hop neighbour
+        // gets the same chained-connect treatment for poll as for push.
+        var nb = await database.GetNeighbour(remoteCallsign);
+        var connectScript = dapps.client.ConnectScript.FromJson(nb?.ConnectScriptJson);
+        var result = await poller.PollAsync(localCallsign, remoteCallsign, bearerPort, ct, connectScript);
         sw.Stop();
         var row = await RecordResultAsync(result);
         if (transmissionAudit is { } ta)

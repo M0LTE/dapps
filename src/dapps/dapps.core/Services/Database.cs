@@ -472,7 +472,7 @@ public class Database(
     /// exists for the same callsign. Idempotent: callers can re-POST
     /// the same neighbour without checking for prior existence.
     /// </summary>
-    internal async Task UpsertNeighbour(string callsign, int? bearerPort, string? udpEndpoint = null)
+    internal async Task UpsertNeighbour(string callsign, int? bearerPort, string? udpEndpoint = null, string? connectScriptJson = null)
     {
         var connection = DbInfo.GetAsyncConnection();
         var existing = await connection.FindWithQueryAsync<DbNeighbour>(
@@ -484,12 +484,14 @@ public class Database(
                 Callsign = callsign,
                 BearerPort = bearerPort,
                 UdpEndpoint = udpEndpoint,
+                ConnectScriptJson = connectScriptJson,
             });
         }
         else
         {
             existing.BearerPort = bearerPort;
             existing.UdpEndpoint = udpEndpoint;
+            existing.ConnectScriptJson = connectScriptJson;
             await connection.UpdateAsync(existing);
         }
     }
@@ -971,5 +973,100 @@ public class Database(
             "select * from streamrecvstate where GapDeadline > 0 and GapDeadline <= ?",
             cutoff.Ticks);
         return rows;
+    }
+
+    // ── Route gossip ──────────────────────────────────────────────
+
+    /// <summary>
+    /// Should we piggyback a <c>routes</c> pull on the next session
+    /// to <paramref name="remoteCallsign"/>? True when no record exists
+    /// (never pulled) or when the previous pull is older than
+    /// <paramref name="stalenessHours"/>. Pure read - the caller must
+    /// follow up with <see cref="MarkRouteGossipPulledAsync"/> when
+    /// the pull actually happens.
+    /// </summary>
+    internal async Task<bool> ShouldPullRouteGossipAsync(
+        string localCallsign, string remoteCallsign, int stalenessHours, DateTime now)
+    {
+        if (stalenessHours <= 0) return false;
+        var key = DbRouteGossipState.MakeKey(localCallsign, remoteCallsign);
+        var row = await DbInfo.GetAsyncConnection().FindAsync<DbRouteGossipState>(key);
+        if (row is null) return true;
+        return (now - row.LastPulledAt).TotalHours >= stalenessHours;
+    }
+
+    /// <summary>Record that a routes pull just happened. Idempotent
+    /// upsert.</summary>
+    internal async Task MarkRouteGossipPulledAsync(
+        string localCallsign, string remoteCallsign, DateTime now)
+    {
+        var connection = DbInfo.GetAsyncConnection();
+        var key = DbRouteGossipState.MakeKey(localCallsign, remoteCallsign);
+        var row = await connection.FindAsync<DbRouteGossipState>(key);
+        if (row is null)
+        {
+            await connection.InsertAsync(new DbRouteGossipState
+            {
+                Key = key,
+                LocalCallsign = localCallsign,
+                RemoteCallsign = remoteCallsign,
+                LastPulledAt = now,
+            });
+        }
+        else
+        {
+            row.LastPulledAt = now;
+            await connection.UpdateAsync(row);
+        }
+    }
+
+    /// <summary>
+    /// Import a route gossiped to us by <paramref name="advertiserCallsign"/>.
+    /// Writes (or refreshes) a <see cref="DbLearnedRoute"/> row with
+    /// <c>Source = "gossip"</c>; the next-hop is the advertiser. We
+    /// don't overwrite a traffic-learned row with a gossip one - direct
+    /// observation outranks hearsay.
+    /// </summary>
+    internal async Task UpsertGossipedRouteAsync(
+        string destinationBaseCallsign, string advertiserCallsign, DateTime now)
+    {
+        if (string.IsNullOrWhiteSpace(destinationBaseCallsign)) return;
+        if (string.IsNullOrWhiteSpace(advertiserCallsign)) return;
+        // Don't import a route TO ourselves - the advertiser may know
+        // they can reach us, but we already know who we are.
+        var advertiserBase = advertiserCallsign.Split('-')[0];
+        if (string.Equals(destinationBaseCallsign, advertiserBase, StringComparison.OrdinalIgnoreCase)) return;
+
+        var connection = DbInfo.GetAsyncConnection();
+        var existing = await connection.FindAsync<DbLearnedRoute>(destinationBaseCallsign);
+        if (existing is not null
+            && !string.Equals(existing.Source, "gossip", StringComparison.OrdinalIgnoreCase))
+        {
+            // Existing row is traffic-learned (Source = "" or "traffic")
+            // - direct observation outranks hearsay, don't overwrite.
+            return;
+        }
+        if (existing is null)
+        {
+            await connection.InsertAsync(new DbLearnedRoute
+            {
+                DestinationBaseCallsign = destinationBaseCallsign,
+                NextHopCallsign = advertiserCallsign,
+                LastSeenAt = now,
+                LastUsedAt = DateTime.MinValue,
+                ConsecutiveFailures = 0,
+                Source = "gossip",
+            });
+            return;
+        }
+
+        existing.LastSeenAt = now;
+        if (!string.Equals(existing.NextHopCallsign, advertiserCallsign, StringComparison.OrdinalIgnoreCase))
+        {
+            existing.NextHopCallsign = advertiserCallsign;
+            existing.ConsecutiveFailures = 0;
+        }
+        existing.Source = "gossip";
+        await connection.UpdateAsync(existing);
     }
 }

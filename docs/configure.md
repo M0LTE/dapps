@@ -78,6 +78,12 @@ The admin password (for the dashboard cookie) is set on `/Setup` first-run flow,
 | Fragment threshold (bytes)        | `DAPPS_FRAGMENT_THRESHOLD_BYTES`         | `4096`      | Payloads strictly larger than this get split into N fragments at submit. `0` disables.  |
 | Fragment reassembly timeout (s)   | `DAPPS_FRAGMENT_REASSEMBLY_TIMEOUT_SECONDS` | `604800` (7 d) | Drop incomplete reassembly buffers older than this.                                  |
 
+### Route gossip
+
+| Name                              | Env var                                  | Default     | What it does                                                                            |
+|-----------------------------------|------------------------------------------|-------------|-----------------------------------------------------------------------------------------|
+| Route gossip staleness (hours)    | `DAPPS_ROUTE_GOSSIP_STALENESS_HOURS`     | `6`         | Minimum hours between consecutive `routes` pulls from the same neighbour. The piggyback gate skips gossip if the previous pull is younger than this. `0` disables route gossip entirely. |
+
 ### Updates
 
 | Name                  | Env var                       | Default | What it does                                                              |

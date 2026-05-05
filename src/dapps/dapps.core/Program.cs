@@ -214,15 +214,20 @@ builder.Services.AddSingleton<IDappsOutboundTransport, BearerSwitchingOutboundTr
 builder.Services.AddSingleton<UdpDatagramBackhaul>(sp =>
     new UdpDatagramBackhaul(sp.GetRequiredService<ILoggerFactory>()));
 builder.Services.AddSingleton<IDappsBackhaul>(sp => sp.GetRequiredService<UdpDatagramBackhaul>());
+builder.Services.AddSingleton<IRouteGossipPort, RouteGossipPort>();
 builder.Services.AddSingleton<IDappsBackhaul>(sp => new Dappsv1SessionBackhaul(
     sp.GetRequiredService<IDappsOutboundTransport>(),
     sp.GetRequiredService<ILoggerFactory>(),
-    // F3 opportunistic poll: hand the backhaul the inbox so it can
+    // Opportunistic poll: hand the backhaul the inbox so it can
     // deliver any messages the remote has queued for us, plus a
     // live read of the operator toggle (re-checked per push so a
     // /Config flip takes effect on the next session).
     opportunisticInbox: sp.GetRequiredService<IBackhaulInbox>(),
-    opportunisticEnabled: () => sp.GetRequiredService<IOptionsMonitor<SystemOptions>>().CurrentValue.OpportunisticPollEnabled));
+    opportunisticEnabled: () => sp.GetRequiredService<IOptionsMonitor<SystemOptions>>().CurrentValue.OpportunisticPollEnabled,
+    // Route gossip: piggyback `routes` pulls from neighbours when
+    // the per-(local, remote) staleness gate allows. Bounded airtime,
+    // no scheduled transmission.
+    routeGossip: sp.GetRequiredService<IRouteGossipPort>()));
 builder.Services.AddSingleton<DatabaseAndMqttInbox>();
 builder.Services.AddSingleton<IBackhaulInbox>(sp => sp.GetRequiredService<DatabaseAndMqttInbox>());
 builder.Services.AddHostedService<UdpDatagramListener>();

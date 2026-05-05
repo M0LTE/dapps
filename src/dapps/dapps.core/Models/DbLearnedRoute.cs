@@ -47,6 +47,15 @@ public class DbLearnedRoute
     /// success. Once this hits the algorithm's invalidation threshold
     /// (default 3), the row is deleted and the next forward attempt
     /// falls back to whatever's available (other static sources, or
-    /// in PR-C, a bounded flood).</summary>
+    /// the bounded flood fallback).</summary>
     public int ConsecutiveFailures { get; set; }
+
+    /// <summary>How this row was learned. <c>"traffic"</c> (or empty
+    /// for legacy rows) - the passive-learning algorithm observed an
+    /// inbound message with this originator. <c>"gossip"</c> - a peer
+    /// advertised this destination via the <c>routes</c> command.
+    /// Gossip-learned rows ride the same invalidation/failure path as
+    /// traffic-learned rows but the dashboard surfaces the source so an
+    /// operator can tell hearsay from observed.</summary>
+    public string Source { get; set; } = "";
 }

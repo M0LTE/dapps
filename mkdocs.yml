@@ -101,6 +101,7 @@ nav:
   - Run: run.md
   - Tune: tune.md
   - Discovery & routing: discovery-and-routing.md
+  - Multi-hop via non-DAPPS nodes: multi-hop.md
   - Operate: operate.md
   - Audit log: audit.md
   - Update: update.md

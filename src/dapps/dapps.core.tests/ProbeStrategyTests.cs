@@ -141,7 +141,8 @@ public sealed class ProbeStrategyTests
             new NoopTransport(),
             TimeProvider.System,
             NullLoggerFactory.Instance,
-            NullLogger<NodeProber>.Instance)!;
+            NullLogger<NodeProber>.Instance,
+            null)!;  // routeGossip - optional, not exercised here
         var db = new Database(NullLogger<Database>.Instance, optsMon);
         var svc = new ProbeSchedulerService(
             poller, db, optsMon, clock,

@@ -42,10 +42,7 @@ public sealed class StaticRoutingAlgorithm(ILogger<StaticRoutingAlgorithm> logge
             n => n.Callsign.Split('-')[0].Equals(destBaseCall, StringComparison.OrdinalIgnoreCase));
         if (manual is not null)
         {
-            return new RouteDecision.NextHop(new BackhaulRoute(
-                manual.Callsign,
-                BearerPort: manual.BearerPort ?? ctx.DefaultBearerPort,
-                UdpEndpoint: manual.UdpEndpoint));
+            return new RouteDecision.NextHop(RouteBuilder.FromNeighbour(manual, ctx.DefaultBearerPort));
         }
 
         // 2. Discovered peers, freshness-filtered, ordered by cost.
@@ -79,10 +76,7 @@ public sealed class StaticRoutingAlgorithm(ILogger<StaticRoutingAlgorithm> logge
         {
             logger.LogInformation("Routing {0} for {1} via route-hint next-hop {2}",
                 message.Id, message.Destination, hintNeighbour.Callsign);
-            return new RouteDecision.NextHop(new BackhaulRoute(
-                hintNeighbour.Callsign,
-                BearerPort: hintNeighbour.BearerPort ?? ctx.DefaultBearerPort,
-                UdpEndpoint: hintNeighbour.UdpEndpoint));
+            return new RouteDecision.NextHop(RouteBuilder.FromNeighbour(hintNeighbour, ctx.DefaultBearerPort));
         }
 
         return new RouteDecision.Unreachable();
