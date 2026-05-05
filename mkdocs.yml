@@ -111,5 +111,6 @@ nav:
       - Tutorial - hello world: app-developers/tutorial.md
       - Reference: app-developers/reference.md
       - Sample gallery: app-developers/gallery.md
+  - Implement DAPPS: implement.md
   - Troubleshooting: troubleshooting.md
   - Glossary: glossary.md

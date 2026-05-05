@@ -233,7 +233,7 @@ Then a back-and-forth of one-line commands and responses:
 
 Headers on `ihave` are forward-compatible - receivers ignore unknown ones. New optional fields (e.g. `src=` for source tracking, `mid=` + `frag=N/M` for multi-part, `sid=`/`sn=`/`gt=` for opt-in ordering) ride the existing `DAPPSv1>` prompt. Breaking changes bump the prompt to `DAPPSv2>`.
 
-The full wire spec lives in the [main repository README](https://github.com/M0LTE/dapps/blob/master/README.md#on-air-protocol).
+The full wire spec - prompt protocol, every line format, the binary datagram codec, beacons - lives in [Implement DAPPS](../implement.md). Read that one if you're writing a second-source node implementation; the summary table here is enough for app authors.
 
 ## Message ordering (opt-in)
 
