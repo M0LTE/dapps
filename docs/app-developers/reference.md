@@ -203,6 +203,9 @@ DAPPS does not impose a hard payload-size limit at the app interface - submit an
 | Read source callsign           | `dapps-source` user property                      | `sourceCallsign` field                              |
 | Read residual TTL              | `dapps-ttl` user property (absent if no TTL)      | `ttl` field (`null` if no TTL)                      |
 | Set TTL on submit              | `dapps-ttl` user property                         | `ttl` field                                         |
+| Opt into ordered delivery      | `dapps-stream` user property                      | `streamId` field                                    |
+| Set ordering gap policy        | `dapps-stream-gap-timeout` user property          | `streamGapTimeoutSeconds` field                     |
+| Read delivered stream / seq    | `dapps-stream`, `dapps-stream-seq` properties     | (not surfaced on REST inbound today)                |
 
 ## DAPPSv1 wire format (summary)
 
@@ -218,7 +221,7 @@ Then a back-and-forth of one-line commands and responses:
 
 | Command                                         | Direction        | Meaning                                              |
 |-------------------------------------------------|------------------|------------------------------------------------------|
-| `ihave id=<7hex> dst=<callsign> sz=<bytes> ttl=<seconds> [src=<callsign>] [mid=<id> frag=<n>/<m>]` | sender → receiver | "I have this message; do you want it?"             |
+| `ihave id=<7hex> dst=<callsign> sz=<bytes> ttl=<seconds> [src=<callsign>] [mid=<id> frag=<n>/<m>] [sid=<stream> sn=<seq> gt=<seconds>]` | sender → receiver | "I have this message; do you want it?"             |
 | `send`                                          | receiver → sender | "Yes, send it."                                     |
 | `?`                                             | receiver → sender | "Already have it / don't recognise this command."   |
 | `data <bytes>`                                  | sender → receiver | The payload, exactly `<sz>` bytes.                  |
@@ -228,9 +231,65 @@ Then a back-and-forth of one-line commands and responses:
 | `end`                                           | reply            | End of `peers` response.                            |
 | `rev <id>[,<id>...]`                            | either           | "Send me anything you're holding for these callsigns." |
 
-Headers on `ihave` are forward-compatible - receivers ignore unknown ones. New optional fields (e.g. `src=` for source tracking, `mid=` + `frag=N/M` for multi-part) ride the existing `DAPPSv1>` prompt. Breaking changes bump the prompt to `DAPPSv2>`.
+Headers on `ihave` are forward-compatible - receivers ignore unknown ones. New optional fields (e.g. `src=` for source tracking, `mid=` + `frag=N/M` for multi-part, `sid=`/`sn=`/`gt=` for opt-in ordering) ride the existing `DAPPSv1>` prompt. Breaking changes bump the prompt to `DAPPSv2>`.
 
 The full wire spec lives in the [main repository README](https://github.com/M0LTE/dapps/blob/master/README.md#on-air-protocol).
+
+## Message ordering (opt-in)
+
+DAPPS doesn't order messages by default. Each submission is independent; under retries and routing reconvergence the receiver can see them in any order. For most apps this is correct: idempotent or content-addressed work doesn't care.
+
+When an app does care - chat transcripts, telemetry sequences, change-log streams - opt-in ordering is available. Setting `streamId` on a submission tags the message as part of a per-sender ordered stream; the daemon mints a monotonic sequence number and the receiving daemon delivers messages on that stream in submit order.
+
+### Opting in
+
+REST:
+
+```bash
+curl -sS -X POST http://localhost:5086/AppApi/outbound \
+  -H 'content-type: application/json' \
+  -d '{
+    "app": "chat",
+    "destCallsign": "M0LTE",
+    "payload": "aGVsbG8=",
+    "streamId": "c1",
+    "streamGapTimeoutSeconds": 600
+  }'
+```
+
+MQTT:
+
+```
+publish dapps/out/chat/M0LTE
+  user-property dapps-stream=c1
+  user-property dapps-stream-gap-timeout=600
+  payload <bytes>
+```
+
+`streamId` is sender-scoped: two senders can pick the same id without colliding because the receiver keys its cursor on `(originator-callsign, streamId)`. Pick something short (it travels on every wire frame for that stream).
+
+`streamGapTimeoutSeconds` chooses the policy when a message is missing:
+
+- **`0` (default, "strict")**: stall forever waiting for the missing seq. Later messages park until the gap fills. Use when you'd rather wait than skip.
+- **`>0` ("timeout")**: stall for that many seconds, then skip past the gap and deliver waiting messages. Use when stale data is worse than missing data.
+
+### What the receiver sees
+
+Inbound messages tagged with a stream show two extra MQTT user properties:
+
+- `dapps-stream` - the stream id the sender chose.
+- `dapps-stream-seq` - the seq within that stream, ascending.
+
+Apps that don't care can ignore them; apps that opted in can use them to detect stream id changes (the sender rotated to a fresh stream after a reset) or to assert seq monotonicity for their own bookkeeping.
+
+### Tradeoffs
+
+- **Latency cost**. One missing message stalls the whole stream until it arrives or the timeout fires. On lossy radio links this is real - opt-in is the right default.
+- **Sender resets**. The sender persists its counter to disk; a fresh install / wiped database starts back at `sn=1`. Re-using the same `streamId` after a reset will cause receivers to drop the new messages as `stream-stale` (their cursor is well past `sn=1`). Mitigate by appending a short epoch suffix to the stream id when you reset (e.g. `chat:tom.2`).
+- **End-to-end semantics**. Ordering is enforced at the receiving daemon, not at intermediate forwarders. Hops can reorder, retry, and flood freely - the trio rides the envelope verbatim.
+- **Forward compatibility**. A daemon that doesn't understand `sid`/`sn`/`gt` ignores the keys and delivers each message immediately. Apps subscribed to a partially-ordering-aware mesh see ordered delivery only between aware nodes.
+
+The dashboard's `/Streams` page surfaces both sender-side counters and receiver-side cursors plus pending row counts; a stalled stream shows up as a non-empty pending column.
 
 ## See also
 

@@ -99,4 +99,25 @@ public class DbMessage
     /// <summary>F2 multi-part: total fragment count for the master id.
     /// Null when not fragmented; ≥ 2 when set.</summary>
     public int? FragmentTotal { get; init; }
+
+    /// <summary>Opt-in ordering stream id. Null when this message
+    /// isn't part of an ordered stream. The receiver's reorder buffer
+    /// keys on (originator-callsign, StreamId).</summary>
+    public string? StreamId { get; init; }
+
+    /// <summary>Opt-in ordering: monotonic seq within
+    /// (originator, StreamId). Null when not ordered.</summary>
+    public uint? StreamSeq { get; init; }
+
+    /// <summary>Opt-in ordering: gap timeout in seconds at originator
+    /// time. 0 = strict, &gt;0 = skip gap after that many seconds.
+    /// Carried verbatim across re-forwards so the destination sees the
+    /// originator's policy regardless of intermediate hops.</summary>
+    public uint? StreamGapTimeoutSeconds { get; init; }
+
+    /// <summary>True when the inbox parked this row awaiting an
+    /// earlier StreamSeq. Set on arrival when seq &gt; expected;
+    /// cleared as the cursor advances and the row drains to MQTT.
+    /// Always false for non-ordered messages.</summary>
+    public bool PendingInOrder { get; set; }
 }

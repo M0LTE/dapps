@@ -65,17 +65,49 @@ public class Database(
     /// the message persist in the queue indefinitely if it can't be
     /// forwarded; apps that want guaranteed cleanup should set a value.
     /// </summary>
-    public async Task<string> SubmitOutboundMessage(string appName, string destCallsign, byte[] payload, int? ttlSeconds = null)
+    public async Task<string> SubmitOutboundMessage(
+        string appName,
+        string destCallsign,
+        byte[] payload,
+        int? ttlSeconds = null,
+        string? streamId = null,
+        uint? streamGapTimeoutSeconds = null)
     {
         var destination = $"{appName}@{destCallsign}";
         var ourCall = options.CurrentValue.Callsign;
         var threshold = options.CurrentValue.FragmentThresholdBytes;
+
+        // Opt-in ordering: if a stream id is supplied, mint the next seq
+        // from DbStreamSendState. The counter and the message persist in
+        // the same call site; a crash between the two leaves the counter
+        // coherent with the on-disk message (the message commit happens
+        // after the counter bump). Gap timeout 0 (= strict) is the
+        // default when streamId is set without an explicit value.
+        var hasStream = !string.IsNullOrEmpty(streamId);
+        if (hasStream && (streamGapTimeoutSeconds is null))
+        {
+            streamGapTimeoutSeconds = 0;
+        }
+        uint? streamSeq = null;
+        if (hasStream)
+        {
+            streamSeq = await AllocateStreamSeqAsync(ourCall, destCallsign, streamId!);
+        }
 
         // F2 multi-part: split payloads above the threshold into N
         // fragment rows. Each fragment is its own DbMessage with a
         // shared MasterId and a 1-based FragmentIndex. The forwarder
         // picks them up individually; the destination's inbox
         // reassembles. Threshold = 0 disables fragmentation.
+        //
+        // Opt-in ordering note: stream metadata is stamped on the
+        // master id of a fragmented submission (and on the sole row
+        // of a non-fragmented one). Each fragment carries the full
+        // stream trio so a fragment-aware-but-stream-naive forwarder
+        // doesn't accidentally strip ordering. The receiver only
+        // applies ordering once reassembly produces the assembled
+        // payload (fragments arriving out of frag-index order are
+        // independent of the stream cursor).
         if (threshold > 0 && payload.Length > threshold)
         {
             var masterSalt = (long)(timeProvider.GetUtcNow().UtcDateTime - DateTime.UnixEpoch).TotalMilliseconds;
@@ -96,7 +128,9 @@ public class Database(
                     fragId, chunk, fragSalt, destination,
                     sourceCallsign: ourCall, "{}", ttl: ttlSeconds,
                     originatorCallsign: ourCall,
-                    masterId: masterId, fragmentIndex: i + 1, fragmentTotal: total);
+                    masterId: masterId, fragmentIndex: i + 1, fragmentTotal: total,
+                    streamId: streamId, streamSeq: streamSeq,
+                    streamGapTimeoutSeconds: streamGapTimeoutSeconds);
             }
             return masterId;
         }
@@ -106,7 +140,10 @@ public class Database(
         // Local submission: we are both the link-source AND the
         // originator. Recorded explicitly so re-forwards downstream
         // surface us in the receiver's dapps-origin user property.
-        await SaveMessage(id, payload, salt, destination, sourceCallsign: ourCall, "{}", ttl: ttlSeconds, originatorCallsign: ourCall);
+        await SaveMessage(id, payload, salt, destination, sourceCallsign: ourCall, "{}", ttl: ttlSeconds,
+            originatorCallsign: ourCall,
+            streamId: streamId, streamSeq: streamSeq,
+            streamGapTimeoutSeconds: streamGapTimeoutSeconds);
         return id;
     }
 
@@ -117,7 +154,7 @@ public class Database(
         return data;
     }
 
-    internal async Task SaveMessage(string id, byte[] buffer, long? salt, string destination, string sourceCallsign, string additionalProperties, int? ttl, string originatorCallsign = "", byte? floodHopsRemaining = null, string? sourceRouteCsv = null, string? traversedHopsCsv = null, string? masterId = null, int? fragmentIndex = null, int? fragmentTotal = null)
+    internal async Task SaveMessage(string id, byte[] buffer, long? salt, string destination, string sourceCallsign, string additionalProperties, int? ttl, string originatorCallsign = "", byte? floodHopsRemaining = null, string? sourceRouteCsv = null, string? traversedHopsCsv = null, string? masterId = null, int? fragmentIndex = null, int? fragmentTotal = null, string? streamId = null, uint? streamSeq = null, uint? streamGapTimeoutSeconds = null, bool pendingInOrder = false)
     {
         var connection = DbInfo.GetAsyncConnection();
 
@@ -146,6 +183,10 @@ public class Database(
             MasterId = masterId,
             FragmentIndex = fragmentIndex,
             FragmentTotal = fragmentTotal,
+            StreamId = streamId,
+            StreamSeq = streamSeq,
+            StreamGapTimeoutSeconds = streamGapTimeoutSeconds,
+            PendingInOrder = pendingInOrder,
         });
     }
 
@@ -175,6 +216,9 @@ public class Database(
             MasterId = offer.MasterId,
             FragmentIndex = offer.Fragment?.Index,
             FragmentTotal = offer.Fragment?.Total,
+            StreamId = offer.StreamId,
+            StreamSeq = offer.StreamSeq,
+            StreamGapTimeoutSeconds = offer.StreamGapTimeoutSeconds,
         });
 
         logger.LogInformation("Saved metadata for offer {0}", offer.Id);
@@ -227,6 +271,9 @@ public class Database(
             CreatedAt = row.CreatedAt,
             DroppedAt = timeProvider.GetUtcNow().UtcDateTime,
             Reason = reason,
+            StreamId = row.StreamId,
+            StreamSeq = row.StreamSeq,
+            StreamGapTimeoutSeconds = row.StreamGapTimeoutSeconds,
         });
         await c.DeleteAsync<DbMessage>(id);
     }
@@ -830,5 +877,99 @@ public class Database(
         var deleted = await DbInfo.GetAsyncConnection().ExecuteAsync(
             "delete from polledNodes where callsign=?", callsign);
         return deleted > 0;
+    }
+
+    // ── Opt-in message ordering: send-side counter ──────────────────
+
+    /// <summary>
+    /// Mint the next sender-side seq for (LocalCallsign, RemoteCallsign,
+    /// StreamId) and persist the bumped counter. Idempotent only across
+    /// transactions: each call returns a fresh seq and advances the row.
+    /// New rows start at 1; existing rows return NextSeq and increment.
+    /// </summary>
+    internal async Task<uint> AllocateStreamSeqAsync(string localCallsign, string remoteCallsign, string streamId)
+    {
+        var connection = DbInfo.GetAsyncConnection();
+        var key = DbStreamSendState.MakeKey(localCallsign, remoteCallsign, streamId);
+        var row = await connection.FindAsync<DbStreamSendState>(key);
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        if (row is null)
+        {
+            await connection.InsertAsync(new DbStreamSendState
+            {
+                Key = key,
+                LocalCallsign = localCallsign,
+                RemoteCallsign = remoteCallsign,
+                StreamId = streamId,
+                NextSeq = 2,
+                UpdatedAt = now,
+            });
+            return 1;
+        }
+        var seq = row.NextSeq;
+        row.NextSeq = seq + 1;
+        row.UpdatedAt = now;
+        await connection.UpdateAsync(row);
+        return seq;
+    }
+
+    /// <summary>All sender-side stream counters - dashboard listing.</summary>
+    public async Task<IReadOnlyList<DbStreamSendState>> GetStreamSendStatesAsync()
+        => await DbInfo.GetAsyncConnection().QueryAsync<DbStreamSendState>(
+            "select * from streamsendstate order by UpdatedAt desc");
+
+    // ── Opt-in message ordering: recv-side cursor ───────────────────
+
+    /// <summary>Look up the receive cursor for a (sender, stream) pair.
+    /// Null when no message has ever been seen for that pair.</summary>
+    internal async Task<DbStreamRecvState?> GetStreamRecvStateAsync(string localCallsign, string senderCallsign, string streamId)
+    {
+        var key = DbStreamRecvState.MakeKey(localCallsign, senderCallsign, streamId);
+        return await DbInfo.GetAsyncConnection().FindAsync<DbStreamRecvState>(key);
+    }
+
+    /// <summary>Idempotent upsert of the recv cursor.</summary>
+    internal async Task UpsertStreamRecvStateAsync(DbStreamRecvState state)
+    {
+        state.Key = DbStreamRecvState.MakeKey(state.LocalCallsign, state.SenderCallsign, state.StreamId);
+        var connection = DbInfo.GetAsyncConnection();
+        var existing = await connection.FindAsync<DbStreamRecvState>(state.Key);
+        if (existing is null) await connection.InsertAsync(state);
+        else await connection.UpdateAsync(state);
+    }
+
+    /// <summary>All recv cursors - dashboard listing.</summary>
+    public async Task<IReadOnlyList<DbStreamRecvState>> GetStreamRecvStatesAsync()
+        => await DbInfo.GetAsyncConnection().QueryAsync<DbStreamRecvState>(
+            "select * from streamrecvstate order by LastReceivedAt desc");
+
+    /// <summary>Pending (parked-awaiting-prior) ordered messages for a
+    /// (sender, stream) pair, ordered by StreamSeq ascending. The inbox
+    /// drains from the front as the cursor advances.</summary>
+    internal async Task<IReadOnlyList<DbMessage>> GetPendingInOrderAsync(string senderCallsign, string streamId)
+    {
+        var connection = DbInfo.GetAsyncConnection();
+        return await connection.QueryAsync<DbMessage>(
+            "select * from messages where PendingInOrder=1 and OriginatorCallsign=? and StreamId=? order by StreamSeq asc",
+            senderCallsign, streamId);
+    }
+
+    /// <summary>Mark a parked row as no-longer-pending. Used when the
+    /// inbox drains it to MQTT or the sweeper skips past it.</summary>
+    internal async Task ClearPendingInOrderAsync(string id)
+    {
+        await DbInfo.GetAsyncConnection().ExecuteAsync(
+            "update messages set PendingInOrder=0 where Id=?", id);
+    }
+
+    /// <summary>Recv cursors that have a non-MinValue gap deadline at or
+    /// before <paramref name="cutoff"/>. The sweeper advances these.</summary>
+    internal async Task<IReadOnlyList<DbStreamRecvState>> GetStaleStreamGapsAsync(DateTime cutoff)
+    {
+        var connection = DbInfo.GetAsyncConnection();
+        var rows = await connection.QueryAsync<DbStreamRecvState>(
+            "select * from streamrecvstate where GapDeadline > 0 and GapDeadline <= ?",
+            cutoff.Ticks);
+        return rows;
     }
 }

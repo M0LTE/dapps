@@ -113,7 +113,14 @@ public class OutboundMessageManager(
                         // verbatim so the message stays groupable across hops.
                         MasterId: message.MasterId,
                         FragmentIndex: message.FragmentIndex,
-                        FragmentTotal: message.FragmentTotal);
+                        FragmentTotal: message.FragmentTotal,
+                        // Opt-in ordering: stream trio is end-to-end at the
+                        // originator's intent; intermediate hops re-emit
+                        // verbatim so the destination sees the originator's
+                        // gap-timeout policy regardless of forwarding path.
+                        StreamId: message.StreamId,
+                        StreamSeq: message.StreamSeq,
+                        StreamGapTimeoutSeconds: message.StreamGapTimeoutSeconds);
                     await ForwardAndObserveAsync(message, nh.Route, bm, optionsValue, stoppingToken);
                     break;
 
@@ -211,7 +218,10 @@ public class OutboundMessageManager(
                 TraversedHops: flood.TraversedHops,
                 MasterId: message.MasterId,
                 FragmentIndex: message.FragmentIndex,
-                FragmentTotal: message.FragmentTotal);
+                FragmentTotal: message.FragmentTotal,
+                StreamId: message.StreamId,
+                StreamSeq: message.StreamSeq,
+                StreamGapTimeoutSeconds: message.StreamGapTimeoutSeconds);
 
             var backhaul = backhauls.FirstOrDefault(b => b.CanHandle(route));
             if (backhaul is null) continue;

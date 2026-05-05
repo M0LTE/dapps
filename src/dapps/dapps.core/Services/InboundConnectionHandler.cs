@@ -305,7 +305,10 @@ public class InboundConnectionHandler(
                     originator: string.IsNullOrEmpty(msg.OriginatorCallsign) ? null : msg.OriginatorCallsign,
                     masterId: msg.MasterId,
                     fragmentIndex: msg.FragmentIndex,
-                    fragmentTotal: msg.FragmentTotal);
+                    fragmentTotal: msg.FragmentTotal,
+                    streamId: msg.StreamId,
+                    streamSeq: msg.StreamSeq,
+                    streamGapTimeoutSeconds: msg.StreamGapTimeoutSeconds);
                 if (!offered)
                 {
                     logger.LogInformation("rev drain: caller declined {0}", msg.Id);
@@ -452,7 +455,10 @@ public class InboundConnectionHandler(
                 Originator: string.IsNullOrEmpty(offer.OriginatorCallsign) ? null : offer.OriginatorCallsign,
                 MasterId: offer.MasterId,
                 FragmentIndex: offer.FragmentIndex,
-                FragmentTotal: offer.FragmentTotal);
+                FragmentTotal: offer.FragmentTotal,
+                StreamId: offer.StreamId,
+                StreamSeq: offer.StreamSeq,
+                StreamGapTimeoutSeconds: offer.StreamGapTimeoutSeconds);
 
             await inbox.DeliverAsync(backhaulMessage, sourceCallsign, stoppingToken);
             await database.DeleteOffer(id);

@@ -46,4 +46,21 @@ internal sealed class DbOffer
     /// <see cref="MasterId"/> is also non-null. Always ≥ 2 when set
     /// (single-part messages skip the fragment headers entirely).</summary>
     public int? FragmentTotal { get; init; }
+
+    /// <summary>Opt-in ordering: <c>sid=</c> from the <c>ihave</c> line,
+    /// or null when the message isn't part of an ordered stream.
+    /// Carried forward into the <c>DbMessage</c> row when the payload
+    /// arrives so the inbox's reorder buffer keys correctly.</summary>
+    public string? StreamId { get; init; }
+
+    /// <summary>Opt-in ordering: <c>sn=</c> monotonic seq within
+    /// (sender, StreamId). Null when not ordered; non-null only when
+    /// <see cref="StreamId"/> is also non-null.</summary>
+    public uint? StreamSeq { get; init; }
+
+    /// <summary>Opt-in ordering: <c>gt=</c> gap timeout in seconds.
+    /// 0 = strict (stall forever for the missing seq); &gt;0 = skip
+    /// the gap after that many seconds and emit gap-skipped. Null when
+    /// not ordered.</summary>
+    public uint? StreamGapTimeoutSeconds { get; init; }
 }

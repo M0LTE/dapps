@@ -13,6 +13,14 @@ public class IHaveCommand
     /// </summary>
     public string? Originator { get; init; }
 
+    /// <summary>Opt-in ordering: stream id (per sender), monotonic
+    /// sequence, and gap timeout in seconds (0 = strict, &gt;0 = skip
+    /// gap after N seconds). All three travel together or all three
+    /// are absent.</summary>
+    public string? StreamId { get; init; }
+    public uint? StreamSeq { get; init; }
+    public uint? StreamGapTimeoutSeconds { get; init; }
+
     public static string Checksum(string ihave) =>
         Crc16CcittFalse.ComputeHex(Encoding.UTF8.GetBytes(ihave));
 
@@ -23,6 +31,10 @@ public class IHaveCommand
         if (!string.IsNullOrEmpty(Originator))
         {
             sb.Append($" src={Originator}");
+        }
+        if (!string.IsNullOrEmpty(StreamId) && StreamSeq.HasValue && StreamGapTimeoutSeconds.HasValue)
+        {
+            sb.Append($" sid={StreamId} sn={StreamSeq} gt={StreamGapTimeoutSeconds}");
         }
         if (Message.Kvps.Count > 0)
         {

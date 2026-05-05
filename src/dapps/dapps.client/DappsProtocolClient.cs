@@ -87,7 +87,10 @@ public class DappsProtocolClient(Stream stream, ILoggerFactory loggerFactory)
         string? originator = null,
         string? masterId = null,
         int? fragmentIndex = null,
-        int? fragmentTotal = null)
+        int? fragmentTotal = null,
+        string? streamId = null,
+        uint? streamSeq = null,
+        uint? streamGapTimeoutSeconds = null)
     {
         if (format != DappsMessage.MessageFormat.Plain)
         {
@@ -131,6 +134,21 @@ public class DappsProtocolClient(Stream stream, ILoggerFactory loggerFactory)
         if (hasFragHeaders)
         {
             sb.Append($" mid={masterId} frag={fragmentIndex}/{fragmentTotal}");
+        }
+        // Opt-in ordering keys. All three travel together; the receiver's
+        // IHaveValidator rejects a partial set. Belt-and-braces sender-
+        // side: catch the malformed envelope before it reaches the wire.
+        var hasStream = !string.IsNullOrEmpty(streamId)
+            && streamSeq.HasValue && streamGapTimeoutSeconds.HasValue;
+        if (!hasStream
+            && (!string.IsNullOrEmpty(streamId) || streamSeq.HasValue || streamGapTimeoutSeconds.HasValue))
+        {
+            throw new ArgumentException(
+                "streamId, streamSeq, streamGapTimeoutSeconds must all be set together (opt-in ordering) or all be null");
+        }
+        if (hasStream)
+        {
+            sb.Append($" sid={streamId} sn={streamSeq} gt={streamGapTimeoutSeconds}");
         }
         sb.Append('\n');
 
@@ -244,7 +262,10 @@ public class DappsProtocolClient(Stream stream, ILoggerFactory loggerFactory)
         string? Originator,
         string? MasterId,
         int? FragmentIndex,
-        int? FragmentTotal);
+        int? FragmentTotal,
+        string? StreamId,
+        uint? StreamSeq,
+        uint? StreamGapTimeoutSeconds);
 
     /// <summary>
     /// Plan F3 - reverse forwarding from the client side. Send
@@ -340,7 +361,10 @@ public class DappsProtocolClient(Stream stream, ILoggerFactory loggerFactory)
                 Originator: parsed.Originator,
                 MasterId: parsed.MasterId,
                 FragmentIndex: parsed.FragmentIndex,
-                FragmentTotal: parsed.FragmentTotal);
+                FragmentTotal: parsed.FragmentTotal,
+                StreamId: parsed.StreamId,
+                StreamSeq: parsed.StreamSeq,
+                StreamGapTimeoutSeconds: parsed.StreamGapTimeoutSeconds);
         }
     }
 
@@ -372,7 +396,7 @@ public class DappsProtocolClient(Stream stream, ILoggerFactory loggerFactory)
     /// minimum fields aren't present.</summary>
     private static (bool Ok, ParsedOffer? Offer) TryParseOffer(string line)
     {
-        // line: "ihave <id> len=N fmt=p dst=… [s=…] [ttl=…] [src=…] [mid=… frag=N/M] …"
+        // line: "ihave <id> len=N fmt=p dst=… [s=…] [ttl=…] [src=…] [mid=… frag=N/M] [sid=… sn=… gt=…] …"
         var parts = line.Split(' ');
         if (parts.Length < 4 || parts[0] != "ihave") return (false, null);
         var id = parts[1];
@@ -384,6 +408,9 @@ public class DappsProtocolClient(Stream stream, ILoggerFactory loggerFactory)
         string? masterId = null;
         int? fragIndex = null;
         int? fragTotal = null;
+        string? streamId = null;
+        uint? streamSeq = null;
+        uint? streamGapTimeout = null;
         for (var i = 2; i < parts.Length; i++)
         {
             var kv = parts[i];
@@ -409,15 +436,19 @@ public class DappsProtocolClient(Stream stream, ILoggerFactory loggerFactory)
                         fragIndex = fn; fragTotal = fm;
                     }
                     break;
+                case "sid": streamId = value; break;
+                case "sn": if (uint.TryParse(value, out var snv)) streamSeq = snv; break;
+                case "gt": if (uint.TryParse(value, out var gtv)) streamGapTimeout = gtv; break;
             }
         }
-        if (destination is null || len is null) return (false, new ParsedOffer(id, "", 0, null, null, null, null, null, null));
-        return (true, new ParsedOffer(id, destination, len.Value, salt, ttl, originator, masterId, fragIndex, fragTotal));
+        if (destination is null || len is null) return (false, new ParsedOffer(id, "", 0, null, null, null, null, null, null, null, null, null));
+        return (true, new ParsedOffer(id, destination, len.Value, salt, ttl, originator, masterId, fragIndex, fragTotal, streamId, streamSeq, streamGapTimeout));
     }
 
     private sealed record ParsedOffer(
         string Id, string Destination, int Length, long? Salt, int? Ttl,
-        string? Originator, string? MasterId, int? FragmentIndex, int? FragmentTotal);
+        string? Originator, string? MasterId, int? FragmentIndex, int? FragmentTotal,
+        string? StreamId, uint? StreamSeq, uint? StreamGapTimeoutSeconds);
 
     /// <summary>
     /// Reads a line terminated by <c>\n</c>, <c>\r</c>, or <c>\r\n</c>.

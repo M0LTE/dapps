@@ -31,7 +31,15 @@ public class DbDroppedMessage
     public DateTime DroppedAt { get; init; } = DateTime.UtcNow;
 
     /// <summary>Short tag explaining the drop. Currently used:
-    /// <c>ttl-expired</c>. Stable across releases - kept short for
+    /// <c>ttl-expired</c>, <c>stalled-awaiting-prior</c>,
+    /// <c>gap-skipped</c>. Stable across releases - kept short for
     /// dashboard display.</summary>
     public string Reason { get; init; } = "";
+
+    /// <summary>Opt-in ordering: stream id, seq, and gap-timeout
+    /// preserved from the live row so the dropped-messages dashboard
+    /// can show why a stream stalled. Null on non-stream rows.</summary>
+    public string? StreamId { get; init; }
+    public uint? StreamSeq { get; init; }
+    public uint? StreamGapTimeoutSeconds { get; init; }
 }

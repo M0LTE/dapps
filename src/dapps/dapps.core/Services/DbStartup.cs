@@ -64,6 +64,8 @@ public static class DbStartup
         db.CreateTable<DbFragment>();
         db.CreateTable<DbPolledNode>();
         db.CreateTable<DbTransmission>();
+        db.CreateTable<DbStreamSendState>();
+        db.CreateTable<DbStreamRecvState>();
 
         var optionsTable = db.Table<DbSystemOption>().Table.TableName;
         var options = db.Query<DbSystemOption>($"select * from {optionsTable};");

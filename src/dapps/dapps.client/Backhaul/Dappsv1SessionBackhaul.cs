@@ -81,7 +81,10 @@ public sealed class Dappsv1SessionBackhaul : IDappsBackhaul
                     originator: message.Originator,
                     masterId: message.MasterId,
                     fragmentIndex: message.FragmentIndex,
-                    fragmentTotal: message.FragmentTotal))
+                    fragmentTotal: message.FragmentTotal,
+                    streamId: message.StreamId,
+                    streamSeq: message.StreamSeq,
+                    streamGapTimeoutSeconds: message.StreamGapTimeoutSeconds))
             {
                 return BackhaulSendResult.Fail($"offer rejected for {message.Id}");
             }
@@ -112,7 +115,10 @@ public sealed class Dappsv1SessionBackhaul : IDappsBackhaul
                             Originator: polled.Originator,
                             MasterId: polled.MasterId,
                             FragmentIndex: polled.FragmentIndex,
-                            FragmentTotal: polled.FragmentTotal);
+                            FragmentTotal: polled.FragmentTotal,
+                            StreamId: polled.StreamId,
+                            StreamSeq: polled.StreamSeq,
+                            StreamGapTimeoutSeconds: polled.StreamGapTimeoutSeconds);
                         await opportunisticInbox.DeliverAsync(inbound, route.Callsign, ct);
                     }
                 }
