@@ -36,7 +36,7 @@ Terms used throughout this manual.
 
 **dapps-id** - User property on MQTT publishes / REST submits that DAPPS uses for idempotent at-least-once delivery. Same `dapps-id` twice → second submit is a no-op.
 
-**dapps-source** - User property carrying the originating callsign. Set by DAPPS at the source node, propagated end-to-end with F1 source tracking.
+**dapps-source** - User property carrying the originating callsign. Set by DAPPS at the source node and propagated end-to-end across forwarding hops.
 
 **dapps-ttl** - User property carrying the residual TTL in seconds. Decremented on each forwarding hop; messages are dropped on zero.
 
@@ -44,15 +44,7 @@ Terms used throughout this manual.
 
 **DSR** - Dynamic Source Routing - a routing class where the sender stamps the path on the message. The `meshcore` algorithm is DSR-flavoured.
 
-**F1** - End-to-end source tracking. The originating callsign is preserved on the message all the way to the destination, even across multiple forwarding hops.
-
-**F2** - Multi-part messages. Payloads larger than the fragment threshold are split into N fragments at submit, each delivered independently and reassembled at the receiver.
-
-**F3** - Reverse polling. A peer can ask another peer for queued messages, instead of waiting for them to be pushed. Two flavours: opportunistic (free, at the end of every push session) and scheduled (periodic).
-
-**F4** - Versioning policy. How DAPPS manages compatibility on the wire - forward-compatible additions stay on the current version, breaking changes bump the prompt.
-
-**fragment** - A piece of a multi-part message. Each fragment carries its master ID, fragment index, fragment total, and is forwarded / acked independently.
+**fragment** - A piece of a multi-part message. Payloads larger than the fragment threshold are split into N fragments at submit, each forwarded / acked independently and reassembled at the destination. Each carries its master ID, fragment index, and fragment total.
 
 **forwarder** - The background loop that walks the messages table and dispatches outbound forwards over the bearer. Ticks every 5 s.
 
@@ -76,17 +68,17 @@ Terms used throughout this manual.
 
 **neighbour** - A callsign DAPPS will actually forward to. May be hand-added or auto-promoted from a successful probe.
 
-**node-prompt** - The text prompt presented when an L2 connect lands on a packet node (BPQ et al). Phase 2b discovery uses this to probe peers that aren't directly DAPPS - connect, type the application command (`DAPPS` by default), then run a normal probe from the resulting prompt.
+**node-prompt** - The text prompt presented when an L2 connect lands on a packet node (BPQ et al). DAPPS uses this to probe peers that aren't directly DAPPS - connect, type the application command (`DAPPS` by default), then run a normal probe from the resulting prompt.
 
 **NODECALL** - A callsign assigned to a packet node itself (as distinct from the operator's own callsign). For example, `GB7XYZ` might be the node call and `M0LTE` the operator's call.
 
-**NVIS** - Near-Vertical Incidence Skywave. An HF propagation mode used for short-to-medium-range communication when ground-wave doesn't reach. DAPPS's B6.2 solicit-and-listen is shaped around its asymmetric-coverage characteristics.
+**NVIS** - Near-Vertical Incidence Skywave. An HF propagation mode used for short-to-medium-range communication when ground-wave doesn't reach. DAPPS's solicit-and-listen discovery is shaped around its asymmetric-coverage characteristics.
 
-**`peers`** - A DAPPSv1 command added in Phase 2 of the probe work. After a successful probe, the prober asks "who do you know?" and seeds each unknown callsign as a candidate to probe later.
+**`peers`** - A DAPPSv1 command for transitive discovery. After a successful probe, the prober asks "who do you know?" and seeds each unknown callsign as a candidate to probe later.
 
-**probe** - A connected-mode session opened to a peer to confirm reachability. Three flavours: direct (Phase 1), transitive via the peer's `peers` response (Phase 2), and node-prompt-discovered (Phase 2b).
+**probe** - A connected-mode session opened to a peer to confirm reachability. Three flavours: direct, transitive (via the peer's `peers` response), and node-prompt-discovered (via the BPQ node prompt for peers that aren't directly DAPPS).
 
-**`rev`** - A DAPPSv1 command added in Phase F3: "send me anything you're holding for me." Used by both opportunistic and scheduled polling.
+**`rev`** - A DAPPSv1 command meaning "send me anything you're holding for me." Used by both opportunistic and scheduled polling.
 
 **REST** - DAPPS's HTTP-based app interface, alongside MQTT. Same submit shape; different protocol.
 

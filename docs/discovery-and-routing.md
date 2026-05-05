@@ -12,7 +12,7 @@ Three tables, each with a single job:
 
 Plus two derived stores:
 
-4. **Probed nodes** - per-callsign liveness state from connected-mode probes (Phase B6.1). Tracks success/failure history, source (`neighbour` for direct, `via:CALL` for transitive, `node-prompt:CALL` for node-prompt-discovered).
+4. **Probed nodes** - per-callsign liveness state from connected-mode probes. Tracks success/failure history, source (`neighbour` for direct, `via:CALL` for transitive, `node-prompt:CALL` for node-prompt-discovered).
 5. **Learned routes** - for the `passive-flood` algorithm, observed forwards build up an internal "I know how to reach X via Y" map.
 
 ## Discovery channels
@@ -34,25 +34,25 @@ When you enable a discovery channel, the beaconer sends a small frame on its cad
 
 A beacon is one packet, not a session - it's stateless. The advertised TTL is how long the receiver should remember the row before it ages out.
 
-## Solicits (B6.2)
+## Solicits
 
 Beacons are push: I send mine, you happen to be listening. Solicits are pull: I ask "is anyone out there?" and listen for replies for a window.
 
 Useful on **HF NVIS** where the round-trip cost of a beacon (and the airtime budget you'd have to give it) makes "transmit and hope" expensive. Solicits are operator-triggered (via the dashboard) or scheduled per-channel.
 
-## Probes (B6.1)
+## Probes
 
 A probe is a connected-mode session - DAPPS opens a real DAPPS session to a peer's callsign and confirms the round-trip works. Probing is **off by default**; turn on with `DAPPS_PROBING_ENABLED=true`.
 
 Three flavours:
 
-| Flavour                | What it does                                                                                                                          | Source flag             |
-|------------------------|---------------------------------------------------------------------------------------------------------------------------------------|-------------------------|
-| **Phase 1**            | Direct probe: open a DAPPSv1 session, confirm prompt, hang up. Records success/failure.                                              | `neighbour`             |
-| **Phase 2 - `peers`**  | After a successful Phase 1 probe, ask the peer "who do you know?" via the `peers` command. Seed each unknown callsign as a candidate. | `via:<asked-peer>`      |
-| **Phase 2b - node-prompt** | For peers that aren't (yet) DAPPS - connect to the BPQ node prompt, type the application command (`DAPPS` by default), and probe from there. | `node-prompt:<source>`  |
+| Flavour            | What it does                                                                                                                                  | Source flag             |
+|--------------------|-----------------------------------------------------------------------------------------------------------------------------------------------|-------------------------|
+| **Direct**         | Open a DAPPSv1 session, confirm prompt, hang up. Records success/failure.                                                                     | `neighbour`             |
+| **Transitive**     | After a successful direct probe, ask the peer "who do you know?" via the `peers` command. Seed each unknown callsign as a candidate.          | `via:<asked-peer>`      |
+| **Node-prompt**    | For peers that aren't (yet) DAPPS - connect to the BPQ node prompt, type the application command (`DAPPS` by default), and probe from there.  | `node-prompt:<source>`  |
 
-Phase 2b auto-discovery is gated on `DAPPS_AUTO_DISCOVER_VIA_NODE_CALL=true`. When on, every AGW DAPPS beacon also seeds a node-prompt-probe candidate for the source's base callsign.
+Node-prompt auto-discovery is gated on `DAPPS_AUTO_DISCOVER_VIA_NODE_CALL=true`. When on, every AGW DAPPS beacon also seeds a node-prompt-probe candidate for the source's base callsign.
 
 ## Neighbours
 

@@ -7,7 +7,7 @@ The reference implementation in this repo is the canonical source of truth. Wher
 The page is in two parts:
 
 - [**Bare essentials**](#bare-essentials) - the smallest set of behaviours that lets two implementations exchange a message and not deadlock. If you implement only this, you get a node that pushes messages, accepts inbound messages, and is invisible to discovery / routing optimisations.
-- [**Full interoperability**](#full-interoperability) - feature by feature, what to add to that minimum to be fully indistinguishable from the reference daemon: source tracking, fragmentation, ordering, polling, peer exchange, discovery beacons, and the datagram codec.
+- [**Full interoperability**](#full-interoperability) - feature by feature, what to add to that minimum to be fully indistinguishable from the reference daemon: end-to-end source tracking, multi-part fragmentation, opt-in ordering, polling, peer exchange, discovery beacons, and the datagram codec.
 
 ## Bare essentials
 
@@ -118,7 +118,7 @@ A node that does only:
 
 The features below are individually optional. The reference daemon implements all of them; pick the ones your scope needs. Each one is wire-additive: a daemon that doesn't understand `src=` will just ignore it, and the message still delivers.
 
-### F1: end-to-end source tracking (`src=`)
+### End-to-end source tracking (`src=`)
 
 Add to `ihave`:
 
@@ -128,11 +128,11 @@ ihave 7e1f3a2 len=5 fmt=p s=1714982400000 src=G0ORIG dst=mail@G0RCV chk=a31f
 
 `src=<callsign>` is the *originator* of the message - the callsign of the node whose app submitted it. Distinct from the *link source* (the immediate sender, derived from the bearer's session metadata). On a multi-hop relay path, every forwarder preserves `src=` verbatim; only the originator stamps it.
 
-Why have it: without `src=`, a receiver three hops down can't tell whether a message originated at G0FIRST or just transited through G0FIRST. With `src=`, the receiver's app sees the originator (exposed as the `dapps-origin` MQTT user property) and can route replies back to the right source. Forwarders that don't speak F1 omit `src=`; receivers treat absent `src=` as "originator unknown".
+Why have it: without `src=`, a receiver three hops down can't tell whether a message originated at G0FIRST or just transited through G0FIRST. With `src=`, the receiver's app sees the originator (exposed as the `dapps-origin` MQTT user property) and can route replies back to the right source. Forwarders that don't propagate it omit `src=`; receivers treat absent `src=` as "originator unknown".
 
 Reference: [DappsProtocolClient.cs:122-128](https://github.com/M0LTE/dapps/blob/master/src/dapps/dapps.client/DappsProtocolClient.cs#L122-L128), [IHaveValidator.cs:144-152](https://github.com/M0LTE/dapps/blob/master/src/dapps/dapps.core/Services/IHaveValidator.cs#L144-L152).
 
-### F2: multi-part fragmentation (`mid=` + `frag=`)
+### Multi-part fragmentation (`mid=` + `frag=`)
 
 A payload that exceeds the operator's fragment threshold (default 4 KB) is split into N chunks at the originator, sent as N independent `ihave` exchanges, and reassembled at the destination.
 
@@ -148,7 +148,7 @@ ihave 33eeefe len=512  fmt=p s=1714982400003 mid=4cf02b1 frag=3/3 dst=mail@G0RCV
 - Each fragment has its own id (hash of its own chunk + its own salt). Intermediate hops forward fragments as opaque messages.
 - Only the final destination groups by `mid`, holds fragments in a reassembly buffer, and delivers the assembled payload to the app once all M arrive.
 
-Why two-id'd: each fragment is independently content-addressed so it can be deduplicated, retried, and routed like any other message. The master id only matters at the destination; relays don't care. A pre-F2 receiver that doesn't know `mid`/`frag` will deliver each fragment to the app as a separate message, which is wrong but not corrupt.
+Why two-id'd: each fragment is independently content-addressed so it can be deduplicated, retried, and routed like any other message. The master id only matters at the destination; relays don't care. A receiver that doesn't know `mid`/`frag` will deliver each fragment to the app as a separate message, which is wrong but not corrupt.
 
 Reassembly buffer entries time out after `FragmentReassemblyTimeoutSeconds` (default 7 days) - long because HF / mesh propagation gaps legitimately last days, and we'd rather hold the partial bytes than throw away most of a near-complete message.
 
