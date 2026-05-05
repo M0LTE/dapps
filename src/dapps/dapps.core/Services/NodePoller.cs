@@ -69,7 +69,10 @@ public sealed class NodePoller(
                     Originator: polled.Originator,
                     MasterId: polled.MasterId,
                     FragmentIndex: polled.FragmentIndex,
-                    FragmentTotal: polled.FragmentTotal);
+                    FragmentTotal: polled.FragmentTotal,
+                    StreamId: polled.StreamId,
+                    StreamSeq: polled.StreamSeq,
+                    StreamGapTimeoutSeconds: polled.StreamGapTimeoutSeconds);
                 await inbox.DeliverAsync(inbound, remoteCallsign, ct);
                 drained++;
             }

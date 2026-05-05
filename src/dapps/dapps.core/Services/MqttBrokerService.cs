@@ -171,6 +171,20 @@ public sealed class MqttBrokerService(
                     "dapps-ttl", residual.ToString(System.Globalization.CultureInfo.InvariantCulture));
             }
         }
+        // Opt-in ordering: surface the stream id + seq the inbox
+        // delivered this on. Apps that opted into ordering by setting
+        // dapps-stream on outbound see the same property on inbound,
+        // so they can correlate cursors and (if they want) reject
+        // out-of-stream-id deliveries.
+        if (!string.IsNullOrEmpty(message.StreamId))
+        {
+            builder = builder.WithUserProperty("dapps-stream", message.StreamId);
+            if (message.StreamSeq is { } sn)
+            {
+                builder = builder.WithUserProperty(
+                    "dapps-stream-seq", sn.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            }
+        }
         var msg = builder.Build();
 
         try
@@ -324,11 +338,35 @@ public sealed class MqttBrokerService(
                 ttl = parsedTtl;
             }
 
+            // Optional opt-in ordering: dapps-stream is the stream id;
+            // dapps-stream-gap-timeout is the policy in seconds (0 or
+            // missing = strict). The daemon allocates the seq.
+            string? streamId = null;
+            uint? streamGap = null;
+            var sidProp = e.ApplicationMessage.UserProperties?
+                .FirstOrDefault(p => string.Equals(p.Name, "dapps-stream", StringComparison.OrdinalIgnoreCase));
+            if (sidProp is not null && !string.IsNullOrWhiteSpace(sidProp.Value)
+                && !sidProp.Value.Contains(' ') && !sidProp.Value.Contains('=')
+                && Encoding.UTF8.GetByteCount(sidProp.Value) <= 255)
+            {
+                streamId = sidProp.Value;
+                var gtProp = e.ApplicationMessage.UserProperties?
+                    .FirstOrDefault(p => string.Equals(p.Name, "dapps-stream-gap-timeout", StringComparison.OrdinalIgnoreCase));
+                if (gtProp is not null
+                    && uint.TryParse(gtProp.Value, System.Globalization.NumberStyles.None,
+                        System.Globalization.CultureInfo.InvariantCulture, out var parsedGap))
+                {
+                    streamGap = parsedGap;
+                }
+            }
+
             try
             {
-                var id = await database.SubmitOutboundMessage(app, dest, e.ApplicationMessage.PayloadSegment.ToArray(), ttl);
-                logger.LogInformation("MQTT: queued outbound {0} from app {1} to {2} (ttl={3})",
-                    id, app, dest, ttl?.ToString() ?? "none");
+                var id = await database.SubmitOutboundMessage(
+                    app, dest, e.ApplicationMessage.PayloadSegment.ToArray(), ttl,
+                    streamId: streamId, streamGapTimeoutSeconds: streamGap);
+                logger.LogInformation("MQTT: queued outbound {0} from app {1} to {2} (ttl={3} stream={4})",
+                    id, app, dest, ttl?.ToString() ?? "none", streamId ?? "none");
             }
             catch (Exception ex)
             {

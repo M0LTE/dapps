@@ -23,7 +23,8 @@ namespace dapps.client.Backhaul.Datagram;
 ///                          bit3=originator, bit4=link-source,
 ///                          bit5=flood-hops-remaining,
 ///                          bit6=source-route, bit7=traversed-hops,
-///                          bit8=fragment (F2 multi-part)
+///                          bit8=fragment (F2 multi-part),
+///                          bit9=stream (opt-in ordering)
 ///   [7]  id (UTF-8 ASCII, 7-char hex from DappsMessage.ComputeHash)
 ///   [8]  salt              (only when flags bit0)
 ///   [4]  ttl seconds       (only when flags bit1)
@@ -43,6 +44,10 @@ namespace dapps.client.Backhaul.Datagram;
 ///   [7]  master id         (only when flags bit8; ASCII)
 ///   [2]  fragment index    (only when flags bit8; UInt16, 1-based)
 ///   [2]  fragment total    (only when flags bit8; UInt16)
+///   [1]  stream id len     (only when flags bit9; max 255 bytes)
+///   [S]  stream id         (only when flags bit9; UTF-8)
+///   [4]  stream seq        (only when flags bit9; UInt32 LE)
+///   [4]  stream gap timeout (only when flags bit9; UInt32 LE seconds, 0=strict)
 ///   [2]  headers count     (only when flags bit2)
 ///   per header:
 ///     [2] key len, [K] key (UTF-8), [2] value len, [V] value (UTF-8)
@@ -56,7 +61,7 @@ public static class BackhaulMessageCodec
     /// <summary>Version this encoder writes AND the only version the
     /// decoder accepts. Bump on any wire-format change so a mismatched
     /// peer fails fast instead of silently misreading flag bits.</summary>
-    public const byte Version = 6;
+    public const byte Version = 7;
     public const int IdLength = 7;
 
     [Flags]
@@ -72,6 +77,7 @@ public static class BackhaulMessageCodec
         HasSourceRoute = 1 << 6,
         HasTraversedHops = 1 << 7,
         HasFragment = 1 << 8,
+        HasStream = 1 << 9,
     }
 
     public static byte[] Encode(BackhaulMessage message)
@@ -100,6 +106,28 @@ public static class BackhaulMessageCodec
         else if (message.FragmentIndex.HasValue || message.FragmentTotal.HasValue)
         {
             throw new ArgumentException("fragment index/total without master id", nameof(message));
+        }
+
+        // Opt-in ordering trio: present together or absent together. The
+        // receiver enforces this in IHaveValidator too, but a relay that
+        // forwards a partial set would silently drop ordering for the
+        // downstream hop, which is worse than failing fast here.
+        var hasStream = !string.IsNullOrEmpty(message.StreamId)
+            || message.StreamSeq.HasValue
+            || message.StreamGapTimeoutSeconds.HasValue;
+        if (hasStream
+            && (string.IsNullOrEmpty(message.StreamId)
+                || !message.StreamSeq.HasValue
+                || !message.StreamGapTimeoutSeconds.HasValue))
+        {
+            throw new ArgumentException(
+                "stream id/seq/gap-timeout must all be set together (opt-in ordering) or all be absent",
+                nameof(message));
+        }
+        var streamIdBytes = hasStream ? Encoding.UTF8.GetBytes(message.StreamId!) : [];
+        if (hasStream && streamIdBytes.Length > byte.MaxValue)
+        {
+            throw new ArgumentException("stream id exceeds 255 bytes", nameof(message));
         }
 
         var idBytes = Encoding.ASCII.GetBytes(message.Id);
@@ -133,6 +161,7 @@ public static class BackhaulMessageCodec
         if (sourceRouteBytes.Length > 0) flags |= Flags.HasSourceRoute;
         if (traversedBytes.Length > 0) flags |= Flags.HasTraversedHops;
         if (hasFragment) flags |= Flags.HasFragment;
+        if (hasStream) flags |= Flags.HasStream;
 
         var size = 1 + 2 + IdLength
             + (message.Salt.HasValue ? 8 : 0)
@@ -144,6 +173,7 @@ public static class BackhaulMessageCodec
             + sourceRouteBytes.Length
             + traversedBytes.Length
             + (hasFragment ? IdLength + 2 + 2 : 0)
+            + (hasStream ? 1 + streamIdBytes.Length + 4 + 4 : 0)
             + headerBytes.Length
             + 4 + message.Payload.Length;
 
@@ -214,6 +244,17 @@ public static class BackhaulMessageCodec
             offset += 2;
             BinaryPrimitives.WriteUInt16LittleEndian(buffer.AsSpan(offset, 2), (ushort)message.FragmentTotal!.Value);
             offset += 2;
+        }
+
+        if (hasStream)
+        {
+            buffer[offset++] = (byte)streamIdBytes.Length;
+            streamIdBytes.CopyTo(buffer.AsSpan(offset));
+            offset += streamIdBytes.Length;
+            BinaryPrimitives.WriteUInt32LittleEndian(buffer.AsSpan(offset, 4), message.StreamSeq!.Value);
+            offset += 4;
+            BinaryPrimitives.WriteUInt32LittleEndian(buffer.AsSpan(offset, 4), message.StreamGapTimeoutSeconds!.Value);
+            offset += 4;
         }
 
         headerBytes.CopyTo(buffer.AsSpan(offset));
@@ -313,6 +354,20 @@ public static class BackhaulMessageCodec
             offset += 2;
         }
 
+        string? streamId = null;
+        uint? streamSeq = null;
+        uint? streamGapTimeout = null;
+        if ((flags & Flags.HasStream) != 0)
+        {
+            var sidLen = buffer[offset++];
+            streamId = Encoding.UTF8.GetString(buffer.Slice(offset, sidLen));
+            offset += sidLen;
+            streamSeq = BinaryPrimitives.ReadUInt32LittleEndian(buffer.Slice(offset, 4));
+            offset += 4;
+            streamGapTimeout = BinaryPrimitives.ReadUInt32LittleEndian(buffer.Slice(offset, 4));
+            offset += 4;
+        }
+
         IReadOnlyDictionary<string, string>? headers = null;
         if ((flags & Flags.HasHeaders) != 0)
         {
@@ -338,7 +393,7 @@ public static class BackhaulMessageCodec
         offset += 4;
         var payload = buffer.Slice(offset, (int)payloadLen).ToArray();
 
-        return new BackhaulMessage(id, destination, salt, ttl, payload, headers, originator, linkSource, floodHops, sourceRoute, traversedHops, masterId, fragmentIndex, fragmentTotal);
+        return new BackhaulMessage(id, destination, salt, ttl, payload, headers, originator, linkSource, floodHops, sourceRoute, traversedHops, masterId, fragmentIndex, fragmentTotal, streamId, streamSeq, streamGapTimeout);
     }
 
     private static byte[] EncodeHeaders(IReadOnlyDictionary<string, string> headers)

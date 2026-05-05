@@ -130,6 +130,7 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<MqttBrokerService>
 builder.Services.AddHostedService<AgwInboundService>();
 builder.Services.AddHostedService<Rhpv2InboundService>();
 builder.Services.AddHostedService<TtlSweeperService>();
+builder.Services.AddHostedService<StreamGapSweeperService>();
 builder.Services.AddSingleton<Database>();
 builder.Services.AddSingleton<AppTokenStore>();
 builder.Services.AddSingleton<AdminPasswordStore>();
@@ -222,7 +223,8 @@ builder.Services.AddSingleton<IDappsBackhaul>(sp => new Dappsv1SessionBackhaul(
     // /Config flip takes effect on the next session).
     opportunisticInbox: sp.GetRequiredService<IBackhaulInbox>(),
     opportunisticEnabled: () => sp.GetRequiredService<IOptionsMonitor<SystemOptions>>().CurrentValue.OpportunisticPollEnabled));
-builder.Services.AddSingleton<IBackhaulInbox, DatabaseAndMqttInbox>();
+builder.Services.AddSingleton<DatabaseAndMqttInbox>();
+builder.Services.AddSingleton<IBackhaulInbox>(sp => sp.GetRequiredService<DatabaseAndMqttInbox>());
 builder.Services.AddHostedService<UdpDatagramListener>();
 
 // B6.1 - connected-mode probe-and-map. NodeProber is stateless and

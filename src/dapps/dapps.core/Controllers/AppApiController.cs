@@ -27,9 +27,22 @@ public class AppApiController(Database database) : ControllerBase
         if (string.IsNullOrWhiteSpace(request.DestCallsign)) return BadRequest("DestCallsign is required");
         if (request.Payload is null || request.Payload.Length == 0) return BadRequest("Payload is required");
         if (request.Ttl is { } ttl && ttl <= 0) return BadRequest("Ttl must be a positive integer (seconds)");
+        // Stream id constraints: non-empty when supplied (to keep the
+        // wire form parseable), capped at 255 bytes (datagram codec
+        // length-prefix is one byte). Spaces forbidden because the
+        // text wire form is space-delimited.
+        if (request.StreamId is { } sid)
+        {
+            if (string.IsNullOrWhiteSpace(sid)) return BadRequest("StreamId, when supplied, must be non-empty");
+            if (sid.Contains(' ') || sid.Contains('=')) return BadRequest("StreamId must not contain spaces or '='");
+            if (System.Text.Encoding.UTF8.GetByteCount(sid) > 255) return BadRequest("StreamId exceeds 255 bytes");
+        }
         if (!HttpContext.IsAuthorisedForApp(request.App)) return Forbid();
 
-        var id = await database.SubmitOutboundMessage(request.App, request.DestCallsign, request.Payload, request.Ttl);
+        var id = await database.SubmitOutboundMessage(
+            request.App, request.DestCallsign, request.Payload, request.Ttl,
+            streamId: request.StreamId,
+            streamGapTimeoutSeconds: request.StreamGapTimeoutSeconds);
         return Ok(new OutboundResponse(id));
     }
 
@@ -69,8 +82,24 @@ public class AppApiController(Database database) : ControllerBase
 /// outgoing <c>ihave</c> as <c>ttl=N</c>. Null = no expiry; the
 /// message stays in the queue until forwarded or manually deleted.
 /// Apps that care about cleanup should set a value.
+///
+/// <see cref="StreamId"/> opts the message into per-sender ordered
+/// delivery: messages with the same StreamId destined for the same
+/// recipient deliver in submit order at the receiver, gated by the
+/// receiver's reorder cursor. <see cref="StreamGapTimeoutSeconds"/>
+/// chooses the gap policy: 0 (default) = strict (stall forever for
+/// the missing seq); &gt;0 = skip the gap after that many seconds.
+/// Both fields ride on the wire as the <c>sid=</c>, <c>sn=</c>,
+/// <c>gt=</c> ihave keys; the daemon mints <c>sn</c> automatically
+/// from the persisted send-state counter.
 /// </summary>
-public sealed record OutboundRequest(string App, string DestCallsign, byte[] Payload, int? Ttl = null);
+public sealed record OutboundRequest(
+    string App,
+    string DestCallsign,
+    byte[] Payload,
+    int? Ttl = null,
+    string? StreamId = null,
+    uint? StreamGapTimeoutSeconds = null);
 
 public sealed record OutboundResponse(string Id);
 

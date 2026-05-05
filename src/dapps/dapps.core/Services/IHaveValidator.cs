@@ -21,7 +21,10 @@ public sealed record IHaveOffer(
     Dictionary<string, string> AdditionalHeaders,
     string? Originator = null,              // src= - originating callsign (F1), null when sender pre-dates F1
     string? MasterId = null,                // mid= - F2 multi-part: opaque grouping id, null = not fragmented
-    FragmentInfo? Fragment = null);         // frag=N/M - F2 multi-part fragment index/total, null = not fragmented
+    FragmentInfo? Fragment = null,          // frag=N/M - F2 multi-part fragment index/total, null = not fragmented
+    string? StreamId = null,                // sid= - opt-in ordering stream identifier (per sender)
+    uint? StreamSeq = null,                 // sn=  - monotonic seq within (sender, sid)
+    uint? StreamGapTimeoutSeconds = null);  // gt=  - 0 = strict, >0 = skip gap after N seconds
 
 /// <summary>F2 multi-part fragment metadata. Index is 1-based; total is
 /// the number of fragments in the original payload. Both must satisfy
@@ -55,7 +58,7 @@ public static class IHaveValidator
     private const int ChkValueLength = 4;
 
     private static readonly HashSet<string> ReservedKeys = new(StringComparer.Ordinal)
-        { "len", "fmt", "s", "clen", "dst", "chk", "ttl", "src", "mid", "frag" };
+        { "len", "fmt", "s", "clen", "dst", "chk", "ttl", "src", "mid", "frag", "sid", "sn", "gt" };
 
     public static OfferValidationResult Validate(string ihaveCommand)
     {
@@ -192,8 +195,40 @@ public static class IHaveValidator
             fragment = new FragmentInfo(fragN, fragM);
         }
 
+        // sid= / sn= / gt= - opt-in ordering. All three travel together
+        // or all three are absent; partial sets are an error since a
+        // gappy implementation downstream couldn't reconstruct the
+        // ordering contract. sn / gt are 32-bit unsigned: sn is the
+        // monotonic seq, gt is the gap timeout in seconds (0 = strict).
+        string? streamId = null;
+        uint? streamSeq = null;
+        uint? streamGapTimeout = null;
+        var hasSid = kvps.TryGetValue("sid", out var sidVal) && !string.IsNullOrEmpty(sidVal);
+        var hasSn = kvps.TryGetValue("sn", out var snVal) && !string.IsNullOrEmpty(snVal);
+        var hasGt = kvps.TryGetValue("gt", out var gtVal) && !string.IsNullOrEmpty(gtVal);
+        if (hasSid || hasSn || hasGt)
+        {
+            if (!(hasSid && hasSn && hasGt))
+            {
+                return OfferValidationResult.Fail(id,
+                    "sid=, sn=, gt= must all be present together (opt-in ordering) or all be absent");
+            }
+            if (!uint.TryParse(snVal, NumberStyles.None, CultureInfo.InvariantCulture, out var snParsed))
+            {
+                return OfferValidationResult.Fail(id, "sn= must be a 32-bit unsigned integer");
+            }
+            if (!uint.TryParse(gtVal, NumberStyles.None, CultureInfo.InvariantCulture, out var gtParsed))
+            {
+                return OfferValidationResult.Fail(id, "gt= must be a 32-bit unsigned integer (0 = strict, >0 = seconds)");
+            }
+            streamId = sidVal!;
+            streamSeq = snParsed;
+            streamGapTimeout = gtParsed;
+        }
+
         return OfferValidationResult.Success(new IHaveOffer(
-            id, len, fmt, salt, clen, dst, ttl, headers, originator, masterId, fragment));
+            id, len, fmt, salt, clen, dst, ttl, headers, originator, masterId, fragment,
+            streamId, streamSeq, streamGapTimeout));
     }
 
     /// <summary>

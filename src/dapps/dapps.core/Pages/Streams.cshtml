@@ -1,0 +1,129 @@
+@page
+@model StreamsModel
+@{
+    ViewData["Title"] = $"DAPPS - streams (@{Model.Options.Callsign})";
+    var now = DateTime.UtcNow;
+}
+
+<header class="app-header">
+    <span class="brand">
+        <span class="dot"></span>
+        DAPPS
+        <span class="callsign">@Model.Options.Callsign</span>
+        <span style="color: var(--text-muted); font-weight: 500; margin-left: 0.4rem;">- streams</span>
+    </span>
+    <span class="spacer"></span>
+    <a href="/">dashboard</a>
+    <a href="/Inbound">inbound</a>
+    <a href="/IHave">ihave</a>
+    <a href="/Transmissions">audit</a>
+    @if (User.Identity?.IsAuthenticated == true)
+    {
+        <a href="/Logout" class="signout">sign out</a>
+    }
+</header>
+
+<main>
+    <h2>Opt-in ordered streams</h2>
+    <p class="muted-inline">
+        Per-(remote, stream-id) state for opt-in message ordering.
+        Set <code>StreamId</code> on outbound submissions to opt in;
+        the daemon mints monotonic <code>sn=</code> values from the send-side
+        counters below. Receive-side cursors gate local delivery on the
+        next-expected seq, with parked rows held until the gap fills or
+        (when <code>gt &gt; 0</code>) the gap deadline elapses.
+    </p>
+
+    <h3>Send state</h3>
+    @if (Model.SendStates.Count == 0)
+    {
+        <p class="muted-inline">No outbound streams have been used yet.</p>
+    }
+    else
+    {
+        <table>
+            <thead>
+                <tr>
+                    <th>Local</th>
+                    <th>Remote</th>
+                    <th>Stream id</th>
+                    <th class="numeric">Next sn</th>
+                    <th>Updated</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var s in Model.SendStates)
+                {
+                    <tr>
+                        <td><code>@s.LocalCallsign</code></td>
+                        <td><code>@s.RemoteCallsign</code></td>
+                        <td><code>@s.StreamId</code></td>
+                        <td class="numeric">@s.NextSeq</td>
+                        <td>@s.UpdatedAt.ToString("yyyy-MM-dd HH:mm:ss")Z</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+
+    <h3 style="margin-top: 1.5rem;">Receive state</h3>
+    @if (Model.RecvStates.Count == 0)
+    {
+        <p class="muted-inline">No inbound streams have been seen yet.</p>
+    }
+    else
+    {
+        <table>
+            <thead>
+                <tr>
+                    <th>Sender</th>
+                    <th>Stream id</th>
+                    <th class="numeric">Next sn</th>
+                    <th class="numeric">Pending</th>
+                    <th>Oldest pending</th>
+                    <th>Gap deadline</th>
+                    <th>Last seen</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var row in Model.RecvStates)
+                {
+                    var stalled = row.PendingCount > 0;
+                    <tr class="@(stalled ? "warn" : "")">
+                        <td><code>@row.State.SenderCallsign</code></td>
+                        <td><code>@row.State.StreamId</code></td>
+                        <td class="numeric">@row.State.NextExpectedSeq</td>
+                        <td class="numeric">@row.PendingCount</td>
+                        <td>
+                            @if (row.OldestPendingAt is { } oldest)
+                            {
+                                @($"{(int)(now - oldest).TotalSeconds}s ago")
+                            }
+                            else
+                            {
+                                @:-
+                            }
+                        </td>
+                        <td>
+                            @if (row.State.GapDeadline == DateTime.MinValue)
+                            {
+                                <span class="muted-inline">-</span>
+                            }
+                            else
+                            {
+                                @row.State.GapDeadline.ToString("yyyy-MM-dd HH:mm:ss")
+                                @:Z
+                            }
+                        </td>
+                        <td>@row.State.LastReceivedAt.ToString("yyyy-MM-dd HH:mm:ss")Z</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+        <p class="muted-inline" style="margin-top: 0.5rem;">
+            Highlighted rows have parked messages awaiting an earlier <code>sn</code>.
+            Strict streams (<code>gt=0</code>) show no gap deadline; in timeout mode the deadline
+            is when the gap sweeper (1-minute cadence) will skip past the missing seq and drain.
+        </p>
+    }
+</main>

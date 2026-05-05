@@ -26,7 +26,10 @@ public sealed record BackhaulMessage(
     IReadOnlyList<string>? TraversedHops = null,
     string? MasterId = null,
     int? FragmentIndex = null,
-    int? FragmentTotal = null);
+    int? FragmentTotal = null,
+    string? StreamId = null,
+    uint? StreamSeq = null,
+    uint? StreamGapTimeoutSeconds = null);
 
 // LinkSourceCallsign: the *immediate sender's* callsign, distinct from
 // Originator (the F1 end-to-end source). Carried on bearers that don't
@@ -72,3 +75,13 @@ public sealed record BackhaulMessage(
 // `mid=…` + `frag=N/M` headers); the receiver's IHaveValidator
 // rejects any mismatched-presence combination. FragmentTotal ≥ 2;
 // single-fragment messages just omit all three fields.
+//
+// StreamId / StreamSeq / StreamGapTimeoutSeconds (opt-in ordering):
+// when StreamSeq is set the message is part of a per-sender ordered
+// stream identified by StreamId. The receiver delivers messages on
+// each (sender-callsign, StreamId) cursor in monotonically-increasing
+// StreamSeq order; gaps stall until the missing seq arrives or
+// StreamGapTimeoutSeconds elapses (gt=0 = strict, never skip).
+// Wire form: `sid=`, `sn=`, `gt=` keys on the ihave line; codec flag
+// bit 9 on datagram bearers. All three are required together when
+// any one is set; intermediate forwarders preserve them verbatim.

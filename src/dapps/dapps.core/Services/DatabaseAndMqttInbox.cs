@@ -91,6 +91,18 @@ public sealed class DatabaseAndMqttInbox(
             return;
         }
 
+        var isLocal = DestinationParser.IsLocal(message.Destination, options.CurrentValue.Callsign);
+
+        // Opt-in ordering: when the envelope carries sn=, gate local
+        // delivery on the per-(originator, sid) cursor. Transit messages
+        // flow through unchanged - intermediate hops re-emit the trio
+        // verbatim; only the final destination reorders.
+        if (isLocal && message.StreamSeq.HasValue && !string.IsNullOrEmpty(message.StreamId))
+        {
+            await DeliverOrderedAsync(message, sourceCallsign, originator, headersJson, ct);
+            return;
+        }
+
         await database.SaveMessage(
             message.Id,
             message.Payload,
@@ -125,9 +137,15 @@ public sealed class DatabaseAndMqttInbox(
             // messages OR fragments-for-elsewhere.)
             masterId: message.MasterId,
             fragmentIndex: message.FragmentIndex,
-            fragmentTotal: message.FragmentTotal);
+            fragmentTotal: message.FragmentTotal,
+            // Opt-in ordering: stream trio is preserved on transit rows
+            // so the forwarder re-emits them on the next hop verbatim.
+            // (Local-ordered-delivery took the early-return above.)
+            streamId: message.StreamId,
+            streamSeq: message.StreamSeq,
+            streamGapTimeoutSeconds: message.StreamGapTimeoutSeconds);
 
-        if (DestinationParser.IsLocal(message.Destination, options.CurrentValue.Callsign))
+        if (isLocal)
         {
             var dbMessage = new DbMessage
             {
@@ -139,6 +157,9 @@ public sealed class DatabaseAndMqttInbox(
                 OriginatorCallsign = originator,
                 AdditionalProperties = headersJson,
                 Ttl = message.Ttl,
+                StreamId = message.StreamId,
+                StreamSeq = message.StreamSeq,
+                StreamGapTimeoutSeconds = message.StreamGapTimeoutSeconds,
             };
             await mqtt.InjectInboundMessage(dbMessage);
         }
@@ -157,6 +178,218 @@ public sealed class DatabaseAndMqttInbox(
             Destination: message.Destination,
             PayloadLength: message.Payload.Length,
             Ttl: message.Ttl));
+    }
+
+    /// <summary>
+    /// Local-destination delivery for an opt-in-ordered message. Compares
+    /// StreamSeq against the persisted cursor for (LocalCallsign,
+    /// originator, StreamId):
+    ///
+    /// <list type="bullet">
+    /// <item><description>seq == expected -&gt; persist, deliver to MQTT, advance cursor, drain consecutive successors</description></item>
+    /// <item><description>seq &gt; expected -&gt; persist with PendingInOrder=true, set GapDeadline (when gt&gt;0) so <see cref="StreamGapSweeper"/> can skip later</description></item>
+    /// <item><description>seq &lt; expected -&gt; persist + soft-delete with reason "stream-stale" (already delivered or already skipped past)</description></item>
+    /// </list>
+    /// </summary>
+    private async Task DeliverOrderedAsync(BackhaulMessage message, string sourceCallsign, string originator, string headersJson, CancellationToken ct)
+    {
+        var localCall = options.CurrentValue.Callsign;
+        var streamId = message.StreamId!;
+        var sn = message.StreamSeq!.Value;
+        // SenderCallsign on the recv-state row keys on the F1 originator
+        // (end-to-end intent), not the link source. Falling back to the
+        // link source preserves usable behaviour on legacy peers that
+        // don't propagate src= - they're just stuck with one cursor per
+        // physical neighbour for that StreamId.
+        var streamSender = !string.IsNullOrEmpty(message.Originator)
+            ? message.Originator
+            : sourceCallsign;
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+
+        var recv = await database.GetStreamRecvStateAsync(localCall, streamSender, streamId)
+                   ?? new DbStreamRecvState
+                   {
+                       LocalCallsign = localCall,
+                       SenderCallsign = streamSender,
+                       StreamId = streamId,
+                       NextExpectedSeq = 1,
+                       LastReceivedAt = now,
+                       GapDeadline = DateTime.MinValue,
+                   };
+
+        if (sn < recv.NextExpectedSeq)
+        {
+            // Already delivered, or the sweeper already advanced past
+            // this seq. Persist for audit, then soft-delete with a
+            // dedicated reason so the dashboard's dropped panel makes
+            // it obvious why this was discarded rather than delivered.
+            await database.SaveMessage(
+                message.Id, message.Payload, message.Salt, message.Destination,
+                sourceCallsign, headersJson, message.Ttl,
+                originatorCallsign: originator,
+                streamId: streamId, streamSeq: sn,
+                streamGapTimeoutSeconds: message.StreamGapTimeoutSeconds);
+            await database.SoftDeleteMessage(message.Id, "stream-stale");
+            recv.LastReceivedAt = now;
+            await database.UpsertStreamRecvStateAsync(recv);
+            logger.LogInformation(
+                "Stream {0}|{1}: dropping {2} (sn={3} < expected {4}) as stream-stale",
+                streamSender, streamId, message.Id, sn, recv.NextExpectedSeq);
+            events.Publish(new InboundEvent(now, message.Id, sourceCallsign, message.Destination, message.Payload.Length, message.Ttl));
+            return;
+        }
+
+        if (sn > recv.NextExpectedSeq)
+        {
+            // Park. Persist with PendingInOrder=true so the row is in
+            // the messages table (visible in the dashboard, ack'able by
+            // ID, etc.) but the inbox doesn't push to MQTT until the
+            // gap fills. GapDeadline is set on first detection of the
+            // gap; subsequent arrivals don't push it out - the original
+            // arrival's deadline is the right cap.
+            await database.SaveMessage(
+                message.Id, message.Payload, message.Salt, message.Destination,
+                sourceCallsign, headersJson, message.Ttl,
+                originatorCallsign: originator,
+                streamId: streamId, streamSeq: sn,
+                streamGapTimeoutSeconds: message.StreamGapTimeoutSeconds,
+                pendingInOrder: true);
+            recv.LastReceivedAt = now;
+            if (recv.GapDeadline == DateTime.MinValue
+                && message.StreamGapTimeoutSeconds is { } gt && gt > 0)
+            {
+                recv.GapDeadline = now + TimeSpan.FromSeconds(gt);
+            }
+            await database.UpsertStreamRecvStateAsync(recv);
+            logger.LogInformation(
+                "Stream {0}|{1}: parking {2} (sn={3}, expected {4}, gt={5})",
+                streamSender, streamId, message.Id, sn, recv.NextExpectedSeq,
+                message.StreamGapTimeoutSeconds ?? 0);
+            events.Publish(new InboundEvent(now, message.Id, sourceCallsign, message.Destination, message.Payload.Length, message.Ttl));
+            return;
+        }
+
+        // sn == NextExpectedSeq: deliver immediately + drain successors.
+        await database.SaveMessage(
+            message.Id, message.Payload, message.Salt, message.Destination,
+            sourceCallsign, headersJson, message.Ttl,
+            originatorCallsign: originator,
+            streamId: streamId, streamSeq: sn,
+            streamGapTimeoutSeconds: message.StreamGapTimeoutSeconds);
+
+        var dbMessage = new DbMessage
+        {
+            Id = message.Id, Payload = message.Payload, Salt = message.Salt,
+            Destination = message.Destination, SourceCallsign = sourceCallsign,
+            OriginatorCallsign = originator, AdditionalProperties = headersJson,
+            Ttl = message.Ttl,
+            StreamId = streamId, StreamSeq = sn,
+            StreamGapTimeoutSeconds = message.StreamGapTimeoutSeconds,
+        };
+        await mqtt.InjectInboundMessage(dbMessage);
+        recv.NextExpectedSeq = sn + 1;
+        recv.LastReceivedAt = now;
+
+        await DrainConsecutivePendingAsync(recv, streamSender, streamId, ct);
+        events.Publish(new InboundEvent(now, message.Id, sourceCallsign, message.Destination, message.Payload.Length, message.Ttl));
+    }
+
+    /// <summary>
+    /// Drain pending rows whose StreamSeq matches the cursor, advancing
+    /// it as it consumes. Stops at the first gap; recomputes the
+    /// recv-state's GapDeadline based on the remaining pending head's
+    /// gt (or clears it when no gap remains). Used by both the
+    /// in-order arrival path and the gap sweeper.
+    /// </summary>
+    internal async Task DrainConsecutivePendingAsync(
+        DbStreamRecvState recv, string streamSender, string streamId, CancellationToken ct)
+    {
+        var pending = await database.GetPendingInOrderAsync(streamSender, streamId);
+        // pending is ordered by StreamSeq asc, so a single forward pass
+        // either delivers a consecutive run or stops at the first gap.
+        var byteOffset = 0;
+        foreach (var p in pending)
+        {
+            if (p.StreamSeq is null) continue;
+            if (p.StreamSeq.Value < recv.NextExpectedSeq)
+            {
+                // Stale parked row (the sweeper advanced past it via
+                // gap-skip and a new arrival didn't catch this up).
+                await database.SoftDeleteMessage(p.Id, "stream-stale");
+                continue;
+            }
+            if (p.StreamSeq.Value != recv.NextExpectedSeq) break;
+
+            var inject = new DbMessage
+            {
+                Id = p.Id, Payload = p.Payload, Salt = p.Salt,
+                Destination = p.Destination, SourceCallsign = p.SourceCallsign,
+                OriginatorCallsign = p.OriginatorCallsign,
+                AdditionalProperties = p.AdditionalProperties,
+                Ttl = p.Ttl, CreatedAt = p.CreatedAt,
+                StreamId = p.StreamId, StreamSeq = p.StreamSeq,
+                StreamGapTimeoutSeconds = p.StreamGapTimeoutSeconds,
+            };
+            await mqtt.InjectInboundMessage(inject);
+            await database.ClearPendingInOrderAsync(p.Id);
+            recv.NextExpectedSeq = p.StreamSeq.Value + 1;
+            byteOffset += p.Payload.Length;
+        }
+
+        // Recompute deadline: if anything still pending above the new
+        // cursor, use the head's stored gt as the new gap budget; else
+        // clear.
+        var stillPending = (await database.GetPendingInOrderAsync(streamSender, streamId))
+            .FirstOrDefault(p => p.StreamSeq is { } s && s > recv.NextExpectedSeq);
+        if (stillPending is null)
+        {
+            recv.GapDeadline = DateTime.MinValue;
+        }
+        else if (stillPending.StreamGapTimeoutSeconds is { } gt && gt > 0)
+        {
+            recv.GapDeadline = recv.LastReceivedAt + TimeSpan.FromSeconds(gt);
+        }
+        else
+        {
+            // gt=0 (strict): the new gap stalls forever.
+            recv.GapDeadline = DateTime.MinValue;
+        }
+        await database.UpsertStreamRecvStateAsync(recv);
+        if (byteOffset > 0)
+        {
+            logger.LogInformation(
+                "Stream {0}|{1}: drained pending up to sn={2}",
+                streamSender, streamId, recv.NextExpectedSeq - 1);
+        }
+    }
+
+    /// <summary>
+    /// Called by <see cref="StreamGapSweeper"/> when a recv-state's
+    /// gap deadline has elapsed. Skips the cursor forward to the
+    /// smallest pending sn for that stream and drains successors.
+    /// Logs each skipped seq for operator visibility.
+    /// </summary>
+    internal async Task SkipGapAsync(DbStreamRecvState recv, CancellationToken ct)
+    {
+        var pending = await database.GetPendingInOrderAsync(recv.SenderCallsign, recv.StreamId);
+        var firstAbove = pending.FirstOrDefault(p => p.StreamSeq is { } s && s >= recv.NextExpectedSeq);
+        if (firstAbove?.StreamSeq is null)
+        {
+            // Nothing pending - clear the deadline.
+            recv.GapDeadline = DateTime.MinValue;
+            await database.UpsertStreamRecvStateAsync(recv);
+            return;
+        }
+        var fromSn = recv.NextExpectedSeq;
+        var toSn = firstAbove.StreamSeq.Value;
+        for (var k = fromSn; k < toSn; k++)
+        {
+            logger.LogWarning(
+                "Stream {0}|{1}: gap-skipped sn={2} (deadline elapsed)",
+                recv.SenderCallsign, recv.StreamId, k);
+        }
+        recv.NextExpectedSeq = toSn;
+        await DrainConsecutivePendingAsync(recv, recv.SenderCallsign, recv.StreamId, ct);
     }
 
     /// <summary>
