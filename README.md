@@ -28,6 +28,10 @@ It covers:
 
 The roadmap and engineering notes (including the design discussion behind the bearer seam, MeshCore-as-backhaul tradeoffs, etc.) live in [`plan.md`](plan.md) and [`docs/`](docs/) in this repo.
 
+## Local simulators
+
+Three sim scripts in [`scripts/`](scripts/) layer on top of each other from cheapest to most realistic - DAPPS-on-loopback over UDP multicast, real BPQ + XRouter over AX.25-over-UDP partner links, and real BPQ + XRouter over real KISS framing into a simulated RF channel (FM capture, collisions, hidden terminals, multi-band paths, multi-hop AX.25 chains via connect-scripts). See [`docs-internal/simulators.md`](docs-internal/simulators.md) for the topology of each, what they validate, and the bring-up nuances captured during the diagnosis runs.
+
 ## Credits
 
 To all at OARC who participated in the RFC, helping take this from a rough idea to a workable system.
