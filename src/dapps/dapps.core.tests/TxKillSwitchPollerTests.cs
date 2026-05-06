@@ -183,8 +183,8 @@ public class TxKillSwitchPollerTests
         // safety-critical defaults.
         TxKillSwitchPoller.KillSwitchUrl.Should().Be(
             "https://compute.oarc.uk/storage/public/folders/4803/dapps-devtime-killswitch.json");
-        TxKillSwitchPoller.PollSeconds.Should().Be(60);
-        TxKillSwitchPoller.StaleSeconds.Should().Be(600);
+        TxKillSwitchPoller.PollSeconds.Should().Be(300);
+        TxKillSwitchPoller.StaleSeconds.Should().Be(1800);
         TxKillSwitchPoller.FailOpen.Should().BeTrue();
     }
 
