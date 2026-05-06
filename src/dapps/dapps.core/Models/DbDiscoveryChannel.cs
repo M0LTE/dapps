@@ -61,7 +61,7 @@ public sealed class DbDiscoveryChannel
     public bool Enabled { get; set; } = true;
 
     /// <summary>Free-form operator notes. Useful for "this is the
-    /// 144.800 channel, don't beacon faster than once an hour".</summary>
+    /// 144.950 channel, don't beacon faster than once an hour".</summary>
     public string Notes { get; set; } = "";
 
     /// <summary>

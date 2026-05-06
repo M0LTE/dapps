@@ -28,7 +28,7 @@ The dashboard shows a red banner across every page when the gate is closed, with
 
 DAPPS is alpha-quality software running on shared amateur radio bandwidth. A bug shipped in a release could, in principle, cause a fleet of nodes to flood the air. Most operators won't catch a regression in a release within minutes; they may not even be at the keyboard. The kill-switch lets the project author gag every running node within roughly one minute of detecting a problem, without coordinating with operators individually.
 
-This is a software-development safety net, not a regulatory mechanism, not a moderation tool. It exists so the worst-case "I shipped a bug that hammers 144.800" stays bounded to a few minutes of harm before every node goes silent.
+This is a software-development safety net, not a regulatory mechanism, not a moderation tool. It exists so the worst-case "I shipped a bug that hammers 144.950" stays bounded to a few minutes of harm before every node goes silent.
 
 ## What you cannot do
 
