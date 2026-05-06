@@ -47,7 +47,8 @@ public sealed class TxKillSwitchPoller(
     IHttpClientFactory httpClientFactory,
     IOptionsMonitor<SystemOptions> options,
     TimeProvider timeProvider,
-    ILogger<TxKillSwitchPoller> logger) : BackgroundService, ITxKillSwitchSignal
+    ILogger<TxKillSwitchPoller> logger,
+    TransmissionAuditService? audit = null) : BackgroundService, ITxKillSwitchSignal
 {
     /// <summary>
     /// Hardcoded kill-switch URL controlled by the DAPPS project
@@ -192,8 +193,13 @@ public sealed class TxKillSwitchPoller(
             var allowed = !applies || response.TxAllowed;
             var reason = applies ? response.Reason : null;
 
+            bool previousAllowed;
+            DateTimeOffset? previousSuccess;
             lock (stateLock)
             {
+                previousAllowed = lastTxAllowed;
+                previousSuccess = lastSuccessAt;
+
                 lastTxAllowed = allowed;
                 lastReason = reason;
                 lastSuccessAt = timeProvider.GetUtcNow();
@@ -203,6 +209,34 @@ public sealed class TxKillSwitchPoller(
             logger.LogInformation(
                 "TX kill-switch: {0} (txAllowed={1}, applies={2}, reason='{3}')",
                 allowed ? "ALLOW" : "BLOCK", response.TxAllowed, applies, reason ?? "");
+
+            // Audit operator-visible transitions: the local Stop/Resume
+            // button writes tx-control rows already; we mirror that
+            // here for remote-driven changes so audit history shows
+            // *both* signals symmetrically. Skip the first-poll-says-
+            // ALLOW case to avoid one tx-control row per startup; the
+            // first-poll-says-BLOCK case is genuinely notable and gets
+            // a row.
+            if (audit is not null)
+            {
+                if (previousSuccess is null && !allowed)
+                {
+                    await audit.RecordAsync(
+                        kind: "tx-control",
+                        bearer: "remote",
+                        reason: $"dev-time kill-switch BLOCK on first poll: {reason ?? "(no reason)"}",
+                        success: true);
+                }
+                else if (previousSuccess is not null && previousAllowed != allowed)
+                {
+                    var direction = allowed ? "ALLOW (was BLOCK)" : "BLOCK (was ALLOW)";
+                    await audit.RecordAsync(
+                        kind: "tx-control",
+                        bearer: "remote",
+                        reason: $"dev-time kill-switch {direction}: {reason ?? "(no reason)"}",
+                        success: true);
+                }
+            }
         }
         catch (Exception ex)
         {
