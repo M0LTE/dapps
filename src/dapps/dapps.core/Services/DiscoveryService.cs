@@ -1,4 +1,5 @@
 using dapps.client.Discovery;
+using dapps.client.Tx;
 using dapps.core.Models;
 using Microsoft.Extensions.Options;
 
@@ -31,7 +32,8 @@ public sealed class DiscoveryService(
     ILogger<DiscoveryService> logger,
     AirtimeAccountant? airtime = null,
     OperationalMetrics? metrics = null,
-    TransmissionAuditService? transmissionAudit = null) : BackgroundService
+    TransmissionAuditService? transmissionAudit = null,
+    IDappsTxGate? txGate = null) : BackgroundService
 {
     private static readonly TimeSpan SweepInterval = TimeSpan.FromMinutes(1);
 
@@ -125,7 +127,7 @@ public sealed class DiscoveryService(
         var opts = options.CurrentValue;
         return bearerName switch
         {
-            "agw" => new AgwUiDiscoveryBearer(opts.NodeHost, opts.AgwPort, opts.Callsign, loggerFactory),
+            "agw" => new AgwUiDiscoveryBearer(opts.NodeHost, opts.AgwPort, opts.Callsign, loggerFactory, txGate: txGate ?? AlwaysOpenTxGate.Instance),
             "udp" => new UdpMulticastDiscoveryBearer(opts.Callsign, loggerFactory),
             _ => null,
         };

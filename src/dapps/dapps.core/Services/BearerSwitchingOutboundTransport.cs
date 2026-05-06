@@ -1,6 +1,7 @@
 using dapps.client.Transport;
 using dapps.client.Transport.Agw;
 using dapps.client.Transport.Rhp;
+using dapps.client.Tx;
 using dapps.core.Models;
 using Microsoft.Extensions.Options;
 
@@ -19,7 +20,8 @@ namespace dapps.core.Services;
 /// </summary>
 public sealed class BearerSwitchingOutboundTransport(
     IOptionsMonitor<SystemOptions> options,
-    ILoggerFactory loggerFactory) : IDappsOutboundTransport
+    ILoggerFactory loggerFactory,
+    IDappsTxGate txGate) : IDappsOutboundTransport
 {
     public Task<IDappsConnection> ConnectAsync(
         string localCallsign, string remoteCallsign, int bearerPort, CancellationToken stoppingToken)
@@ -33,11 +35,12 @@ public sealed class BearerSwitchingOutboundTransport(
             var rhp = new Rhpv2OutboundTransport(
                 opts.NodeHost, port,
                 loggerFactory.CreateLogger<Rhpv2OutboundTransport>(),
-                user, pass);
+                user, pass,
+                txGate);
             return rhp.ConnectAsync(localCallsign, remoteCallsign, bearerPort, stoppingToken);
         }
 
-        var agw = new AgwOutboundTransport(opts.NodeHost, opts.AgwPort, loggerFactory);
+        var agw = new AgwOutboundTransport(opts.NodeHost, opts.AgwPort, loggerFactory, txGate);
         return agw.ConnectAsync(localCallsign, remoteCallsign, bearerPort, stoppingToken);
     }
 }

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Net.Sockets;
 using System.Threading.Channels;
 using dapps.client.Transport.Agw;
+using dapps.client.Tx;
 using Microsoft.Extensions.Logging;
 
 namespace dapps.client.Discovery;
@@ -33,6 +34,7 @@ public sealed class AgwUiDiscoveryBearer : IDiscoveryBearer
     private readonly string _ourCallsign;
     private readonly string _broadcastCall;
     private readonly ILogger _logger;
+    private readonly IDappsTxGate _txGate;
 
     private TcpClient? _tcp;
     private AgwFrameTransport? _framing;
@@ -51,13 +53,15 @@ public sealed class AgwUiDiscoveryBearer : IDiscoveryBearer
         string host, int port,
         string ourCallsign,
         ILoggerFactory loggerFactory,
-        string broadcastCall = DefaultBroadcastCall)
+        string broadcastCall = DefaultBroadcastCall,
+        IDappsTxGate? txGate = null)
     {
         _host = host;
         _port = port;
         _ourCallsign = ourCallsign;
         _broadcastCall = broadcastCall;
         _logger = loggerFactory.CreateLogger<AgwUiDiscoveryBearer>();
+        _txGate = txGate ?? AlwaysOpenTxGate.Instance;
     }
 
     public async Task StartAsync(IReadOnlyList<DiscoveryChannelInfo> channels, CancellationToken ct)
@@ -78,7 +82,7 @@ public sealed class AgwUiDiscoveryBearer : IDiscoveryBearer
 
         var tcp = new TcpClient();
         await tcp.ConnectAsync(_host, _port, ct);
-        var framing = new AgwFrameTransport(tcp.GetStream());
+        var framing = new AgwFrameTransport(tcp.GetStream(), _txGate);
 
         // Register our callsign once for the whole connection.
         await framing.WriteFrameAsync(

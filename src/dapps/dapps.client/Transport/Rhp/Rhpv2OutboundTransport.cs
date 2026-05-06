@@ -1,4 +1,5 @@
 using dapps.client.Transport.Agw;
+using dapps.client.Tx;
 using Microsoft.Extensions.Logging;
 using RhpV2.Client;
 using RhpV2.Client.Protocol;
@@ -35,17 +36,20 @@ public sealed class Rhpv2OutboundTransport : IDappsOutboundTransport
     private readonly string? authUser;
     private readonly string? authPass;
     private readonly ILogger logger;
+    private readonly IDappsTxGate txGate;
 
     public Rhpv2OutboundTransport(
         string host, int port,
         ILogger<Rhpv2OutboundTransport> logger,
-        string? authUser = null, string? authPass = null)
+        string? authUser = null, string? authPass = null,
+        IDappsTxGate? txGate = null)
     {
         this.host = host;
         this.port = port;
         this.logger = logger;
         this.authUser = authUser;
         this.authPass = authPass;
+        this.txGate = txGate ?? AlwaysOpenTxGate.Instance;
     }
 
     public async Task<IDappsConnection> ConnectAsync(
@@ -68,6 +72,14 @@ public sealed class Rhpv2OutboundTransport : IDappsOutboundTransport
             // 0-indexed. Add one and convert.
             var portName = (bearerPort + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
 
+            // RF-emitting: an active OpenAsync triggers an AX.25 SABM on
+            // the remote port. Block here when the gate is closed.
+            if (!txGate.TxAllowed)
+            {
+                throw new TxStoppedException(
+                    $"RHP active open {localCallsign}->{remoteCallsign} on port {portName}: {txGate.BlockReason ?? "(no reason)"}");
+            }
+
             logger.LogInformation("RHP: open active {local}->{remote} on port {p}", localCallsign, remoteCallsign, portName);
             var handle = await rhp.OpenAsync(
                 family: ProtocolFamily.Ax25,
@@ -80,9 +92,21 @@ public sealed class Rhpv2OutboundTransport : IDappsOutboundTransport
 
             // Stream view of the handle. Reuses MultiplexedAgwSessionStream
             // (functionally generic - just a Pipe + 2 callbacks).
+            // RF-emitting: SendOnHandleAsync emits AX.25 I-frames. Gate
+            // each call so a session opened before TX-stop becomes
+            // silent the moment the operator hits the kill-switch.
+            // CloseAsync stays ungated to avoid leaking handles.
+            var gate = txGate;
             var stream = new MultiplexedAgwSessionStream(
                 writeOutgoing: async (data, c) =>
-                    await rhp.SendOnHandleAsync(handle, data, c),
+                {
+                    if (!gate.TxAllowed)
+                    {
+                        throw new TxStoppedException(
+                            $"RHP send on handle {handle}: {gate.BlockReason ?? "(no reason)"}");
+                    }
+                    await rhp.SendOnHandleAsync(handle, data, c);
+                },
                 sendRemoteDisconnect: async c =>
                 {
                     try { await rhp.CloseAsync(handle, c); }

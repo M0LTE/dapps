@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
+using dapps.client.Tx;
 using Microsoft.Extensions.Logging;
 
 namespace dapps.client.Backhaul.Datagram;
@@ -30,8 +31,9 @@ public sealed class UdpDatagramBackhaul : IDappsBackhaul, IDisposable
     private readonly UdpClient _udp;
     private readonly int _mtu;
     private readonly ILogger _logger;
+    private readonly IDappsTxGate _txGate;
 
-    public UdpDatagramBackhaul(ILoggerFactory loggerFactory, int mtu = DefaultMtu)
+    public UdpDatagramBackhaul(ILoggerFactory loggerFactory, int mtu = DefaultMtu, IDappsTxGate? txGate = null)
     {
         if (mtu < Packetiser.MinMtu)
         {
@@ -41,6 +43,7 @@ public sealed class UdpDatagramBackhaul : IDappsBackhaul, IDisposable
         _udp = new UdpClient { EnableBroadcast = false };
         _mtu = mtu;
         _logger = loggerFactory.CreateLogger<UdpDatagramBackhaul>();
+        _txGate = txGate ?? AlwaysOpenTxGate.Instance;
     }
 
     public bool CanHandle(BackhaulRoute route) => !string.IsNullOrWhiteSpace(route.UdpEndpoint);
@@ -51,6 +54,11 @@ public sealed class UdpDatagramBackhaul : IDappsBackhaul, IDisposable
         string localCallsign,
         CancellationToken ct)
     {
+        if (!_txGate.TxAllowed)
+        {
+            return BackhaulSendResult.Fail($"tx-stopped: {_txGate.BlockReason ?? "(no reason)"}");
+        }
+
         if (!TryParseEndpoint(route.UdpEndpoint, out var endpoint, out var parseError))
         {
             return BackhaulSendResult.Fail($"invalid UdpEndpoint '{route.UdpEndpoint}': {parseError}");
