@@ -1,3 +1,4 @@
+@inject SystemOptionsBackedTxGate TxGate
 @{
     var title = ViewData["Title"] as string ?? "DAPPS";
 }
@@ -225,6 +226,66 @@
         .ok-banner { background: var(--ok-soft); border-color: color-mix(in srgb, var(--ok) 25%, transparent); color: var(--ok); }
         .err-banner { background: var(--err-soft); border-color: color-mix(in srgb, var(--err) 25%, transparent); color: var(--err); }
 
+        /* ── TX kill-switch banner ─────────────────────────────── */
+        .tx-stop-banner {
+            position: sticky; top: 0; z-index: 20;
+            background: var(--err); color: white;
+            padding: 0.6rem 1.5rem;
+            display: flex; align-items: center; gap: 1rem;
+            font-size: 0.9rem; font-weight: 600;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            animation: tx-stop-pulse 2s ease-in-out infinite;
+        }
+        .tx-stop-banner .tx-stop-icon {
+            display: inline-block; width: 1.2rem; height: 1.2rem;
+            border-radius: 50%; background: white;
+            position: relative; flex-shrink: 0;
+        }
+        .tx-stop-banner .tx-stop-icon::after {
+            content: ""; position: absolute;
+            inset: 0.25rem; background: var(--err);
+            border-radius: 2px;
+        }
+        .tx-stop-banner .tx-stop-reason {
+            opacity: 0.9; font-weight: 400;
+        }
+        .tx-stop-banner .spacer { flex: 1; }
+        .tx-stop-banner form { margin: 0; }
+        .tx-stop-banner button {
+            background: white; color: var(--err);
+            border: 0; border-radius: var(--radius-sm);
+            padding: 0.35rem 0.85rem;
+            font: inherit; font-weight: 600; font-size: 0.85rem;
+            cursor: pointer;
+        }
+        .tx-stop-banner button:hover { background: #fee; }
+        @@keyframes tx-stop-pulse {
+            0%, 100% { box-shadow: 0 2px 8px rgba(0,0,0,0.2), 0 0 0 0 color-mix(in srgb, var(--err) 60%, transparent); }
+            50%      { box-shadow: 0 2px 8px rgba(0,0,0,0.2), 0 0 0 6px color-mix(in srgb, var(--err) 0%, transparent); }
+        }
+        /* Inline TX-stop button on every page header (when TX is on).
+           Single-click stop with no confirmation - this is a safety
+           control and the operator wants it to be fast. Resume goes
+           via the banner, also one click. */
+        form.tx-stop-form { margin: 0; padding: 0; }
+        button.tx-stop-btn {
+            background: var(--err); color: white;
+            border: 1px solid var(--err);
+            border-radius: var(--radius-sm);
+            padding: 0.25rem 0.7rem;
+            font: inherit; font-weight: 600; font-size: 0.78rem;
+            letter-spacing: 0.05em; text-transform: uppercase;
+            cursor: pointer;
+        }
+        button.tx-stop-btn:hover { background: #b91c1c; border-color: #b91c1c; }
+        /* Floating STOP control - visible from every page when TX is
+           currently allowed, so an operator can kill TX in one click
+           regardless of where they are. Sits above the page header
+           sticky strip. */
+        .tx-stop-floating {
+            position: fixed; top: 0.55rem; right: 1rem; z-index: 30;
+        }
+
         /* ── Code / mono ────────────────────────────────────────── */
         code {
             font-family: var(--font-mono); font-size: 0.85em;
@@ -381,6 +442,27 @@
     </style>
 </head>
 <body>
+    @if (!TxGate.TxAllowed)
+    {
+        <div class="tx-stop-banner" role="alert">
+            <span class="tx-stop-icon" aria-hidden="true"></span>
+            <span>TX STOPPED</span>
+            <span class="tx-stop-reason">@TxGate.BlockReason</span>
+            <span class="spacer"></span>
+            @if (!TxGate.LocalAllowed)
+            {
+                <form method="post" action="/TxControl/resume" class="tx-stop-form">
+                    <button type="submit">Resume TX</button>
+                </form>
+            }
+        </div>
+    }
+    else
+    {
+        <form method="post" action="/TxControl/stop" class="tx-stop-form tx-stop-floating">
+            <button type="submit" class="tx-stop-btn" title="Stop all transmissions immediately">Stop TX</button>
+        </form>
+    }
     @RenderBody()
 </body>
 </html>

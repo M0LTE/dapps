@@ -48,11 +48,17 @@ builder.Services.AddSingleton<SystemOptionsStore>();
 builder.Services.AddSingleton<IOptionsMonitor<SystemOptions>>(
     sp => sp.GetRequiredService<SystemOptionsStore>());
 
-// TX kill-switch seam (PR 1). PR 2 swaps this for a composite gate
-// backed by a SystemOptions toggle and a remote-poll status; for now
-// it always allows TX, but every bearer goes through it so nothing
-// has to change at the bearer layer when the real gate ships.
-builder.Services.AddSingleton<IDappsTxGate>(AlwaysOpenTxGate.Instance);
+// TX kill-switch wiring. The gate composes two signals: a local
+// operator toggle (SystemOptions.TxEnabled, PR 2) and a remote
+// kill-switch (ITxKillSwitchSignal, PR 3). Until PR 3 lands the
+// remote signal is OpenTxKillSwitchSignal, so the gate effectively
+// reflects the local toggle alone. Register the concrete gate as a
+// singleton so the TxControlController can read both signals
+// independently for the dashboard banner; the IDappsTxGate alias
+// resolves the same instance for bearers.
+builder.Services.AddSingleton<ITxKillSwitchSignal, OpenTxKillSwitchSignal>();
+builder.Services.AddSingleton<SystemOptionsBackedTxGate>();
+builder.Services.AddSingleton<IDappsTxGate>(sp => sp.GetRequiredService<SystemOptionsBackedTxGate>());
 
 builder.Services.AddHttpClient();
 

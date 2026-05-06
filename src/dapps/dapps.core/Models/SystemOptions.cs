@@ -287,6 +287,18 @@ public class SystemOptions
     public string RoutingAlgorithm { get; set; } = "passive-flood";
 
     /// <summary>
+    /// Operator master TX kill-switch. When false, every bearer's
+    /// chokepoint refuses to put bytes that produce on-air emissions
+    /// on the wire - forwards, floods, beacons, probes, polls, all
+    /// blocked at the AGW frame / RHP open / UDP send level. Inbound
+    /// RX is unaffected. Disconnect frames and node-control admin
+    /// frames stay enabled so the BPQ/XR session remains usable and
+    /// in-flight sessions tear down cleanly. Toggle via the dashboard
+    /// header; persists across restart. Default true.
+    /// </summary>
+    public bool TxEnabled { get; set; } = true;
+
+    /// <summary>
     /// When true, every outbound transmission (beacon, solicit, probe,
     /// forward, poll, ack, heartbeat) is logged to the
     /// <see cref="DbTransmission"/> table for operator-side audit.
