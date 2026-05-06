@@ -104,6 +104,7 @@ public sealed class SystemOptionsStore : IOptionsMonitor<SystemOptions>
         await Upsert(connection, existing, nameof(options.TransmissionAuditEnabled), options.TransmissionAuditEnabled.ToString());
         await Upsert(connection, existing, nameof(options.TransmissionAuditRetentionDays), options.TransmissionAuditRetentionDays.ToString());
         await Upsert(connection, existing, nameof(options.TransmissionAuditMqttPublish), options.TransmissionAuditMqttPublish.ToString());
+        await Upsert(connection, existing, nameof(options.TxEnabled), options.TxEnabled.ToString());
 
         Reload();
     }
@@ -171,6 +172,7 @@ public sealed class SystemOptionsStore : IOptionsMonitor<SystemOptions>
             TransmissionAuditEnabled = TryGetBool(r, nameof(SystemOptions.TransmissionAuditEnabled), true),
             TransmissionAuditRetentionDays = TryGetInt(r, nameof(SystemOptions.TransmissionAuditRetentionDays), 90, min: 0),
             TransmissionAuditMqttPublish = TryGetBool(r, nameof(SystemOptions.TransmissionAuditMqttPublish), false),
+            TxEnabled = TryGetBool(r, nameof(SystemOptions.TxEnabled), true),
         };
     }
 
