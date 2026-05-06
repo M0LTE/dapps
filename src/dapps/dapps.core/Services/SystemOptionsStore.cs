@@ -105,10 +105,6 @@ public sealed class SystemOptionsStore : IOptionsMonitor<SystemOptions>
         await Upsert(connection, existing, nameof(options.TransmissionAuditRetentionDays), options.TransmissionAuditRetentionDays.ToString());
         await Upsert(connection, existing, nameof(options.TransmissionAuditMqttPublish), options.TransmissionAuditMqttPublish.ToString());
         await Upsert(connection, existing, nameof(options.TxEnabled), options.TxEnabled.ToString());
-        await Upsert(connection, existing, nameof(options.TxKillSwitchUrl), options.TxKillSwitchUrl);
-        await Upsert(connection, existing, nameof(options.TxKillSwitchPollSeconds), options.TxKillSwitchPollSeconds.ToString());
-        await Upsert(connection, existing, nameof(options.TxKillSwitchFailOpen), options.TxKillSwitchFailOpen.ToString());
-        await Upsert(connection, existing, nameof(options.TxKillSwitchStaleSeconds), options.TxKillSwitchStaleSeconds.ToString());
 
         Reload();
     }
@@ -177,10 +173,6 @@ public sealed class SystemOptionsStore : IOptionsMonitor<SystemOptions>
             TransmissionAuditRetentionDays = TryGetInt(r, nameof(SystemOptions.TransmissionAuditRetentionDays), 90, min: 0),
             TransmissionAuditMqttPublish = TryGetBool(r, nameof(SystemOptions.TransmissionAuditMqttPublish), false),
             TxEnabled = TryGetBool(r, nameof(SystemOptions.TxEnabled), true),
-            TxKillSwitchUrl = TryGet(r, nameof(SystemOptions.TxKillSwitchUrl), ""),
-            TxKillSwitchPollSeconds = TryGetInt(r, nameof(SystemOptions.TxKillSwitchPollSeconds), 60, min: 5),
-            TxKillSwitchFailOpen = TryGetBool(r, nameof(SystemOptions.TxKillSwitchFailOpen), true),
-            TxKillSwitchStaleSeconds = TryGetInt(r, nameof(SystemOptions.TxKillSwitchStaleSeconds), 600, min: 30),
         };
     }
 

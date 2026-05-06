@@ -26,6 +26,10 @@ The wire protocol is small and human-readable on the line: a peer connects, gets
 - **Not a routing protocol replacement for the AX.25 layer.** DAPPS routes its own messages over whichever bearer is available, but it doesn't replace what your packet node does for connecting users.
 - **Not BPQ-specific.** BPQ is one supported packet node; XRouter is another (via RHPv2). Anything that speaks AGW or RHPv2 works the same; MeshCore is in flight.
 
+## Before you put it on the air
+
+DAPPS is pre-1.0. While it is, every running node polls a single URL controlled by the project author and stops transmitting if that URL says so. It's a development-phase safety net - not configurable, removed before 1.0. See [Dev-time TX kill-switch](dev-time-tx-kill-switch.md) for the full rationale and what it means in practice.
+
 ## The journey
 
 ### 1. Install

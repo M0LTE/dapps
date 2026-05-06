@@ -1,18 +1,21 @@
-using System.Net;
-using System.Text;
 using AwesomeAssertions;
 using dapps.core.Models;
 using dapps.core.Services;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
+using System.Net;
+using System.Text;
 
 namespace dapps.core.tests;
 
 /// <summary>
-/// PR 3: poller behaviour. Covers the JSON contract, callsign
-/// targeting, fail-open / fail-closed staleness, and the
-/// ITxKillSwitchSignal surface the gate consumes.
+/// Poller behaviour. The URL, poll cadence, staleness window, and
+/// fail-open mode are hardcoded constants on
+/// <see cref="TxKillSwitchPoller"/>; the canned <c>HttpMessageHandler</c>
+/// here intercepts every outbound HTTP call regardless of URL, so
+/// these tests exercise behaviour without caring what the production
+/// URL is.
 /// </summary>
 public class TxKillSwitchPollerTests
 {
@@ -43,26 +46,10 @@ public class TxKillSwitchPollerTests
         new(code) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
 
     [Fact]
-    public async Task Disabled_WhenUrlEmpty_NeverFetchesAndAllows()
-    {
-        var calls = 0;
-        var handler = new CannedHandler(_ => { calls++; return Json("{}"); });
-        var opts = new StubOptions(new SystemOptions { TxKillSwitchUrl = "", Callsign = "M0LTE-1" });
-        var poller = NewPoller(handler, opts, new FakeTimeProvider());
-
-        await poller.RefreshAsync(CancellationToken.None);
-
-        calls.Should().Be(0);
-        poller.RemoteAllowed.Should().BeTrue();
-        poller.RemoteBlockReason.Should().BeNull();
-    }
-
-    [Fact]
     public async Task Allowed_WhenResponseSaysSo()
     {
         var handler = new CannedHandler(_ => Json("""{"txAllowed":true,"reason":"normal ops","appliesTo":["*"]}"""));
-        var opts = new StubOptions(new SystemOptions { TxKillSwitchUrl = "http://example/ks", Callsign = "M0LTE-1" });
-        var poller = NewPoller(handler, opts, new FakeTimeProvider());
+        var poller = NewPoller(handler, new SystemOptions { Callsign = "M0LTE-1" });
 
         await poller.RefreshAsync(CancellationToken.None);
 
@@ -76,13 +63,13 @@ public class TxKillSwitchPollerTests
     {
         var handler = new CannedHandler(_ => Json(
             """{"txAllowed":false,"reason":"contest QRM","appliesTo":["M0LTE-*"]}"""));
-        var opts = new StubOptions(new SystemOptions { TxKillSwitchUrl = "http://example/ks", Callsign = "M0LTE-2" });
-        var poller = NewPoller(handler, opts, new FakeTimeProvider());
+        var poller = NewPoller(handler, new SystemOptions { Callsign = "M0LTE-2" });
 
         await poller.RefreshAsync(CancellationToken.None);
 
         poller.RemoteAllowed.Should().BeFalse();
         poller.RemoteBlockReason.Should().Contain("contest QRM");
+        poller.RemoteBlockReason.Should().Contain("dev-time kill-switch");
     }
 
     [Fact]
@@ -91,8 +78,7 @@ public class TxKillSwitchPollerTests
         // Block targeted at GB7RDG only; we are M0LTE-2 - should not gag us.
         var handler = new CannedHandler(_ => Json(
             """{"txAllowed":false,"reason":"GB7RDG site QRM","appliesTo":["GB7RDG-*"]}"""));
-        var opts = new StubOptions(new SystemOptions { TxKillSwitchUrl = "http://example/ks", Callsign = "M0LTE-2" });
-        var poller = NewPoller(handler, opts, new FakeTimeProvider());
+        var poller = NewPoller(handler, new SystemOptions { Callsign = "M0LTE-2" });
 
         await poller.RefreshAsync(CancellationToken.None);
 
@@ -104,142 +90,73 @@ public class TxKillSwitchPollerTests
     public async Task Allowed_WhenAppliesToOmittedAndTxAllowedTrue()
     {
         var handler = new CannedHandler(_ => Json("""{"txAllowed":true,"reason":"all good"}"""));
-        var opts = new StubOptions(new SystemOptions { TxKillSwitchUrl = "http://example/ks", Callsign = "M0LTE-1" });
-        var poller = NewPoller(handler, opts, new FakeTimeProvider());
+        var poller = NewPoller(handler, new SystemOptions { Callsign = "M0LTE-1" });
 
         await poller.RefreshAsync(CancellationToken.None);
 
         poller.RemoteAllowed.Should().BeTrue();
-    }
-
-    [Fact]
-    public async Task Stale_FailOpen_AllowsAfterStalenessElapses()
-    {
-        var clock = new FakeTimeProvider(DateTimeOffset.UtcNow);
-        // Initially blocked.
-        var handler = new CannedHandler(_ => Json("""{"txAllowed":false,"reason":"emergency","appliesTo":["*"]}"""));
-        var opts = new StubOptions(new SystemOptions
-        {
-            TxKillSwitchUrl = "http://example/ks",
-            Callsign = "M0LTE-1",
-            TxKillSwitchStaleSeconds = 60,
-            TxKillSwitchFailOpen = true,
-        });
-        var poller = NewPoller(handler, opts, clock);
-
-        await poller.RefreshAsync(CancellationToken.None);
-        poller.RemoteAllowed.Should().BeFalse("fresh successful poll said block");
-
-        // Now the publisher goes silent. Switch the handler to throw on
-        // every call, and let time march past the staleness window.
-        handler = new CannedHandler(_ => throw new HttpRequestException("network down"));
-        var poller2 = NewPoller(handler, opts, clock);
-
-        // Hydrate poller2 by replaying the original successful state.
-        // Simpler: have it poll once successfully then go dark.
-        var successThenFail = new SequentialHandler(
-            Json("""{"txAllowed":false,"reason":"emergency","appliesTo":["*"]}"""),
-            null);  // null = throw on subsequent calls
-        var pollerSeq = NewPoller(successThenFail, opts, clock);
-        await pollerSeq.RefreshAsync(CancellationToken.None);
-        pollerSeq.RemoteAllowed.Should().BeFalse();
-
-        clock.Advance(TimeSpan.FromSeconds(120));  // past staleness
-        await pollerSeq.RefreshAsync(CancellationToken.None);  // fails
-        pollerSeq.RemoteAllowed.Should().BeTrue("fail-open + stale = allow");
-        pollerSeq.RemoteBlockReason.Should().BeNull();
-    }
-
-    [Fact]
-    public async Task Stale_FailClosed_BlocksAfterStalenessElapses()
-    {
-        var clock = new FakeTimeProvider(DateTimeOffset.UtcNow);
-        var sequential = new SequentialHandler(
-            Json("""{"txAllowed":true,"reason":"normal","appliesTo":["*"]}"""),
-            null);
-        var opts = new StubOptions(new SystemOptions
-        {
-            TxKillSwitchUrl = "http://example/ks",
-            Callsign = "M0LTE-1",
-            TxKillSwitchStaleSeconds = 60,
-            TxKillSwitchFailOpen = false,
-        });
-        var poller = NewPoller(sequential, opts, clock);
-
-        await poller.RefreshAsync(CancellationToken.None);
-        poller.RemoteAllowed.Should().BeTrue();
-
-        clock.Advance(TimeSpan.FromSeconds(120));
-        await poller.RefreshAsync(CancellationToken.None);  // fails
-
-        poller.RemoteAllowed.Should().BeFalse("fail-closed + stale = block");
-        poller.RemoteBlockReason.Should().Contain("unreachable");
     }
 
     [Fact]
     public async Task NeverFetchedSuccessfully_FailOpen_Allows()
     {
+        // Production constant: FailOpen=true. A node with no internet
+        // at boot (or behind a proxy that's not yet up) keeps emitting
+        // rather than going silent.
         var handler = new CannedHandler(_ => throw new HttpRequestException("dns down"));
-        var opts = new StubOptions(new SystemOptions
-        {
-            TxKillSwitchUrl = "http://example/ks",
-            Callsign = "M0LTE-1",
-            TxKillSwitchFailOpen = true,
-        });
-        var poller = NewPoller(handler, opts, new FakeTimeProvider());
+        var poller = NewPoller(handler, new SystemOptions { Callsign = "M0LTE-1" });
 
         await poller.RefreshAsync(CancellationToken.None);
 
-        poller.RemoteAllowed.Should().BeTrue("fail-open default allows when bootstrap fails");
+        poller.RemoteAllowed.Should().BeTrue();
         poller.LastError.Should().NotBeNull();
-    }
-
-    [Fact]
-    public async Task NeverFetchedSuccessfully_FailClosed_Blocks()
-    {
-        var handler = new CannedHandler(_ => throw new HttpRequestException("dns down"));
-        var opts = new StubOptions(new SystemOptions
-        {
-            TxKillSwitchUrl = "http://example/ks",
-            Callsign = "M0LTE-1",
-            TxKillSwitchFailOpen = false,
-        });
-        var poller = NewPoller(handler, opts, new FakeTimeProvider());
-
-        await poller.RefreshAsync(CancellationToken.None);
-
-        poller.RemoteAllowed.Should().BeFalse();
-        poller.RemoteBlockReason.Should().Contain("unreachable");
     }
 
     [Fact]
     public async Task TransientFailure_KeepsLastSuccessfulValue_WithinStalenessWindow()
     {
         var clock = new FakeTimeProvider(DateTimeOffset.UtcNow);
+        // First call: blocked. Subsequent calls: planned-fault.
         var sequential = new SequentialHandler(
             Json("""{"txAllowed":false,"reason":"licence inspection","appliesTo":["*"]}"""),
-            null,  // network glitch
-            null); // still down
-        var opts = new StubOptions(new SystemOptions
-        {
-            TxKillSwitchUrl = "http://example/ks",
-            Callsign = "M0LTE-1",
-            TxKillSwitchStaleSeconds = 600,  // 10min staleness
-        });
-        var poller = NewPoller(sequential, opts, clock);
+            null,
+            null);
+        var poller = NewPoller(sequential, new SystemOptions { Callsign = "M0LTE-1" }, clock);
 
         await poller.RefreshAsync(CancellationToken.None);
         poller.RemoteAllowed.Should().BeFalse();
 
+        // Bump clock 30s, attempt a refresh that fails. Still inside
+        // the 600s staleness window, so the cached "blocked" sticks.
         clock.Advance(TimeSpan.FromSeconds(30));
-        await poller.RefreshAsync(CancellationToken.None);   // fails
-
-        poller.RemoteAllowed.Should().BeFalse("within staleness window, keep last known block");
+        await poller.RefreshAsync(CancellationToken.None);
+        poller.RemoteAllowed.Should().BeFalse();
         poller.RemoteBlockReason.Should().Contain("licence inspection");
 
         clock.Advance(TimeSpan.FromSeconds(30));
-        await poller.RefreshAsync(CancellationToken.None);   // fails again
+        await poller.RefreshAsync(CancellationToken.None);
         poller.RemoteAllowed.Should().BeFalse("still within window");
+    }
+
+    [Fact]
+    public async Task Stale_FallsBackToFailOpen()
+    {
+        var clock = new FakeTimeProvider(DateTimeOffset.UtcNow);
+        var sequential = new SequentialHandler(
+            Json("""{"txAllowed":false,"reason":"emergency","appliesTo":["*"]}"""),
+            null);
+        var poller = NewPoller(sequential, new SystemOptions { Callsign = "M0LTE-1" }, clock);
+
+        await poller.RefreshAsync(CancellationToken.None);
+        poller.RemoteAllowed.Should().BeFalse("fresh successful poll said block");
+
+        // Advance past the hardcoded 600s staleness window. Subsequent
+        // refresh fails. With FailOpen=true (production constant), we
+        // re-allow.
+        clock.Advance(TimeSpan.FromSeconds(TxKillSwitchPoller.StaleSeconds + 60));
+        await poller.RefreshAsync(CancellationToken.None);
+        poller.RemoteAllowed.Should().BeTrue("stale + fail-open = allow");
+        poller.RemoteBlockReason.Should().BeNull();
     }
 
     [Theory]
@@ -250,23 +167,36 @@ public class TxKillSwitchPollerTests
     [InlineData(new string[] { "M0LTE-*" }, "GB7RDG", false)]
     [InlineData(new string[] { "M0LTE-2" }, "M0LTE-2", true)]
     [InlineData(new string[] { "M0LTE-2" }, "M0LTE-3", false)]
-    [InlineData(new string[] { "M0LTE-*", "GB7RDG" }, "GB7RDG", true)]   // multi-pattern
-    [InlineData(new string[] { }, "M0LTE-1", true)]                      // empty list = all
-    [InlineData(new string[] { "" }, "M0LTE-1", false)]                  // explicit empty entry skipped
+    [InlineData(new string[] { "M0LTE-*", "GB7RDG" }, "GB7RDG", true)]
+    [InlineData(new string[] { }, "M0LTE-1", true)]
+    [InlineData(new string[] { "" }, "M0LTE-1", false)]
     public void AppliesToThisNode_PatternMatchesExpected(string[] patterns, string callsign, bool expected)
     {
         TxKillSwitchPoller.AppliesToThisNode(patterns, callsign).Should().Be(expected);
     }
 
+    [Fact]
+    public void HardcodedConstants_PinProductionValues()
+    {
+        // Pin the production constants so an accidental tweak shows
+        // up as a failing test review item, not a silent change to
+        // safety-critical defaults.
+        TxKillSwitchPoller.KillSwitchUrl.Should().Be(
+            "https://compute.oarc.uk/storage/public/folders/4803/dapps-devtime-killswitch.json");
+        TxKillSwitchPoller.PollSeconds.Should().Be(60);
+        TxKillSwitchPoller.StaleSeconds.Should().Be(600);
+        TxKillSwitchPoller.FailOpen.Should().BeTrue();
+    }
+
     private static TxKillSwitchPoller NewPoller(
         HttpMessageHandler handler,
-        IOptionsMonitor<SystemOptions> options,
-        TimeProvider clock)
+        SystemOptions options,
+        TimeProvider? clock = null)
     {
         return new TxKillSwitchPoller(
             new CannedHttpClientFactory(handler),
-            options,
-            clock,
+            new StubOptions(options),
+            clock ?? new FakeTimeProvider(),
             NullLogger<TxKillSwitchPoller>.Instance);
     }
 
