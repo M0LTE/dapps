@@ -1,5 +1,6 @@
 using System.Net.Sockets;
 using System.Text;
+using dapps.client.Tx;
 using Microsoft.Extensions.Logging;
 
 namespace dapps.client.Transport.Agw;
@@ -10,10 +11,20 @@ namespace dapps.client.Transport.Agw;
 /// node, asks for an AX.25 connection, and returns a Stream once the remote
 /// confirms.
 /// </summary>
-public sealed class AgwOutboundTransport(string host, int port, ILoggerFactory loggerFactory)
-    : IDappsOutboundTransport
+public sealed class AgwOutboundTransport : IDappsOutboundTransport
 {
-    private readonly ILogger logger = loggerFactory.CreateLogger<AgwOutboundTransport>();
+    private readonly string host;
+    private readonly int port;
+    private readonly ILogger logger;
+    private readonly IDappsTxGate txGate;
+
+    public AgwOutboundTransport(string host, int port, ILoggerFactory loggerFactory, IDappsTxGate? txGate = null)
+    {
+        this.host = host;
+        this.port = port;
+        this.logger = loggerFactory.CreateLogger<AgwOutboundTransport>();
+        this.txGate = txGate ?? AlwaysOpenTxGate.Instance;
+    }
 
     public async Task<IDappsConnection> ConnectAsync(
         string localCallsign,
@@ -33,7 +44,7 @@ public sealed class AgwOutboundTransport(string host, int port, ILoggerFactory l
             logger.LogInformation("AGW: connecting to {host}:{port}", host, port);
             await tcp.ConnectAsync(host, port, stoppingToken);
             var ns = tcp.GetStream();
-            var framing = new AgwFrameTransport(ns);
+            var framing = new AgwFrameTransport(ns, txGate);
 
             // Register our local callsign first. Without this BPQ has no
             // valid source for the SABM and emits frames with a blank src

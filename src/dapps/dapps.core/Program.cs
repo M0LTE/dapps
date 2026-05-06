@@ -3,6 +3,7 @@ using dapps.client.Backhaul.Datagram;
 using dapps.client.Discovery;
 using dapps.client.Transport;
 using dapps.client.Transport.Agw;
+using dapps.client.Tx;
 using dapps.core.Models;
 using dapps.core.Routing;
 using dapps.core.Services;
@@ -46,6 +47,12 @@ builder.Services.AddRazorPages();
 builder.Services.AddSingleton<SystemOptionsStore>();
 builder.Services.AddSingleton<IOptionsMonitor<SystemOptions>>(
     sp => sp.GetRequiredService<SystemOptionsStore>());
+
+// TX kill-switch seam (PR 1). PR 2 swaps this for a composite gate
+// backed by a SystemOptions toggle and a remote-poll status; for now
+// it always allows TX, but every bearer goes through it so nothing
+// has to change at the bearer layer when the real gate ships.
+builder.Services.AddSingleton<IDappsTxGate>(AlwaysOpenTxGate.Instance);
 
 builder.Services.AddHttpClient();
 
@@ -212,7 +219,9 @@ builder.Services.AddSingleton<IDappsOutboundTransport, BearerSwitchingOutboundTr
 // IDappsBackhaul whose CanHandle returns true for the route. UDP wins
 // when the neighbour has a UdpEndpoint set; AGW handles everything else.
 builder.Services.AddSingleton<UdpDatagramBackhaul>(sp =>
-    new UdpDatagramBackhaul(sp.GetRequiredService<ILoggerFactory>()));
+    new UdpDatagramBackhaul(
+        sp.GetRequiredService<ILoggerFactory>(),
+        txGate: sp.GetRequiredService<IDappsTxGate>()));
 builder.Services.AddSingleton<IDappsBackhaul>(sp => sp.GetRequiredService<UdpDatagramBackhaul>());
 builder.Services.AddSingleton<IRouteGossipPort, RouteGossipPort>();
 builder.Services.AddSingleton<IDappsBackhaul>(sp => new Dappsv1SessionBackhaul(

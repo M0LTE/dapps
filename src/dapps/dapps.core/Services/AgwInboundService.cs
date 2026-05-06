@@ -3,6 +3,7 @@ using System.Net.Sockets;
 using System.Text;
 using dapps.client.Backhaul;
 using dapps.client.Transport.Agw;
+using dapps.client.Tx;
 using dapps.core.Models;
 using Microsoft.Extensions.Options;
 
@@ -38,13 +39,15 @@ public sealed class AgwInboundService(
     IBackhaulInbox inbox,
     ILoggerFactory loggerFactory,
     ILogger<AgwInboundService> logger,
-    OperationalMetrics? metrics = null) : IHostedService
+    OperationalMetrics? metrics = null,
+    IDappsTxGate? txGate = null) : IHostedService
 {
     private static readonly TimeSpan ReconnectBackoff = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan IdleBackoff = TimeSpan.FromSeconds(2);
 
     private readonly CancellationTokenSource stoppingTokenSource = new();
     private readonly OperationalMetrics metrics = metrics ?? new OperationalMetrics();
+    private readonly IDappsTxGate txGate = txGate ?? AlwaysOpenTxGate.Instance;
     private Task? loopTask;
     private CancellationTokenSource? cycleTokenSource;
     private IDisposable? optionsChangeSubscription;
@@ -126,7 +129,7 @@ public sealed class AgwInboundService(
         using var tcp = new TcpClient();
         logger.LogInformation("AGW inbound: connecting {0}:{1}", opts.NodeHost, opts.AgwPort);
         await tcp.ConnectAsync(opts.NodeHost, opts.AgwPort, ct);
-        var framing = new AgwFrameTransport(tcp.GetStream());
+        var framing = new AgwFrameTransport(tcp.GetStream(), txGate);
 
         // 'X' register so BPQ knows where to dispatch inbound 'C' frames.
         // Note this is necessary but *not sufficient*: the operator must
