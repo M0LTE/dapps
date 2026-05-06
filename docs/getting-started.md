@@ -28,7 +28,7 @@ The wire protocol is small and human-readable on the line: a peer connects, gets
 
 ## Before you put it on the air
 
-DAPPS is pre-1.0. While it is, every running node polls a single URL controlled by the project author and stops transmitting if that URL says so. It's a development-phase safety net - not configurable, removed before 1.0. See [Dev-time TX kill-switch](dev-time-tx-kill-switch.md) for the full rationale and what it means in practice.
+DAPPS is pre-1.0. While it is, every running node checks a URL controlled by the project author every five minutes; the URL can ask nodes to pause transmissions. It's a development-phase safety net - not configurable, removed before 1.0. See [Dev-time TX kill-switch](dev-time-tx-kill-switch.md) for the full rationale and what it means in practice.
 
 ## The journey
 

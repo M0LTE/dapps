@@ -1,16 +1,16 @@
 # Dev-time TX kill-switch
 
-DAPPS is pre-1.0 software. Until it is judged stable enough for unsupervised use on the air, every running node polls a single URL controlled by the project author and stops transmitting if that URL says so. This page exists so you know exactly what that means before you put a node on the air.
+DAPPS is pre-1.0 software. While it is, every running node checks a URL controlled by the project author every five minutes; the URL can ask nodes to pause transmissions. This page exists so you know what that means before you put a node on the air.
 
 ## What is it
 
-Every DAPPS daemon, regardless of operator, polls
+Every running DAPPS daemon polls
 
 ```
 https://compute.oarc.uk/storage/public/folders/4803/dapps-devtime-killswitch.json
 ```
 
-once a minute. The response is small JSON:
+every five minutes. The response is small JSON:
 
 ```json
 {
@@ -26,31 +26,31 @@ The dashboard shows a red banner across every page when the gate is closed, with
 
 ## Why it is here
 
-DAPPS is alpha-quality software running on shared amateur radio bandwidth. A bug shipped in a release could, in principle, cause a fleet of nodes to flood the air. Most operators won't catch a regression in a release within minutes; they may not even be at the keyboard. The kill-switch lets the project author gag every running node within roughly one minute of detecting a problem, without coordinating with operators individually.
+DAPPS is early-stage software running on shared amateur radio bandwidth. A bug in a release could, in principle, cause a fleet of nodes to transmit more than they should. An operator may not be at the keyboard to catch a regression, especially overnight or during a working day. The kill-switch lets the author signal every running node to pause within a few minutes of spotting a problem, without coordinating with each operator individually.
 
-This is a software-development safety net, not a regulatory mechanism, not a moderation tool. It exists so the worst-case "I shipped a bug that hammers 144.950" stays bounded to a few minutes of harm before every node goes silent.
+This is a software-development safety net, not a regulatory mechanism, not a moderation tool. The aim is to keep the worst case ("I shipped a bug that hammers 144.950") bounded.
 
-## What you cannot do
+## What's not configurable
 
-- You cannot disable the polling.
-- You cannot repoint it to a different URL.
-- You cannot relax the cadence, the staleness window, or the fail-open behaviour.
+- The polling cannot be disabled.
+- The URL cannot be changed at runtime.
+- The cadence, staleness window, and fail-open behaviour are fixed.
 
-The values are constants in the source (`TxKillSwitchPoller.cs`); a fork can change them but the published binaries cannot be configured at runtime. This is deliberate. A configurable kill-switch defeats its purpose - the whole point is that the author can rely on every node polling the one URL.
+The values are constants in the source (`TxKillSwitchPoller.cs`) and the published binaries do not expose them as settings. This is deliberate: a configurable kill-switch wouldn't reliably reach every node, which is the whole point.
 
-If that posture is unacceptable to you, the answer is to not run pre-1.0 DAPPS, or to fork. Both are valid choices.
+If you'd rather not run software with this in place, deferring until 1.0 is a reasonable call.
 
 ## What you can do
 
 - See the current state in the dashboard banner and at `GET /TxControl/status`.
-- Continue to use the operator master TX-stop button independently. It is a separate signal; closing the local toggle gags TX even when the remote signal is allowing, and reopening the local toggle does *not* override a remote block.
+- Continue to use the operator master TX-stop button independently. It is a separate signal; closing the local toggle pauses TX even when the remote signal is allowing, and reopening the local toggle does *not* override a remote block.
 - Monitor outbound HTTPS traffic to the kill-switch URL if you want to verify what's being polled. Nothing operator-identifying is sent: the request is a plain `GET` with no body and no auth.
 - Read the `Services/TxKillSwitchPoller.cs` source. The whole mechanism is around two hundred lines.
 
 ## Failure modes
 
 - **URL unreachable at startup**: the gate stays open. A new install with no internet does not silently refuse to TX.
-- **URL unreachable after a successful poll**: the daemon keeps using the most recent successful state for ten minutes (the staleness window). After that it falls back to allow.
+- **URL unreachable after a successful poll**: the daemon keeps using the most recent successful state for thirty minutes (the staleness window). After that it falls back to allow.
 - **Malformed JSON**: same as unreachable - the failure is logged at debug level and the previous state is kept.
 
 The staleness window is short enough that a genuinely stuck poller won't keep trusting hours-old state, and long enough to ride out the kind of network blip that's common on a domestic connection. Fail-open is the conservative posture for an amateur radio installation: an operator with a working RF stack and a flaky internet connection is not made worse off by losing transmissions on top.
@@ -63,9 +63,9 @@ If the project pivots and a configurable per-fleet kill-switch becomes useful (a
 
 ## What the network sees
 
-A `GET` request to the URL above, once a minute, from every running DAPPS node. No body, no headers beyond a User-Agent generated by the .NET HTTP stack, no cookies, no auth. The response is cached only in process memory.
+A `GET` request to the URL above, every five minutes, from every running DAPPS node. No body, no headers beyond a User-Agent generated by the .NET HTTP stack, no cookies, no auth. The response is cached only in process memory.
 
-If you operate a node in an environment where polling that URL is itself a problem (an isolated network, a regulator concerned about outbound traffic), the answer is to not run pre-1.0 DAPPS in that environment. Fail-open will keep TX working when the URL is unreachable, but the request will still be made on the polling cadence.
+If polling that URL is itself a problem in your environment (an isolated network, a regulatory concern about outbound traffic), waiting for 1.0 before deploying may be the right call. Fail-open keeps TX working when the URL is unreachable, but the request itself still happens on the polling cadence.
 
 ## Source
 

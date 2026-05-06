@@ -16,9 +16,9 @@ namespace dapps.core.Services;
 /// staleness window, and fail-open behaviour are constants. Operators
 /// running pre-1.0 DAPPS cannot disable it, repoint it, or relax the
 /// timings. The mechanism is a development-phase safety net so the
-/// author can gag misbehaving experimental nodes if a release ships
-/// with a bug that floods the air. It will be removed (or made
-/// genuinely configurable per-fleet) before 1.0. See
+/// author can ask experimental nodes to pause if a release ships with
+/// a bug that transmits more than it should. It will be removed (or
+/// made genuinely configurable per-fleet) before 1.0. See
 /// <c>docs/dev-time-tx-kill-switch.md</c> for the operator-facing
 /// rationale.</para>
 ///
@@ -36,9 +36,9 @@ namespace dapps.core.Services;
 ///
 /// Fail behaviour: HTTP / parse failure keeps the last successful
 /// state for <see cref="StaleSeconds"/>, then falls back to allow
-/// (fail-open). A network outage doesn't gag a working amateur radio
-/// installation - the kill-switch is for active intervention by the
-/// project author, not graceful degradation.
+/// (fail-open). A network outage doesn't silence a working amateur
+/// radio installation - the kill-switch is for active intervention
+/// by the project author, not graceful degradation.
 ///
 /// Errors are swallowed by design: a poller crash mustn't take down
 /// the daemon. Same posture as <see cref="UpdateChecker"/>.
@@ -58,19 +58,21 @@ public sealed class TxKillSwitchPoller(
         "https://compute.oarc.uk/storage/public/folders/4803/dapps-devtime-killswitch.json";
 
     /// <summary>Seconds between polls. Constant: cannot be tuned per
-    /// node. 60s gives near-real-time response without hammering the
-    /// publishing endpoint.</summary>
-    public const int PollSeconds = 60;
+    /// node. 300s (5 min) is responsive enough to pause a misbehaving
+    /// fleet within a single beacon cadence, slow enough that the
+    /// outbound traffic to the publishing endpoint stays trivial
+    /// even at hundreds of nodes.</summary>
+    public const int PollSeconds = 300;
 
     /// <summary>Seconds without a successful fetch before the cached
-    /// value is considered stale. Constant: 600 (10 min) - long enough
-    /// to ride out transient network blips, short enough that a
-    /// genuinely-stuck poller stops trusting old state in a reasonable
-    /// time.</summary>
-    public const int StaleSeconds = 600;
+    /// value is considered stale. Constant: 1800 (30 min) - several
+    /// poll cycles of failure before declaring the cached value
+    /// untrustworthy, long enough to ride out a transient outage,
+    /// short enough that a stuck poller stops trusting hour-old state.</summary>
+    public const int StaleSeconds = 1800;
 
     /// <summary>When stale or never-yet-fetched, allow TX. Constant:
-    /// the kill-switch is for active intervention, not for gagging
+    /// the kill-switch is for active intervention, not for silencing
     /// nodes that lose internet.</summary>
     public const bool FailOpen = true;
 
@@ -160,6 +162,21 @@ public sealed class TxKillSwitchPoller(
     {
         try
         {
+            // Belt-and-braces: refuse to fetch over plaintext even if
+            // the constant ever drifts. Cert validation itself is
+            // done by the named HttpClient's primary handler (see DI
+            // registration in Program.cs), which uses a fresh
+            // SocketsHttpHandler with default SslOptions - the system
+            // trust store + chain/hostname/expiry checks. We never
+            // override RemoteCertificateValidationCallback anywhere
+            // in the process; this guard catches the URL-scheme
+            // angle that's not in the handler's job description.
+            if (!KillSwitchUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException(
+                    "TX kill-switch URL must be https:// - refusing to poll over plaintext");
+            }
+
             var client = httpClientFactory.CreateClient("tx-kill-switch");
             client.Timeout = TimeSpan.FromSeconds(10);
 

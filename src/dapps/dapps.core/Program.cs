@@ -67,6 +67,21 @@ builder.Services.AddSingleton<IDappsTxGate>(sp => sp.GetRequiredService<SystemOp
 
 builder.Services.AddHttpClient();
 
+// Dedicated named client for the TX kill-switch poller. Pinned to
+// a fresh SocketsHttpHandler so any future global handler tweak
+// (e.g. someone adding a "trust all certs" callback to the default
+// for testing and forgetting to remove it) cannot weaken the
+// validation on the kill-switch fetch. SslOptions is left at
+// default = system trust store + chain / hostname / expiry. The
+// poller adds a runtime guard that the URL scheme is https://;
+// together those two stop a downgrade or a bypassed validation
+// from silently rendering the kill-switch ineffective.
+builder.Services.AddHttpClient("tx-kill-switch")
+    .ConfigurePrimaryHttpMessageHandler(() => new System.Net.Http.SocketsHttpHandler
+    {
+        SslOptions = new System.Net.Security.SslClientAuthenticationOptions(),
+    });
+
 // Plan A polish - single TimeProvider injected everywhere
 // cadence-sensitive code reads time. Tests substitute
 // FakeTimeProvider (Microsoft.Extensions.TimeProvider.Testing) so
