@@ -49,14 +49,19 @@ builder.Services.AddSingleton<IOptionsMonitor<SystemOptions>>(
     sp => sp.GetRequiredService<SystemOptionsStore>());
 
 // TX kill-switch wiring. The gate composes two signals: a local
-// operator toggle (SystemOptions.TxEnabled, PR 2) and a remote
-// kill-switch (ITxKillSwitchSignal, PR 3). Until PR 3 lands the
-// remote signal is OpenTxKillSwitchSignal, so the gate effectively
-// reflects the local toggle alone. Register the concrete gate as a
-// singleton so the TxControlController can read both signals
-// independently for the dashboard banner; the IDappsTxGate alias
-// resolves the same instance for bearers.
-builder.Services.AddSingleton<ITxKillSwitchSignal, OpenTxKillSwitchSignal>();
+// operator toggle (SystemOptions.TxEnabled) and a remote
+// kill-switch URL polled by TxKillSwitchPoller. The poller IS the
+// ITxKillSwitchSignal: registered both as a singleton (so the gate
+// can read its state) and as a hosted service (so the polling loop
+// runs). When SystemOptions.TxKillSwitchUrl is empty the poller
+// idles and reports "remote allowed" - the gate effectively reflects
+// the local toggle alone. Register the concrete gate as a singleton
+// so the TxControlController can read both signals independently
+// for the dashboard banner; the IDappsTxGate alias resolves the
+// same instance for bearers.
+builder.Services.AddSingleton<TxKillSwitchPoller>();
+builder.Services.AddSingleton<ITxKillSwitchSignal>(sp => sp.GetRequiredService<TxKillSwitchPoller>());
+builder.Services.AddHostedService(sp => sp.GetRequiredService<TxKillSwitchPoller>());
 builder.Services.AddSingleton<SystemOptionsBackedTxGate>();
 builder.Services.AddSingleton<IDappsTxGate>(sp => sp.GetRequiredService<SystemOptionsBackedTxGate>());
 

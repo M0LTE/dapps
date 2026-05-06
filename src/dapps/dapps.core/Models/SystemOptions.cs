@@ -299,6 +299,48 @@ public class SystemOptions
     public bool TxEnabled { get; set; } = true;
 
     /// <summary>
+    /// Centralised TX kill-switch URL. The poller fetches this URL on
+    /// <see cref="TxKillSwitchPollSeconds"/> and parses the response
+    /// as JSON: <c>{"txAllowed":bool,"reason":string?,"appliesTo":["CALLSIGN-*","*"]}</c>.
+    /// When <c>txAllowed=false</c> and the local callsign matches one
+    /// of the <c>appliesTo</c> patterns (or it's <c>["*"]</c>), the
+    /// gate closes for this node. Empty string disables the poller.
+    /// Lets a network operator (RSGB, club sysop, regulator) gag a
+    /// single node or the whole fleet without touching individual
+    /// boxes. Default empty.
+    /// </summary>
+    public string TxKillSwitchUrl { get; set; } = "";
+
+    /// <summary>
+    /// Seconds between TX kill-switch URL polls when configured.
+    /// Default 60. Clamped to a minimum of 5 by the poller. Set
+    /// shorter for fast-reacting fleets, longer to reduce HTTP load
+    /// on the publishing endpoint.
+    /// </summary>
+    public int TxKillSwitchPollSeconds { get; set; } = 60;
+
+    /// <summary>
+    /// What the gate does when the kill-switch URL is unreachable for
+    /// longer than <see cref="TxKillSwitchStaleSeconds"/>. <c>true</c>
+    /// (default) = fail-open: a network outage doesn't gag a working
+    /// node, since the kill-switch is for active intervention not
+    /// graceful degradation. <c>false</c> = fail-closed: if we can't
+    /// confirm "go", don't TX. Trade-off: fail-closed loses RF
+    /// alongside internet; fail-open trusts the most recent successful
+    /// poll until it goes stale.
+    /// </summary>
+    public bool TxKillSwitchFailOpen { get; set; } = true;
+
+    /// <summary>
+    /// Seconds without a successful kill-switch fetch before the gate
+    /// considers the cached value stale and switches to the
+    /// <see cref="TxKillSwitchFailOpen"/> behaviour. Default 600
+    /// (10 minutes). Inside this window the last-known result is
+    /// trusted regardless of network state.
+    /// </summary>
+    public int TxKillSwitchStaleSeconds { get; set; } = 600;
+
+    /// <summary>
     /// When true, every outbound transmission (beacon, solicit, probe,
     /// forward, poll, ack, heartbeat) is logged to the
     /// <see cref="DbTransmission"/> table for operator-side audit.
