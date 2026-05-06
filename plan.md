@@ -10,14 +10,17 @@ What's left is in the "Suggested ordering" near the bottom plus the open H beare
 
 ## Tom's scratchpad of ideas
 
+Active forward-looking work is tracked as GitHub issues now. The bullets below are the historical scratchpad; the open ones link to their tracking issue. Resolved bullets stay struck-through for context.
+
 - ~~when looking at long distance routing what about looking into the routing implementation in Meshcore?~~ *(actioned - see B5.1; selectable alongside the default passive-flood stack)*
-- what about using Meshcore as a transport? *(separate question; tracked under Phase H1)*
-- I think we should look at shipping an actual usable app, ideally an actual phone app, maybe a messenger app. Or maybe a long form mail app so as not to conflict with whatsapp.
+- what about using Meshcore as a transport? *(tracked as #137 alongside Phase H1+H2)*
+- shipping a real end-user app - phone messenger or long-form mail app *(tracked as #135)*
 - ~~RHP (v2?) support~~ *(done for XRouter via `RhpV2.Client` 0.2.2; mainline BPQ RHP still upstream-blocked)*
-- ~~MCP server endpoint exposing some DAPPS surface to LLMs~~ *(in progress - see Phase M)*
+- ~~MCP server endpoint exposing some DAPPS surface to LLMs~~ *(done - see Phase M)*
 - ~~**Global airtime budget for discovery.**~~ *(actioned - see B7 below)*
 - ~~**Probe strategies, not bare intervals.**~~ *(actioned - see B7 below)*
-- **Collaborative route gossip** - today every node discovers the mesh independently. Worth sharing what we've learned with neighbours; HF NVIS broadcast and/or QO-100 satellite as broadcast-shaped bearers; fountain codes for the unacked-broadcast shape. *(sketched - see B8 below)*
+- **Collaborative route gossip** - share route state with neighbours, HF NVIS / QO-100 broadcast bearers, fountain codes for the unacked shape. *(tracked as #136 alongside Phase B8 below)*
+- **Headless / scripted provisioning API** - one-shot bootstrap endpoint so sim scripts, fleet provisioning, CI, and first-boot init don't have to navigate the operator-facing Razor wizard. *(tracked as #134)*
 
 ## Open tasks (issues filed)
 
@@ -284,7 +287,7 @@ Two scratchpad items folded into one PR because they're the same shape: pick the
 
 B7 follow-ups landed in a separate PR: per-channel airtime budgets via `DbDiscoveryChannel.AirtimeBudgetSecondsPerHour` (0 = use the global cap; reservations must fit under both ceilings when both are set, with a key on each entry so per-channel buckets sum independently), an airtime-meter pill on the Discovery channels dashboard heading showing trailing-hour consumption against the global cap (warns at ≥90%), per-channel "Channel budget" column in the channels table + corresponding "Add channel" form input, and a `dapps --show-config` CLI subcommand that walks the persisted systemoptions table and prints `DAPPS_SCREAMING_SNAKE=value` pairs without booting the host.
 
-### B8. Collaborative route gossip *(sketch)*
+### B8. Collaborative route gossip *(sketch - tracked as #136)*
 
 Today every node discovers the mesh independently. B6.1 Phase 2's `peers` query *is* a small step toward sharing - when I successfully probe you I ask "who do you know?" and seed your neighbours as `via:<you>` candidates I then probe myself, so node *existence* propagates one-hop-at-a-time across the probe graph. What's missing is **route-state sharing**: I tell you "I successfully reached X via Y at hop-count N, save yourself the discovery cost." That's the AODV → DSDV/RIP step we deliberately didn't take.
 
@@ -360,7 +363,7 @@ Systemd units live in `scripts/dapps-updater.service` + `.timer`. README install
 
 **What's NOT in this PR (deferred):** scheduled auto-update (C5.3), Windows/macOS triggered-update path, channel pinning, signature verification.
 
-#### C5.3 - Auto-update on a schedule *(parked)*
+#### C5.3 - Auto-update on a schedule *(parked - tracked as #140)*
 
 Originally sketched as: opt-in `AutoUpdate=true` + `QuietHours` window, skip if traffic was forwarded in the last N minutes, per-major-version pinning so a 0→1 bump doesn't surprise people overnight.
 
@@ -432,7 +435,7 @@ Likeliest-cheapest stack: server-rendered Razor or Blazor Server. Avoid SPA tool
 
 Combined with the existing `hello.py` from E2, the gallery covers request/reply, many-to-many, one-shot submit, periodic submit, and mixed-mode shapes. Mailing-list / forum-style apps were considered but cut as borderline DAPPS-shape (more about server architecture than DAPPS surface) - defer to early adopters who actually need that pattern.
 
-## Phase G - second-language reference implementation
+## Phase G - second-language reference implementation *(tracked as #141)*
 
 **Goal:** prove the spec is portable, not an accidental description of the C# implementation.
 
@@ -467,7 +470,7 @@ Apps never see fragments - the MQTT/REST surface only emits the assembled messag
 
 20 new tests across `F2WireFormatTests` (10 - parse + reject paths for `mid=` / `frag=N/M`), `F2FragmentationTests` (8 - sender chunking, in-order reassembly, out-of-order reassembly, idempotent re-delivery, incomplete-buffer hold, stale sweep, transit-fragment passthrough), and `DappsProtocolClientTests` (+2 - wire-emit shape with F2 headers, partial-args reject). 455/455.
 
-### F2.5. Fountain codes for broadcast / HF / multi-path
+### F2.5. Fountain codes for broadcast / HF / multi-path *(tracked as #138)*
 
 Future option, not in F2's scope. A fountain code (LT, Raptor) lets the originator emit an unbounded stream of random-combination packets; any recipient who collects K(1+ε) of them reconstructs the source. No back-channel retransmission protocol; the sender just keeps emitting and recipients tune in until they've collected enough.
 
@@ -518,7 +521,7 @@ The "feature negotiation on the prompt" alternative was rejected: it lets implem
 
 Pre-shipping caveat - also in the README - applies until non-author operators are on the air: while there's nobody to coordinate with, breaking changes still get to skip the version-bump, because the compatibility tape buys nothing. Policy fully kicks in when the first independent operator picks DAPPS up.
 
-### F5. Authenticated message origin (signing) *(design parked)*
+### F5. Authenticated message origin (signing) *(design parked - tracked as #139)*
 
 Messages signed by the source node so receivers can verify the origin chain hasn't been tampered with. Encryption is illegal under amateur regulation; signing is fine. Design discussion happened mid-Phase-M but the work is parked - pulling forward when there's a real abuse case to defend against, or when the OARC community has appetite for a key-registry side-project.
 
@@ -540,11 +543,11 @@ Pickup signal: a real-world need (abuse case, cross-implementation interop conce
 
 **Bearer-specific work, distinct from the routing decisions in Phase B.** These are about *what wire forms DAPPS speaks*; routing logic (how DAPPS picks where to send) is solved one layer up and is bearer-agnostic. Each item here is an `IDappsBackhaul` (and optionally `IDiscoveryBearer`) implementation slotting under the existing seams without changing core routing.
 
-### H1. MeshCore Companion-over-USB
+### H1. MeshCore Companion-over-USB *(tracked as #137 alongside H2)*
 
 Use a MeshCore companion radio (e.g. Heltec / TTGO LoRa boards running the MeshCore companion firmware) as a bearer. The companion exposes a serial protocol over USB; DAPPS opens that serial port, sends companion datagrams carrying our `BackhaulMessage` payloads, and listens for inbound datagrams. Discovery beacon support if the companion firmware allows it; otherwise rely on Phase B5's flood-then-learn over this bearer instead of explicit beacons.
 
-### H2. MeshCore KISS-over-USB
+### H2. MeshCore KISS-over-USB *(tracked as #137 alongside H1)*
 
 Same hardware as H1 but via the MeshCore KISS interface - raw frames rather than companion-level datagrams. Trades convenience for control. Same `BackhaulMessage` codec; same packetiser. Probably done after H1 once H1 has shaken out the wire-shape questions.
 
