@@ -71,4 +71,33 @@ public sealed class IndexModel(
         public string Destination { get; set; } = "";
         public string? Payload { get; set; }
     }
+
+    /// <summary>
+    /// Maps a queue row's internal flags (Forwarded / LocallyDelivered
+    /// + destination-is-local) onto the (label, pill-class) pair the
+    /// queue tables render. Pure for testability; used historically by
+    /// the server-rendered queue table on /, kept here so the unit
+    /// tests in DashboardLogicTests still exercise the routing.
+    /// </summary>
+    public static (string Label, string PillClass) MessageStatus(DbMessage m, string ourCallsign)
+    {
+        var local = ourCallsign.Split('-')[0];
+        var dest = m.Destination.Split('@').Last().Split('-')[0];
+        var isLocal = string.Equals(dest, local, StringComparison.OrdinalIgnoreCase);
+        if (isLocal && m.LocallyDelivered) return ("delivered", "ok");
+        if (isLocal) return ("pending local", "warn");
+        if (m.Forwarded) return ("forwarded", "info");
+        return ("pending", "");
+    }
+
+    /// <summary>Compact age string (seconds / minutes / hours / days)
+    /// for queue row display.</summary>
+    public static string Age(DateTime createdAt)
+    {
+        var span = DateTime.UtcNow - createdAt;
+        if (span.TotalSeconds < 90) return $"{(int)span.TotalSeconds}s";
+        if (span.TotalMinutes < 90) return $"{(int)span.TotalMinutes}m";
+        if (span.TotalHours < 36) return $"{(int)span.TotalHours}h";
+        return $"{(int)span.TotalDays}d";
+    }
 }

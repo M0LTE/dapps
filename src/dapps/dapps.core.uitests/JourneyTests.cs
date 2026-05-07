@@ -61,37 +61,43 @@ public sealed class JourneyTests(PlaywrightFixture pw) : IAsyncLifetime
             "completing the wizard should drop us on the dashboard root");
         await CaptureAsync(page, "dashboard");
 
-        // 2. /Inbound - SSE-driven live tail. The cookie carries
-        // through, so we should land directly on the page (no
-        // bounce to /Login). DOMContentLoaded rather than
-        // NetworkIdle: the EventSource opens a long-lived
-        // connection that NetworkIdle would wait on forever.
-        await page.GotoAsync($"{_app.BaseUrl}/Inbound", new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
-        page.Url.Should().Contain("/Inbound");
+        // 2. /Messages?tab=live - SSE-driven live tail (replaces the
+        // legacy /Inbound page). The cookie carries through, so we
+        // should land directly on the page (no bounce to /Login).
+        // DOMContentLoaded rather than NetworkIdle: the EventSource
+        // opens a long-lived connection that NetworkIdle would wait
+        // on forever.
+        await page.GotoAsync($"{_app.BaseUrl}/Messages?tab=live", new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
+        page.Url.Should().Contain("/Messages");
         (await page.Locator("#filter-app").CountAsync())
-            .Should().Be(1, "the D2-followup filter inputs should be present");
-        await CaptureAsync(page, "inbound");
+            .Should().Be(1, "the live-arrivals filter inputs should be present");
+        await CaptureAsync(page, "messages-live");
 
-        // 3. /IHave - manual compose form.
-        await page.GotoAsync($"{_app.BaseUrl}/IHave");
-        page.Url.Should().Contain("/IHave");
-        (await page.Locator("form").CountAsync()).Should().BeGreaterThan(0);
-        await CaptureAsync(page, "ihave");
-
-        // 4. Drive the /Inbound filter inputs - proves the journey
-        // harness can do interactive flows (typing, observing
-        // filter-summary text update). Empty page so no rows to
-        // hide, but the summary text should swap to a "showing X of
-        // Y rows" form once any filter has content. Right now there
-        // are zero rows so the summary's count math will read
-        // "showing 0 of 0 rows" - the *transition* off "showing all
-        // rows" is what we're proving the JS does.
+        // /Inbound legacy URL must redirect to /Messages?tab=live so
+        // old bookmarks resolve.
         await page.GotoAsync($"{_app.BaseUrl}/Inbound", new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
+        page.Url.Should().Contain("/Messages");
+
+        // 3. /Compose - manual ihave form (renamed from /IHave).
+        await page.GotoAsync($"{_app.BaseUrl}/Compose");
+        page.Url.Should().Contain("/Compose");
+        (await page.Locator("form").CountAsync()).Should().BeGreaterThan(0);
+        await CaptureAsync(page, "compose");
+
+        // 4. Drive the live-arrivals filter inputs - proves the
+        // journey harness can do interactive flows (typing, observing
+        // filter-summary text update). Empty page so no rows to hide,
+        // but the summary text should swap to a "showing X of Y rows"
+        // form once any filter has content. Right now there are zero
+        // rows so the summary's count math will read "showing 0 of 0
+        // rows" - the *transition* off "showing all rows" is what
+        // we're proving the JS does.
+        await page.GotoAsync($"{_app.BaseUrl}/Messages?tab=live", new PageGotoOptions { WaitUntil = WaitUntilState.DOMContentLoaded });
         await page.FillAsync("#filter-app", "mail");
         var summary = await page.Locator("#filter-summary").InnerTextAsync();
         summary.Should().NotBe("showing all rows",
             "typing a filter value should switch the summary off the 'all rows' label");
-        await CaptureAsync(page, "inbound-filtered");
+        await CaptureAsync(page, "messages-live-filtered");
     }
 
     private static async Task CaptureAsync(IPage page, string name)
