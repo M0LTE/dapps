@@ -1,4 +1,3 @@
-using System.Net.Sockets;
 using System.Text;
 using dapps.core.Models;
 using dapps.core.Services;
@@ -9,42 +8,21 @@ using Microsoft.Extensions.Options;
 namespace dapps.core.Pages;
 
 /// <summary>
-/// Server-rendered single-page dashboard (Plan D1 + D2). Reads
-/// directly from the queue and config tables; no JS, just a meta-refresh
-/// loop. Posts a test message via <see cref="OnPostSendAsync"/>.
+/// Overview page (/) - lean first paint plus a JS layer driven by
+/// <c>/Operational?full=true</c>. The model only needs SystemOptions
+/// and the TX-gate state for the page header; live data (queue counts,
+/// node reachability, decisions ring, airtime, update card) all come
+/// from the snapshot the layout polls.
 /// </summary>
 public sealed class IndexModel(
     Database database,
     IOptionsMonitor<SystemOptions> options,
-    AirtimeAccountant airtime,
+    SystemOptionsBackedTxGate txGate,
     ILogger<IndexModel> logger) : PageModel
 {
     public SystemOptions Options { get; private set; } = new();
-    public double DiscoveryAirtimeConsumedSecondsLastHour { get; private set; }
-    public int DiscoveryAirtimeBudgetSecondsPerHour => airtime.BudgetSecondsPerHour;
-
-    public bool NodeReachable { get; private set; }
-
-    public int NeighbourCount { get; private set; }
-
-    public IReadOnlyList<DbNeighbour> Neighbours { get; private set; } = [];
-
-    public int TotalMessages { get; private set; }
-    public int PendingOutbound { get; private set; }
-    public int UndeliveredLocal { get; private set; }
-    public IReadOnlyList<DbMessage> RecentMessages { get; private set; } = [];
-
-    /// <summary>Messages destined for somewhere else, not yet forwarded.
-    /// What the OutboundMessageManager loop is working through.</summary>
-    public IReadOnlyList<DbMessage> OutboundQueue { get; private set; } = [];
-
-    /// <summary>Messages destined for an app on this node, not yet
-    /// ack'd by that app. The "inbox" half of the queue.</summary>
-    public IReadOnlyList<DbMessage> LocalInbox { get; private set; } = [];
-
-    public IReadOnlyList<DbDiscoveredPeer> DiscoveredPeers { get; private set; } = [];
-
-    public IReadOnlyList<DbDiscoveryChannel> DiscoveryChannels { get; private set; } = [];
+    public bool TxAllowed => txGate.TxAllowed;
+    public string? TxBlockReason => txGate.BlockReason;
 
     [BindProperty]
     public SendForm Send { get; set; } = new();
@@ -52,13 +30,16 @@ public sealed class IndexModel(
     public string? FlashOk { get; set; }
     public string? FlashError { get; set; }
 
-    public async Task OnGetAsync()
+    public Task OnGetAsync()
     {
-        await LoadAsync();
+        Options = options.CurrentValue;
+        return Task.CompletedTask;
     }
 
     public async Task<IActionResult> OnPostSendAsync()
     {
+        Options = options.CurrentValue;
+
         if (string.IsNullOrWhiteSpace(Send.App)) FlashError = "App is required";
         else if (string.IsNullOrWhiteSpace(Send.Destination)) FlashError = "Destination callsign is required";
         else if (string.IsNullOrWhiteSpace(Send.Payload)) FlashError = "Payload is required";
@@ -76,60 +57,12 @@ public sealed class IndexModel(
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Dashboard test-send failed");
+                logger.LogError(ex, "Overview test-send failed");
                 FlashError = $"Send failed: {ex.Message}";
             }
         }
 
-        await LoadAsync();
         return Page();
-    }
-
-    private async Task LoadAsync()
-    {
-        Options = options.CurrentValue;
-
-        var neighbours = await database.GetNeighbours();
-        Neighbours = neighbours.ToList();
-        NeighbourCount = Neighbours.Count;
-
-        TotalMessages = await database.CountMessages();
-        PendingOutbound = await database.CountPendingOutbound();
-        UndeliveredLocal = await database.CountUndeliveredLocal();
-        RecentMessages = await database.GetRecentMessages(50);
-        // Split the recent slice into the two operational queues.
-        // Done here in C# rather than via separate DB queries because
-        // the slice is small (50 rows) and we already have the data.
-        var local = Options.Callsign.Split('-')[0];
-        OutboundQueue = RecentMessages
-            .Where(m => !m.Forwarded
-                && !string.Equals(m.Destination.Split('@').Last().Split('-')[0], local, StringComparison.OrdinalIgnoreCase))
-            .ToList();
-        LocalInbox = RecentMessages
-            .Where(m => !m.LocallyDelivered
-                && string.Equals(m.Destination.Split('@').Last().Split('-')[0], local, StringComparison.OrdinalIgnoreCase))
-            .ToList();
-        DiscoveredPeers = await database.GetDiscoveredPeers();
-        DiscoveryChannels = await database.GetDiscoveryChannels();
-        DiscoveryAirtimeConsumedSecondsLastHour = airtime.ConsumedSecondsLastHour;
-
-        NodeReachable = await ProbeTcp(Options.NodeHost, Options.AgwPort);
-    }
-
-    private static async Task<bool> ProbeTcp(string host, int port)
-    {
-        if (string.IsNullOrWhiteSpace(host) || port <= 0) return false;
-        try
-        {
-            using var tcp = new TcpClient();
-            using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(500));
-            await tcp.ConnectAsync(host, port, cts.Token);
-            return tcp.Connected;
-        }
-        catch
-        {
-            return false;
-        }
     }
 
     public sealed class SendForm
@@ -139,6 +72,13 @@ public sealed class IndexModel(
         public string? Payload { get; set; }
     }
 
+    /// <summary>
+    /// Maps a queue row's internal flags (Forwarded / LocallyDelivered
+    /// + destination-is-local) onto the (label, pill-class) pair the
+    /// queue tables render. Pure for testability; used historically by
+    /// the server-rendered queue table on /, kept here so the unit
+    /// tests in DashboardLogicTests still exercise the routing.
+    /// </summary>
     public static (string Label, string PillClass) MessageStatus(DbMessage m, string ourCallsign)
     {
         var local = ourCallsign.Split('-')[0];
@@ -150,6 +90,8 @@ public sealed class IndexModel(
         return ("pending", "");
     }
 
+    /// <summary>Compact age string (seconds / minutes / hours / days)
+    /// for queue row display.</summary>
     public static string Age(DateTime createdAt)
     {
         var span = DateTime.UtcNow - createdAt;

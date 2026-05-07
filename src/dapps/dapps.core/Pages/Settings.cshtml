@@ -1,0 +1,214 @@
+@page
+@model SettingsModel
+@{
+    ViewData["Title"] = $"DAPPS - settings ({Model.Options.Callsign})";
+    ViewData["Active"] = "settings";
+    ViewData["PageTitle"] = "Settings";
+    ViewData["PageSubtitle"] = "Operator knobs. Most settings hot-reload within seconds; MQTT and UDP listener ports still need a daemon restart.";
+    var nb = (Model.Options.NodeBearer ?? "agw").Trim().ToLowerInvariant();
+    var ps = Model.Options.ProbeStrategy;
+}
+
+<style>
+    /* Mask RHPv2 password without using <input type="password">, so
+       Edge's password manager doesn't treat the (RhpUser, RhpPass)
+       pair as credentials and paint a dark overlay over both fields. */
+    input.masked {
+        -webkit-text-security: disc;
+        text-security: disc;
+        font-family: var(--font-mono);
+        letter-spacing: 0.18em;
+    }
+</style>
+
+<form id="settings-form" onsubmit="dappsSaveConfig(event)" autocomplete="off">
+    <div class="panel">
+        <h3>Identity &amp; packet-node bearer</h3>
+        <p class="panel-sub">How DAPPS identifies itself and which packet node it rides on. Bearer port changes are picked up on the next forwarder tick (no restart).</p>
+        <div class="field-grid">
+            <div class="field"><label>Callsign</label><input name="Callsign" value="@Model.Options.Callsign" required />
+                <span class="hint">includes optional SSID, e.g. <code>M0LTE-7</code></span></div>
+            <div class="field"><label>Node host</label><input name="NodeHost" value="@Model.Options.NodeHost" required />
+                <span class="hint">usually <code>localhost</code></span></div>
+            <div class="field"><label>Node bearer</label>
+                <select name="NodeBearer">
+                    <option value="agw" selected="@(nb == "agw")">AGW (BPQ)</option>
+                    <option value="rhpv2" selected="@(nb == "rhpv2")">RHPv2 (XRouter)</option>
+                </select>
+                <span class="hint">flip to switch the active inbound + outbound bearer</span>
+            </div>
+            <div class="field"><label>AGW port</label><input name="AgwPort" type="number" min="1" max="65535" value="@Model.Options.AgwPort" required /></div>
+            <div class="field"><label>RHPv2 port</label><input name="RhpPort" type="number" min="1" max="65535" value="@Model.Options.RhpPort" required /></div>
+            <div class="field"><label>RHPv2 user</label>
+                <input name="RhpUser" type="text" value="@Model.Options.RhpUser"
+                       autocomplete="off" data-form-type="other" data-1p-ignore="true" data-lpignore="true" />
+                <span class="hint">blank if no auth</span></div>
+            <div class="field"><label>RHPv2 password</label>
+                <input name="RhpPass" type="text" value="@Model.Options.RhpPass"
+                       autocomplete="off" data-form-type="other" data-1p-ignore="true" data-lpignore="true"
+                       class="masked" />
+                <span class="hint">stored on this node, not a sysop credential</span></div>
+            <div class="field"><label>Default bearer port</label><input name="DefaultBearerPort" type="number" min="0" max="255" value="@Model.Options.DefaultBearerPort" required />
+                <span class="hint">0-indexed; used when a neighbour has no per-row override</span></div>
+        </div>
+    </div>
+
+    <div class="panel">
+        <h3>App interface</h3>
+        <p class="panel-sub">Local apps publish and subscribe through these. Restart required after changing ports.</p>
+        <div class="field-grid">
+            <div class="field"><label>MQTT broker port</label><input name="MqttPort" type="number" min="1" max="65535" value="@Model.Options.MqttPort" required /></div>
+            <div class="field"><label>UDP listener port</label><input name="UdpListenPort" type="number" min="0" max="65535" value="@Model.Options.UdpListenPort" required />
+                <span class="hint">0 = disabled. Stand-in for MeshCore-style datagram backhaul.</span></div>
+            <label class="field-checkbox" style="grid-column: 1 / -1;">
+                <input name="AuthRequired" type="checkbox" @(Model.Options.AuthRequired ? "checked" : "") />
+                <span>Require per-app tokens for MQTT/REST<br/><span class="hint">leave off on a single-operator loopback node</span></span>
+            </label>
+        </div>
+    </div>
+
+    <div class="panel">
+        <h3>Discovery &amp; airtime</h3>
+        <p class="panel-sub">Total trailing-hour airtime cap shared by every discovery transmission (beacons, solicits, probes). Per-channel caps live in Topology.</p>
+        <div class="field-grid">
+            <div class="field"><label>Discovery airtime budget (s/h)</label>
+                <input name="DiscoveryAirtimeBudgetSecondsPerHour" type="number" min="0" max="3600" value="@Model.Options.DiscoveryAirtimeBudgetSecondsPerHour" required />
+                <span class="hint">0 = unlimited</span></div>
+        </div>
+    </div>
+
+    <div class="panel">
+        <h3>Probing &amp; routing</h3>
+        <p class="panel-sub">B6.1 connected-mode probe + B7 strategy choice.</p>
+        <div class="field-grid">
+            <label class="field-checkbox"><input name="ProbingEnabled" type="checkbox" @(Model.Options.ProbingEnabled ? "checked" : "") />
+                <span>Probe known peers on a slow cadence</span></label>
+            <div class="field"><label>Probe interval (hours)</label><input name="ProbeIntervalHours" type="number" min="1" max="168" value="@Model.Options.ProbeIntervalHours" required /></div>
+            <div class="field"><label>Strategy</label>
+                <select name="ProbeStrategy">
+                    <option value="FixedInterval" selected="@(ps == ProbeStrategy.FixedInterval)">Fixed interval</option>
+                    <option value="Overnight" selected="@(ps == ProbeStrategy.Overnight)">Overnight</option>
+                    <option value="WhenQuiet" selected="@(ps == ProbeStrategy.WhenQuiet)">When forwarder is quiet</option>
+                </select>
+            </div>
+            <div class="field"><label>Overnight start hour</label><input name="ProbeOvernightStartHour" type="number" min="0" max="23" value="@Model.Options.ProbeOvernightStartHour" required /><span class="hint">local time</span></div>
+            <div class="field"><label>Overnight end hour</label><input name="ProbeOvernightEndHour" type="number" min="0" max="23" value="@Model.Options.ProbeOvernightEndHour" required /></div>
+            <div class="field"><label>Quiet window (s)</label><input name="ProbeQuietWindowSeconds" type="number" min="1" max="86400" value="@Model.Options.ProbeQuietWindowSeconds" required /></div>
+            <label class="field-checkbox"><input name="AutoDiscoverViaNodeCall" type="checkbox" @(Model.Options.AutoDiscoverViaNodeCall ? "checked" : "") />
+                <span>Auto-seed node-prompt probe candidates from inbound AGW beacons<br/><span class="hint">B6.1 phase 2b</span></span></label>
+            <div class="field"><label>Node-prompt application command</label><input name="NodePromptApplicationCommand" type="text" value="@Model.Options.NodePromptApplicationCommand" /></div>
+        </div>
+    </div>
+
+    <div class="panel">
+        <h3>Polling</h3>
+        <p class="panel-sub">F3 mail-pull. Opportunistic = drain on every push session; scheduled = walk neighbours on a cadence.</p>
+        <div class="field-grid">
+            <label class="field-checkbox"><input name="OpportunisticPollEnabled" type="checkbox" @(Model.Options.OpportunisticPollEnabled ? "checked" : "") />
+                <span>Drain peers' mail at the end of every push session (F3a)</span></label>
+            <label class="field-checkbox"><input name="ScheduledPollEnabled" type="checkbox" @(Model.Options.ScheduledPollEnabled ? "checked" : "") />
+                <span>Schedule periodic mail polls (F3b)</span></label>
+            <div class="field"><label>Poll interval (hours)</label><input name="PollIntervalHours" type="number" min="1" max="168" value="@Model.Options.PollIntervalHours" required /></div>
+        </div>
+    </div>
+
+    <div class="panel">
+        <h3>Heartbeat</h3>
+        <p class="panel-sub">Periodic operational snapshot publish on <code>dapps/metrics/heartbeat</code>. Same JSON shape as <code>/Operational</code>.</p>
+        <div class="field-grid">
+            <label class="field-checkbox"><input name="HeartbeatEnabled" type="checkbox" @(Model.Options.HeartbeatEnabled ? "checked" : "") />
+                <span>Publish heartbeat to MQTT</span></label>
+            <div class="field"><label>Heartbeat interval (s)</label><input name="HeartbeatIntervalSeconds" type="number" min="10" max="3600" value="@Model.Options.HeartbeatIntervalSeconds" required /></div>
+        </div>
+    </div>
+
+    <div class="panel">
+        <h3>Updates</h3>
+        <div class="field-grid">
+            <label class="field-checkbox"><input name="UpdateCheckEnabled" type="checkbox" @(Model.Options.UpdateCheckEnabled ? "checked" : "") />
+                <span>Check GitHub for new releases<br/><span class="hint">~once an hour, plus a one-shot check on demand from the topbar</span></span></label>
+        </div>
+    </div>
+
+    <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin: 1rem 0 1.5rem;">
+        <button class="btn ghost" type="button" onclick="location.reload()">Discard</button>
+        <button class="btn" type="submit">Save</button>
+    </div>
+</form>
+
+<div class="panel">
+    <h3>Rotate admin password</h3>
+    <p class="panel-sub">Existing sessions stay valid until logout or 90-day expiry. Only future logins use the new password.</p>
+    <form class="row-form" onsubmit="dappsRotatePassword(event)">
+        <div class="field" style="grid-column: 1 / -1;"><label>New password</label>
+            <input name="password" type="password" required minlength="8" autocomplete="new-password" />
+        </div>
+        <button class="btn" type="submit">Set password</button>
+    </form>
+</div>
+
+<script>
+async function dappsPostJson(url, body, method) {
+    const res = await fetch(url, {
+        method: method || 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: body == null ? null : JSON.stringify(body),
+    });
+    if (!res.ok && res.status !== 204) {
+        const text = await res.text();
+        alert(`Request failed (${res.status}): ${text}`);
+        return false;
+    }
+    return true;
+}
+async function dappsSaveConfig(ev) {
+    ev.preventDefault();
+    const f = ev.target;
+    const body = {
+        Callsign: f.Callsign.value,
+        NodeHost: f.NodeHost.value,
+        NodeBearer: f.NodeBearer.value,
+        AgwPort: parseInt(f.AgwPort.value, 10),
+        RhpPort: parseInt(f.RhpPort.value, 10),
+        RhpUser: f.RhpUser.value,
+        RhpPass: f.RhpPass.value,
+        DefaultBearerPort: parseInt(f.DefaultBearerPort.value, 10),
+        MqttPort: parseInt(f.MqttPort.value, 10),
+        UdpListenPort: parseInt(f.UdpListenPort.value, 10),
+        AuthRequired: f.AuthRequired.checked,
+        UpdateCheckEnabled: f.UpdateCheckEnabled.checked,
+        ProbingEnabled: f.ProbingEnabled.checked,
+        ProbeIntervalHours: parseInt(f.ProbeIntervalHours.value, 10),
+        ProbeStrategy: f.ProbeStrategy.value,
+        ProbeOvernightStartHour: parseInt(f.ProbeOvernightStartHour.value, 10),
+        ProbeOvernightEndHour: parseInt(f.ProbeOvernightEndHour.value, 10),
+        ProbeQuietWindowSeconds: parseInt(f.ProbeQuietWindowSeconds.value, 10),
+        OpportunisticPollEnabled: f.OpportunisticPollEnabled.checked,
+        ScheduledPollEnabled: f.ScheduledPollEnabled.checked,
+        PollIntervalHours: parseInt(f.PollIntervalHours.value, 10),
+        DiscoveryAirtimeBudgetSecondsPerHour: parseInt(f.DiscoveryAirtimeBudgetSecondsPerHour.value, 10),
+        HeartbeatEnabled: f.HeartbeatEnabled.checked,
+        HeartbeatIntervalSeconds: parseInt(f.HeartbeatIntervalSeconds.value, 10),
+        AutoDiscoverViaNodeCall: f.AutoDiscoverViaNodeCall.checked,
+        NodePromptApplicationCommand: f.NodePromptApplicationCommand.value,
+    };
+    if (await dappsPostJson('/Config', body)) {
+        const head = document.querySelector('.page-head');
+        if (head) {
+            const banner = document.createElement('div');
+            banner.className = 'ok-banner';
+            banner.textContent = 'Settings saved.';
+            head.parentNode.insertBefore(banner, head.nextSibling);
+            setTimeout(() => banner.remove(), 3000);
+        }
+    }
+}
+async function dappsRotatePassword(ev) {
+    ev.preventDefault();
+    const pwd = ev.target.password.value;
+    if (await dappsPostJson('/Config/admin-password', { password: pwd })) {
+        ev.target.reset();
+        alert('Password updated.');
+    }
+}
+</script>

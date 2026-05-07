@@ -2,27 +2,15 @@
 @model IndexModel
 @{
     ViewData["Title"] = $"DAPPS - {Model.Options.Callsign}";
+    ViewData["Active"] = "overview";
+    ViewData["PageTitle"] = "Overview";
+    ViewData["PageSubtitle"] = "Node health, queue at a glance, and quick actions. Live status updates every 5 seconds.";
 }
 
-<header class="app-header">
-    <span class="brand">
-        <span class="dot"></span>
-        DAPPS
-        <span class="callsign">@Model.Options.Callsign</span>
-    </span>
-    <span id="version-pill" class="pill" style="display:none"></span>
-    <span class="spacer"></span>
-    <a href="/Inbound">inbound</a>
-    <a href="/IHave">ihave</a>
-    <a href="/Streams">streams</a>
-    <a href="/Transmissions">audit</a>
-    @if (User.Identity?.IsAuthenticated == true)
-    {
-        <a href="/Logout" class="signout">Sign out</a>
-    }
-</header>
-
-<main>
+@section Actions {
+    <a class="btn secondary sm" href="/Diagnostics">Audit log</a>
+    <a class="btn sm" href="/Compose">Compose message</a>
+}
 
 @if (Model.FlashOk is not null)
 {
@@ -33,1390 +21,408 @@
     <div class="err-banner">@Model.FlashError</div>
 }
 
-<script>
-    // Dashboard-wide consolidation shim. Every per-feature panel
-    // historically polled its own /Events/health, /Events/queue,
-    // /Probes, /Polls, /Events/dropped, /Events/version, /Update/status.
-    // That fans out to 7+ network round-trips per cycle; here we
-    // collapse them to a single /Operational?full=true poll and
-    // synthesise the per-feature responses from the cached document.
-    //
-    // The existing render code in each panel's IIFE keeps using
-    // fetch(URL) unchanged - we override window.fetch for those exact
-    // GETs and pass everything else (POSTs, /Update/apply marker
-    // writes, action handlers) through to the native impl.
-    (function () {
-        window.__dappsSnap = null;
-        async function refresh() {
-            try {
-                const res = await __dappsNativeFetch('/Operational?full=true', { credentials: 'same-origin' });
-                if (res.ok) window.__dappsSnap = await res.json();
-            } catch { /* keep last cached snap */ }
-        }
-        const __dappsNativeFetch = window.fetch.bind(window);
-        window.__dappsNativeFetch = __dappsNativeFetch;
-
-        const ok = (body) => new Response(JSON.stringify(body), {
-            status: 200, headers: {'Content-Type': 'application/json'},
-        });
-        const synth = {
-            '/Events/version': s => ({
-                current: s.version,
-                isDevBuild: s.tables?.update?.isDevBuild ?? false,
-                latest: s.tables?.update?.latest ?? null,
-                releaseUrl: s.tables?.update?.releaseUrl ?? null,
-                isAvailable: s.tables?.update?.isAvailable ?? false,
-                fetchedAt: s.tables?.update?.fetchedAt ?? null,
-            }),
-            '/Update/status': s => s.tables?.update ?? {
-                current: s.version,
-                isDevBuild: false, latest: null, releaseUrl: null,
-                isAvailable: false, fetchedAt: null, requestPending: false,
-                lastRun: null,
-            },
-            '/Events/health': s => ({
-                forwardAttempts: s.forwardAttempts,
-                forwardSuccess: s.forwardSuccess,
-                forwardFailure: s.forwardFailure,
-                ttlExpiredDrops: s.ttlExpiredDrops,
-                noRouteSkips: s.noRouteSkips,
-                agwReconnects: s.agwReconnects,
-                agwLastReconnectAt: s.agwLastReconnectAt,
-                inboundConnects: s.inboundConnects,
-                hashMismatches: s.hashMismatches,
-                neighbours: s.neighbourLinks ?? [],
-                recentEvents: s.recentEvents ?? [],
-            }),
-            '/Events/queue': s => ({
-                totalMessages: s.totalMessagesCount,
-                pendingOutbound: s.pendingOutboundCount,
-                undeliveredLocal: s.undeliveredLocalCount,
-                outbound: s.tables?.outbound ?? [],
-                localInbox: s.tables?.localInbox ?? [],
-            }),
-            '/Events/dropped': s => s.tables?.dropped ?? [],
-            '/Probes': s => (s.tables?.probedNodes ?? []).map(p => ({
-                callsign: p.callsign,
-                lastBearerPort: p.lastBearerPort,
-                lastProbedAt: p.lastProbedAt,
-                lastSuccessAt: p.lastSuccessAt,
-                lastError: p.lastError,
-                consecutiveFailures: p.consecutiveFailures,
-                successCount: p.successCount,
-                optOut: p.optOut,
-                source: p.source && p.source.length ? p.source : 'neighbour',
-            })),
-            '/Polls': s => s.tables?.polledNodes ?? [],
-        };
-
-        window.fetch = function (url, init) {
-            const method = ((init && init.method) || 'GET').toUpperCase();
-            if (method === 'GET' && typeof url === 'string') {
-                const path = url.split('?')[0];
-                const fn = synth[path];
-                if (fn) {
-                    return (async () => {
-                        if (!window.__dappsSnap) await refresh();
-                        if (!window.__dappsSnap) return new Response('', { status: 503 });
-                        return ok(fn(window.__dappsSnap));
-                    })();
-                }
-            }
-            return __dappsNativeFetch(url, init);
-        };
-
-        // Master refresh on load + every 5s. Per-panel polls keep
-        // their own setInterval cadences but read from the cache.
-        refresh();
-        setInterval(refresh, 5000);
-        // Allow action handlers (Apply update etc.) to force a fresh
-        // snapshot after a mutation.
-        window.dappsRefreshSnap = refresh;
-    })();
-</script>
-
-<script>
-    // Poll /Events/version once on load and every 10 minutes after.
-    // Renders one of three states into #version-pill in the header:
-    //   - dev build:        "dev <sha>"   (info pill)
-    //   - up to date:       "v0.X.Y"      (muted pill)
-    //   - update available: "v0.X.Y → v0.X.Z available" (warn pill, links to release)
-    (function () {
-        const pill = document.getElementById('version-pill');
-        if (!pill) return;
-        async function poll() {
-            try {
-                const res = await fetch('/Events/version', { credentials: 'same-origin' });
-                if (!res.ok) return;
-                const v = await res.json();
-                pill.style.display = '';
-                pill.innerHTML = '';
-                if (v.isDevBuild) {
-                    pill.className = 'pill info';
-                    pill.textContent = v.current;
-                    pill.title = 'Running a dev build (not stamped from a release)';
-                } else if (v.isAvailable && v.latest) {
-                    pill.className = 'pill warn';
-                    const a = document.createElement('a');
-                    a.href = v.releaseUrl || '#';
-                    a.target = '_blank';
-                    a.rel = 'noopener';
-                    a.style.color = 'inherit';
-                    a.style.textDecoration = 'none';
-                    a.textContent = `v${v.current} → v${v.latest} available`;
-                    pill.appendChild(a);
-                    pill.title = 'A newer release is on GitHub. Click for changelog.';
-                } else {
-                    pill.className = 'pill';
-                    pill.textContent = `v${v.current}`;
-                    pill.title = v.latest
-                        ? `Latest on GitHub: v${v.latest}`
-                        : 'Update check has not run yet';
-                }
-            } catch { /* swallow; try again next tick */ }
-        }
-        poll();
-        setInterval(poll, 10 * 60 * 1000);
-    })();
-</script>
-
-<h2>Node</h2>
-<div class="grid">
-    <div class="card">
-        <div class="label">Callsign</div>
-        <div class="value mono">@Model.Options.Callsign</div>
-        <div class="caption">how this node identifies itself on the air</div>
+@if (string.IsNullOrWhiteSpace(Model.Options.Callsign) || string.Equals(Model.Options.Callsign, "N0CALL", StringComparison.OrdinalIgnoreCase))
+{
+    <div class="info-banner">
+        Looks like a fresh install. Set your callsign and packet-node bearer in <a href="/Settings">Settings</a> to start beaconing.
     </div>
-    <div class="card">
-        <div class="label">Packet node</div>
-        <div class="value mono">
+}
+
+<!-- Hero status row -->
+<div class="grid">
+    <div class="tile is-on" id="hero-node">
+        <div class="head">
+            <span class="led on"></span>
+            <span class="lbl">Packet node</span>
+            <span class="pill" id="hero-node-pill">checking</span>
+        </div>
+        <div class="v" id="hero-node-v">
             @{
                 var bearerLabel = string.Equals(Model.Options.NodeBearer, "rhpv2", StringComparison.OrdinalIgnoreCase) ? "RHPv2" : "AGW";
                 var nodePort = string.Equals(Model.Options.NodeBearer, "rhpv2", StringComparison.OrdinalIgnoreCase)
                     ? (Model.Options.RhpPort > 0 ? Model.Options.RhpPort : 9000)
                     : Model.Options.AgwPort;
             }
-            <span>@bearerLabel @Model.Options.NodeHost:@nodePort</span>
-            <span class="dot @(Model.NodeReachable ? "ok" : "warn")" title="@(Model.NodeReachable ? "reachable" : "unreachable")"></span>
+            @bearerLabel @Model.Options.NodeHost:@nodePort
         </div>
-        <div class="caption">
-            @(Model.NodeReachable ? "TCP probe ok - node accepting connections" : "TCP probe failed - check the packet node is running and the bearer port is correct")
+        <div class="sub" id="hero-node-sub">
+            What DAPPS rides on. Probe answers means TCP connect succeeded.
         </div>
     </div>
-    <div class="card">
-        <div class="label">Default outbound port</div>
-        <div class="value mono">@Model.Options.DefaultBearerPort</div>
-        <div class="caption">bearer port (0-indexed) sent on outbound forwards when a neighbour has none set</div>
+
+    <div class="tile" id="hero-mqtt">
+        <div class="head">
+            <span class="led"></span>
+            <span class="lbl">MQTT broker</span>
+            <span class="pill" id="hero-mqtt-pill">-</span>
+        </div>
+        <div class="v" id="hero-mqtt-v">localhost:@Model.Options.MqttPort</div>
+        <div class="sub">Apps subscribe to <code>dapps/in/&lt;app&gt;</code> here.</div>
     </div>
-    <div class="card">
-        <div class="label">MQTT broker</div>
-        <div class="value mono">localhost:@Model.Options.MqttPort</div>
-        <div class="caption">apps subscribe here for inbound messages (see <code>dapps/in/&lt;app&gt;</code>)</div>
-    </div>
-    <div class="card">
-        <div class="label">UDP datagram listener</div>
-        <div class="value">
-            @if (Model.Options.UdpListenPort > 0)
+
+    <div class="tile @(Model.TxAllowed ? "is-on" : "is-err")" id="hero-tx">
+        <div class="head">
+            <span class="led @(Model.TxAllowed ? "on" : "err")"></span>
+            <span class="lbl">TX gate</span>
+            @if (Model.TxAllowed)
             {
-                <span class="pill info">on :@Model.Options.UdpListenPort</span>
+                <span class="pill ok">live</span>
             }
             else
             {
-                <span class="pill">disabled</span>
+                <span class="pill err">stopped</span>
             }
         </div>
-        <div class="caption">stand-in for MeshCore-style datagram backhaul; off in normal use</div>
+        <div class="v">@(Model.TxAllowed ? "transmitting" : "blocked")</div>
+        <div class="sub">@(Model.TxAllowed ? "Beacons, probes, and forwards are firing as scheduled." : (Model.TxBlockReason ?? "Operator stopped TX."))</div>
     </div>
-    <div class="card">
-        <div class="label">App-interface auth</div>
-        <div class="value">
-            @if (Model.Options.AuthRequired)
-            {
-                <span class="pill ok">tokens required</span>
-            }
-            else
-            {
-                <span class="pill warn">open</span>
-            }
+
+    <div class="tile" id="hero-update">
+        <div class="head">
+            <span class="led" id="hero-update-led"></span>
+            <span class="lbl">Build</span>
+            <span class="pill" id="hero-update-pill">-</span>
         </div>
-        <div class="caption">
-            @if (Model.Options.AuthRequired)
-            {
-                <span>MQTT/REST clients must present a per-app token</span>
-            }
-            else
-            {
-                <span>any MQTT/REST client on this host can act as any app - fine for loopback, set tokens for shared nodes</span>
-            }
+        <div class="v" id="hero-update-v">checking</div>
+        <div class="sub" id="hero-update-sub">
+            <a href="#" id="hero-update-action" class="link-btn" style="display:none;">Apply update</a>
+            <span id="hero-update-meta" class="muted">checking GitHub</span>
         </div>
     </div>
 </div>
-<details class="edit-block">
-    <summary>Edit configuration</summary>
-    <p class="muted">Callsign, node host, bearer choice, AGW + RHPv2 ports - applied immediately (hot-reload). MQTT and UDP-listener ports still need a daemon restart.</p>
-    <form class="edit-form" onsubmit="dappsSaveConfig(event)">
-        <label>Callsign <input name="Callsign" value="@Model.Options.Callsign" required /></label>
-        <label>Node host <input name="NodeHost" value="@Model.Options.NodeHost" required /></label>
-        @{
-            var nb = (Model.Options.NodeBearer ?? "agw").Trim().ToLowerInvariant();
-        }
-        <label>Node bearer
-            <select name="NodeBearer">
-                <option value="agw" selected="@(nb == "agw")">AGW (BPQ)</option>
-                <option value="rhpv2" selected="@(nb == "rhpv2")">RHPv2 (XRouter)</option>
-            </select>
-        </label>
-        <label>AGW port <input name="AgwPort" type="number" min="1" max="65535" value="@Model.Options.AgwPort" required /></label>
-        <label>RHPv2 port <input name="RhpPort" type="number" min="1" max="65535" value="@Model.Options.RhpPort" required /></label>
-        <label>RHPv2 user (blank if no auth) <input name="RhpUser" type="text" value="@Model.Options.RhpUser" /></label>
-        <label>RHPv2 password <input name="RhpPass" type="password" value="@Model.Options.RhpPass" /></label>
-        <label>Default bearer port <input name="DefaultBearerPort" type="number" min="0" max="255" value="@Model.Options.DefaultBearerPort" required /></label>
-        <label>MQTT port <input name="MqttPort" type="number" min="1" max="65535" value="@Model.Options.MqttPort" required /></label>
-        <label>UDP listener port (0 = disabled) <input name="UdpListenPort" type="number" min="0" max="65535" value="@Model.Options.UdpListenPort" required /></label>
-        <label class="checkbox-label"><input name="AuthRequired" type="checkbox" @(Model.Options.AuthRequired ? "checked" : "") /> App-interface auth required</label>
-        <label class="checkbox-label"><input name="UpdateCheckEnabled" type="checkbox" @(Model.Options.UpdateCheckEnabled ? "checked" : "") /> Check GitHub for new releases</label>
-        <label class="checkbox-label"><input name="ProbingEnabled" type="checkbox" @(Model.Options.ProbingEnabled ? "checked" : "") /> Probe known peers on a slow cadence (B6.1)</label>
-        <label>Probe interval (hours) <input name="ProbeIntervalHours" type="number" min="1" max="168" value="@Model.Options.ProbeIntervalHours" required /></label>
-        @{
-            var ps = Model.Options.ProbeStrategy;
-        }
-        <label>Probe strategy (B7)
-            <select name="ProbeStrategy">
-                <option value="FixedInterval" selected="@(ps == dapps.core.Models.ProbeStrategy.FixedInterval)">Fixed interval</option>
-                <option value="Overnight" selected="@(ps == dapps.core.Models.ProbeStrategy.Overnight)">Overnight (one sweep/day)</option>
-                <option value="WhenQuiet" selected="@(ps == dapps.core.Models.ProbeStrategy.WhenQuiet)">When forwarder is quiet</option>
-            </select>
-        </label>
-        <label>Overnight start hour (local) <input name="ProbeOvernightStartHour" type="number" min="0" max="23" value="@Model.Options.ProbeOvernightStartHour" required /></label>
-        <label>Overnight end hour (local) <input name="ProbeOvernightEndHour" type="number" min="0" max="23" value="@Model.Options.ProbeOvernightEndHour" required /></label>
-        <label>Quiet window (seconds) <input name="ProbeQuietWindowSeconds" type="number" min="1" max="86400" value="@Model.Options.ProbeQuietWindowSeconds" required /></label>
-        <label class="checkbox-label"><input name="OpportunisticPollEnabled" type="checkbox" @(Model.Options.OpportunisticPollEnabled ? "checked" : "") /> Opportunistic poll on every push (F3a) - drain peers' mail at the end of every push session</label>
-        <label class="checkbox-label"><input name="ScheduledPollEnabled" type="checkbox" @(Model.Options.ScheduledPollEnabled ? "checked" : "") /> Schedule periodic mail polls (F3b) - for nodes that don't push often</label>
-        <label>Poll interval (hours) <input name="PollIntervalHours" type="number" min="1" max="168" value="@Model.Options.PollIntervalHours" required /></label>
-        <label>Discovery airtime budget (seconds/hour, 0 = unlimited) (B7) <input name="DiscoveryAirtimeBudgetSecondsPerHour" type="number" min="0" max="3600" value="@Model.Options.DiscoveryAirtimeBudgetSecondsPerHour" required /></label>
-        <label class="checkbox-label"><input name="HeartbeatEnabled" type="checkbox" @(Model.Options.HeartbeatEnabled ? "checked" : "") /> Publish operational heartbeat to MQTT (C3)</label>
-        <label>Heartbeat interval (seconds) <input name="HeartbeatIntervalSeconds" type="number" min="10" max="3600" value="@Model.Options.HeartbeatIntervalSeconds" required /></label>
-        <label class="checkbox-label"><input name="AutoDiscoverViaNodeCall" type="checkbox" @(Model.Options.AutoDiscoverViaNodeCall ? "checked" : "") /> Auto-seed node-prompt probe candidates from inbound AGW beacons (B6.1 Phase 2b)</label>
-        <label>Node-prompt application command <input name="NodePromptApplicationCommand" type="text" value="@Model.Options.NodePromptApplicationCommand" /></label>
-        <button type="submit">Save</button>
-    </form>
-</details>
-<details class="edit-block">
-    <summary>Rotate admin password</summary>
-    <form class="edit-form" onsubmit="dappsRotatePassword(event)">
-        <label>New password <input name="password" type="password" required minlength="8" /></label>
-        <button type="submit">Set</button>
-    </form>
-    <p class="muted">Existing session stays valid until logout or 90-day expiry - only future logins use the new password.</p>
-</details>
 
-<h2>Update <span id="upd-phase" class="pill">-</span></h2>
-<p class="muted-inline">Plan C5.2 - triggered self-update via the privileged <code>dapps-updater.service</code>. Click <em>Apply update</em>; the unprivileged dapps writes a request marker to <code>/var/lib/dapps/update-requested</code> which the updater picks up on its next 60 s tick. The updater downloads the latest release for this RID, swaps it in, restarts dapps, watches for 60 s, and rolls back to <code>dapps.previous</code> if the new binary fails to stay up. <span class="muted">Status auto-refreshes every 5 s during a run.</span></p>
-<div class="grid">
-    <div class="card">
-        <div class="label">Running</div>
-        <div class="value mono"><span id="upd-current">-</span></div>
-        <div class="caption" id="upd-rid-line">RID detected at build time</div>
-    </div>
-    <div class="card">
-        <div class="label">Latest on GitHub</div>
-        <div class="value mono"><span id="upd-latest">-</span></div>
-        <div class="caption" id="upd-fetched">Update check has not run yet</div>
-    </div>
-    <div class="card">
-        <div class="label">Last apply</div>
-        <div class="value"><span id="upd-last">never</span></div>
-        <div class="caption" id="upd-last-error"></div>
-    </div>
-    <div class="card">
-        <div class="label">Action</div>
-        <div class="card-actions">
-            <button id="upd-apply-btn" class="btn" type="button" onclick="dappsApplyUpdate()" disabled>Apply update</button>
-            <button id="upd-check-btn" class="btn secondary" type="button" onclick="dappsCheckNow()">Check now</button>
+<!-- Activity + decision ticker -->
+<div class="grid-2" style="margin-top: 1rem;">
+    <div class="sparkbox">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom: 0.4rem;">
+            <strong style="font-size: 0.82rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em;">Activity (forwards/min)</strong>
+            <span class="muted" id="spark-summary" style="font-size: 0.78rem;">tracking since reload</span>
         </div>
-        <div class="caption" id="upd-apply-caption">Need an available release to apply</div>
+        <svg class="spark-svg" id="spark" viewBox="0 0 200 60" preserveAspectRatio="none" aria-hidden="true">
+            <defs>
+                <linearGradient id="sparkfill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="var(--signal)" stop-opacity="0.45" />
+                    <stop offset="100%" stop-color="var(--signal)" stop-opacity="0" />
+                </linearGradient>
+            </defs>
+            <path id="spark-area" d="" fill="url(#sparkfill)" />
+            <path id="spark-line" d="" fill="none" stroke="var(--signal)" stroke-width="1.5" />
+        </svg>
+        <div class="spark-meta">
+            <span><span class="led on" style="vertical-align: middle;"></span> <span id="spark-now">0</span> /min now</span>
+            <span><span id="spark-lifetime">0</span> forwards since boot</span>
+        </div>
+    </div>
+    <div class="panel" style="padding: 0.75rem 0.85rem;">
+        <div style="display:flex; align-items:center; justify-content:space-between;">
+            <strong style="font-size: 0.82rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em;">Recent decisions</strong>
+            <span class="muted" style="font-size: 0.78rem;">last 20 events</span>
+        </div>
+        <div class="ticker" id="ticker">
+            <div class="row"><span class="t">-</span><span class="k">waiting</span><span class="m">for events from /Operational</span></div>
+        </div>
     </div>
 </div>
 
-<script>
-    (function () {
-        const phase = document.getElementById('upd-phase');
-        const cur = document.getElementById('upd-current');
-        const lat = document.getElementById('upd-latest');
-        const fetched = document.getElementById('upd-fetched');
-        const last = document.getElementById('upd-last');
-        const lastErr = document.getElementById('upd-last-error');
-        const btn = document.getElementById('upd-apply-btn');
-        const cap = document.getElementById('upd-apply-caption');
-        const fmtAgo = (iso) => {
-            if (!iso) return '-';
-            const s = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
-            if (s < 90) return `${s}s ago`;
-            const m = Math.floor(s / 60);
-            if (m < 90) return `${m}m ago`;
-            const h = Math.floor(s / 3600);
-            if (h < 36) return `${h}h ago`;
-            return `${Math.floor(s / 86400)}d ago`;
-        };
-        const escape = (s) => String(s ?? '').replace(/[&<>"']/g, c =>
-            ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-        const inProgress = (p) => ['Checking','Downloading','Swapping','Restarting','Verifying'].includes(p);
-        async function poll() {
-            try {
-                const res = await fetch('/Update/status', { credentials: 'same-origin' });
-                if (!res.ok) return;
-                const s = await res.json();
-                cur.textContent = s.isDevBuild ? `${s.current} (dev)` : `v${s.current}`;
-                lat.textContent = s.latest ? `v${s.latest}` : '-';
-                fetched.textContent = s.fetchedAt ? `last checked ${fmtAgo(s.fetchedAt)}` : 'Update check has not run yet';
-
-                const lr = s.lastRun;
-                if (!lr) {
-                    // No prior apply on record. If we just clicked Apply
-                    // and the marker file is in place, surface that
-                    // immediately rather than leaving "never" up.
-                    last.textContent = s.requestPending ? 'waiting...' : 'never';
-                    lastErr.textContent = '';
-                    phase.className = 'pill';
-                    phase.textContent = '-';
-                } else {
-                    // Phase is the enum name as a string (System.Text.Json
-                    // would default to integers; UpdatePhase has a
-                    // [JsonStringEnumConverter] attribute pinning the
-                    // string shape - see UpdateStatus.cs).
-                    const prettyPhase =
-                        lr.phase === 'RolledBack' ? 'rolled back'
-                        : (typeof lr.phase === 'string' ? lr.phase.toLowerCase() : '?');
-                    // After the operator clicks Apply, the marker file is
-                    // written immediately but the privileged updater
-                    // service only ticks once a minute. Until that tick,
-                    // lastRun still describes the *previous* apply (or
-                    // "never"). Surfacing "waiting..." in that interval
-                    // confirms the click was received and tells the
-                    // operator why nothing's happening yet.
-                    if (s.requestPending && !inProgress(lr.phase)) {
-                        last.textContent = 'waiting...';
-                    } else {
-                        last.textContent = `${prettyPhase} · ${fmtAgo(lr.updated_at)}`;
-                    }
-                    lastErr.textContent = lr.error ? `error: ${escape(lr.error)}` : '';
-                    if (lr.phase === 'Success') { phase.className = 'pill ok'; phase.textContent = 'success'; }
-                    else if (lr.phase === 'RolledBack') { phase.className = 'pill warn'; phase.textContent = 'rolled back'; }
-                    else if (lr.phase === 'Failed') { phase.className = 'pill warn'; phase.textContent = 'failed'; }
-                    else if (inProgress(lr.phase)) { phase.className = 'pill info'; phase.textContent = prettyPhase; }
-                    else { phase.className = 'pill'; phase.textContent = prettyPhase; }
-                }
-
-                // Apply-button gating: needs a release available, and
-                // not already running, and not already requested.
-                const running = lr && inProgress(lr.phase);
-                const canApply = s.isAvailable && !running && !s.requestPending;
-                btn.disabled = !canApply;
-                if (running) cap.textContent = 'Update in progress…';
-                else if (s.requestPending) cap.textContent = 'Request queued - updater fires on next 60 s tick';
-                else if (s.isDevBuild) cap.textContent = 'Dev builds do not auto-update';
-                else if (!s.isAvailable && s.latest) cap.textContent = 'Already on the latest release';
-                else if (!s.latest) cap.textContent = 'Need an available release to apply';
-                else cap.textContent = 'Click to download + swap + restart';
-            } catch { /* try again next tick */ }
-        }
-        async function dappsApplyUpdateFn() {
-            if (!confirm('Apply the latest available update? Dapps will restart; if it fails to come up the previous binary is restored automatically.')) return;
-            // Flip Last apply to "waiting..." optimistically so the click
-            // gets immediate feedback rather than waiting up to 5s for the
-            // next poll. The poll itself (driven by `s.requestPending`)
-            // will keep it on "waiting..." until the updater service ticks.
-            last.textContent = 'waiting...';
-            lastErr.textContent = '';
-            const res = await fetch('/Update/apply', { method: 'POST' });
-            if (!res.ok && res.status !== 202 && res.status !== 204) {
-                const text = await res.text();
-                alert(`Apply failed (${res.status}): ${text}`);
-                return;
-            }
-            await (window.dappsRefreshSnap?.());
-            poll();
-        }
-        async function dappsCheckNowFn() {
-            // Force-refresh the cache. Cheap one-shot HTTPS to GitHub -
-            // operators who just shipped a release hit this to see the
-            // node notice within seconds rather than up to an hour.
-            const btn = document.getElementById('upd-check-btn');
-            btn.disabled = true;
-            btn.textContent = 'Checking…';
-            try {
-                const res = await fetch('/Update/check', { method: 'POST' });
-                if (!res.ok) {
-                    const text = await res.text();
-                    alert(`Check failed (${res.status}): ${text}`);
-                    return;
-                }
-                await (window.dappsRefreshSnap?.());
-                await poll();
-            } finally {
-                btn.disabled = false;
-                btn.textContent = 'Check now';
-            }
-        }
-        window.dappsApplyUpdate = dappsApplyUpdateFn;
-        window.dappsCheckNow = dappsCheckNowFn;
-        poll();
-        setInterval(poll, 5000);
-    })();
-</script>
-
-<h2>Health</h2>
-<p class="muted-inline">Process-lifetime counters + per-neighbour link state + a ring of recent forwarder / AGW / inbound-validation events. Resets on restart.</p>
-<div class="grid">
-    <div class="card">
-        <div class="label">Forward attempts</div>
-        <div class="value"><span id="m-forward-attempts">-</span></div>
-        <div class="caption"><span id="m-forward-success">-</span> ok / <span id="m-forward-failure">-</span> failed</div>
+<!-- Queue + Inbox summary -->
+<div class="grid-3" style="margin-top: 1.25rem;">
+    <div class="panel">
+        <h3>Outbound queue</h3>
+        <p class="panel-sub">Messages addressed elsewhere. Forwarder ticks every 5 s.</p>
+        <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+            <div class="card" style="padding: 0.7rem 0.85rem;"><div class="label">Pending</div><div class="value" id="ov-pending-out">-</div></div>
+            <div class="card" style="padding: 0.7rem 0.85rem;"><div class="label">Forwards (boot)</div><div class="value" id="ov-fwd-success">-</div></div>
+        </div>
+        <div class="card-actions"><a class="btn secondary sm" href="/Messages?tab=outbound">Inspect outbound</a></div>
     </div>
-    <div class="card">
-        <div class="label">TTL drops</div>
-        <div class="value"><span id="m-ttl">-</span></div>
-        <div class="caption">messages whose residual TTL hit zero in our queue</div>
+    <div class="panel">
+        <h3>Local inbox</h3>
+        <p class="panel-sub">Messages for apps on this node, awaiting MQTT/REST ack.</p>
+        <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+            <div class="card" style="padding: 0.7rem 0.85rem;"><div class="label">Undelivered</div><div class="value" id="ov-pending-local">-</div></div>
+            <div class="card" style="padding: 0.7rem 0.85rem;"><div class="label">Total tracked</div><div class="value" id="ov-total">-</div></div>
+        </div>
+        <div class="card-actions"><a class="btn secondary sm" href="/Messages?tab=inbox">Inspect inbox</a><a class="btn ghost sm" href="/Messages?tab=live">Live arrivals</a></div>
     </div>
-    <div class="card">
-        <div class="label">No-route skips</div>
-        <div class="value"><span id="m-noroute">-</span></div>
-        <div class="caption">no neighbour / discovered peer / route-hint matched</div>
-    </div>
-    <div class="card">
-        <div class="label">AGW reconnects</div>
-        <div class="value"><span id="m-agw-reconnects">-</span></div>
-        <div class="caption" id="m-agw-last">never</div>
-    </div>
-    <div class="card">
-        <div class="label">Inbound L2 connects</div>
-        <div class="value"><span id="m-inbound">-</span></div>
-        <div class="caption">L2 connects dispatched to us by the packet node</div>
-    </div>
-    <div class="card">
-        <div class="label">Hash mismatches</div>
-        <div class="value"><span id="m-hash">-</span></div>
-        <div class="caption">received payload whose sha1 didn't match the offered id</div>
+    <div class="panel">
+        <h3>Discovery airtime</h3>
+        <p class="panel-sub">Trailing-hour discovery TX vs. budget. Beacons defer when full.</p>
+        <div class="card" style="padding: 0.7rem 0.85rem;">
+            <div class="label" id="ov-air-label">Used</div>
+            <div class="value" id="ov-air-value">-</div>
+            <div class="card-actions" style="margin-top: 0.6rem;">
+                <span class="gauge" style="width: 100%;"><span class="bar"><span class="fill" id="ov-air-fill"></span></span></span>
+            </div>
+            <div class="caption" id="ov-air-caption">budget set in Settings -> Discovery</div>
+        </div>
     </div>
 </div>
 
-<h3 class="subhead">Per-neighbour link state</h3>
-<table id="neigh-health-table">
-    <thead>
-        <tr>
-            <th>Callsign</th>
-            <th class="numeric">OK</th>
-            <th class="numeric">Failed</th>
-            <th>Last success</th>
-            <th>Last failure</th>
-            <th>Last error</th>
-        </tr>
-    </thead>
-    <tbody id="neigh-health-body">
-        <tr><td colspan="6" class="muted" style="text-align:center;">No forwarding activity yet.</td></tr>
-    </tbody>
-</table>
-
-<h3 class="subhead">Recent activity</h3>
-<table id="recent-events-table">
-    <thead>
-        <tr>
-            <th>Time (UTC)</th>
-            <th>Kind</th>
-            <th>Detail</th>
-        </tr>
-    </thead>
-    <tbody id="recent-events-body">
-        <tr><td colspan="3" class="muted" style="text-align:center;">No events yet.</td></tr>
-    </tbody>
-</table>
-
-<script>
-    // Poll /Events/health every 5s; re-render counters, neighbour
-    // table, and recent-events ring. Same DOM-swap pattern as the
-    // queue tables - no full-page reload.
-    (function () {
-        const fmtAt = (iso) => iso ? new Date(iso).toISOString().replace('T', ' ').substring(0, 19) : '-';
-        const fmtAgo = (iso) => {
-            if (!iso) return '-';
-            const s = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
-            if (s < 90) return `${s}s ago`;
-            const m = Math.floor(s / 60);
-            if (m < 90) return `${m}m ago`;
-            const h = Math.floor(s / 3600);
-            if (h < 36) return `${h}h ago`;
-            return `${Math.floor(s / 86400)}d ago`;
-        };
-        const escape = (s) => String(s ?? '').replace(/[&<>"']/g, c =>
-            ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-        const setText = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
-
-        async function poll() {
-            try {
-                const res = await fetch('/Events/health', { credentials: 'same-origin' });
-                if (!res.ok) return;
-                const d = await res.json();
-                setText('m-forward-attempts', d.forwardAttempts);
-                setText('m-forward-success', d.forwardSuccess);
-                setText('m-forward-failure', d.forwardFailure);
-                setText('m-ttl', d.ttlExpiredDrops);
-                setText('m-noroute', d.noRouteSkips);
-                setText('m-agw-reconnects', d.agwReconnects);
-                setText('m-agw-last', d.agwLastReconnectAt ? `last ${fmtAgo(d.agwLastReconnectAt)}` : 'never');
-                setText('m-inbound', d.inboundConnects);
-                setText('m-hash', d.hashMismatches);
-
-                const nbody = document.getElementById('neigh-health-body');
-                if (!d.neighbours.length) {
-                    nbody.innerHTML = '<tr><td colspan="6" class="muted" style="text-align:center;">No forwarding activity yet.</td></tr>';
-                } else {
-                    nbody.innerHTML = d.neighbours.map(n =>
-                        `<tr>` +
-                        `<td><code>${escape(n.callsign)}</code></td>` +
-                        `<td class="numeric">${n.successCount}</td>` +
-                        `<td class="numeric">${n.failureCount}</td>` +
-                        `<td class="muted">${fmtAgo(n.lastSuccessAt)}</td>` +
-                        `<td class="muted">${fmtAgo(n.lastFailureAt)}</td>` +
-                        `<td class="muted">${escape(n.lastError ?? '-')}</td>` +
-                        `</tr>`
-                    ).join('');
-                }
-
-                const ebody = document.getElementById('recent-events-body');
-                if (!d.recentEvents.length) {
-                    ebody.innerHTML = '<tr><td colspan="3" class="muted" style="text-align:center;">No events yet.</td></tr>';
-                } else {
-                    ebody.innerHTML = d.recentEvents.map(e =>
-                        `<tr>` +
-                        `<td><code>${fmtAt(e.at).substring(11, 19)}</code></td>` +
-                        `<td><span class="pill ${kindClass(e.kind)}">${escape(e.kind)}</span></td>` +
-                        `<td class="muted">${escape(e.summary)}</td>` +
-                        `</tr>`
-                    ).join('');
-                }
-            } catch { /* try again next tick */ }
-        }
-        function kindClass(k) {
-            if (k.endsWith('.ok')) return 'ok';
-            if (k.endsWith('.fail') || k.endsWith('.mismatch') || k.endsWith('.expired') || k.endsWith('.none')) return 'warn';
-            if (k.startsWith('agw.')) return 'info';
-            return '';
-        }
-        poll();
-        setInterval(poll, 5000);
-    })();
-</script>
-
-<h2>Queue at a glance</h2>
-<div class="grid">
-    <div class="card">
-        <div class="label">Total messages</div>
-        <div class="value">@Model.TotalMessages</div>
-        <div class="caption">all rows in the messages table, ever</div>
-    </div>
-    <div class="card">
-        <div class="label">Pending outbound</div>
-        <div class="value">@Model.PendingOutbound</div>
-        <div class="caption">queued for forwarding to another node</div>
-    </div>
-    <div class="card">
-        <div class="label">Undelivered local</div>
-        <div class="value">@Model.UndeliveredLocal</div>
-        <div class="caption">arrived for an app on this node, not yet ack'd</div>
-    </div>
-    <div class="card">
-        <div class="label">Neighbours</div>
-        <div class="value">@Model.NeighbourCount</div>
-        <div class="caption">configured forwarding peers</div>
-    </div>
+<!-- Needs attention -->
+<h2>Needs attention</h2>
+<div id="alerts" class="grid">
+    <div class="empty" id="alerts-empty">Nothing flagged. The node is happy.</div>
 </div>
 
-<h2>Outbound queue <span id="outbound-count" class="pill @(Model.OutboundQueue.Count == 0 ? "" : "warn")">@Model.OutboundQueue.Count</span></h2>
-<p class="muted-inline">Messages waiting to be forwarded to another node. The forwarder loop wakes periodically, picks one, and sends it via the cheapest reachable bearer. <span class="muted">Auto-refreshes every 5s.</span></p>
-<table id="outbound-table">
-    <thead>
-        <tr>
-            <th>Id</th>
-            <th>Destination</th>
-            <th>From</th>
-            <th class="numeric">Bytes</th>
-            <th class="numeric">TTL</th>
-            <th>Age</th>
-        </tr>
-    </thead>
-    <tbody id="outbound-body">
-    @if (Model.OutboundQueue.Count == 0)
-    {
-        <tr><td colspan="6" class="muted" style="text-align:center;">No outbound forwards in flight.</td></tr>
-    }
-    else
-    {
-        @foreach (var m in Model.OutboundQueue)
-        {
-            <tr>
-                <td><code>@m.Id</code></td>
-                <td><code>@m.Destination</code></td>
-                <td><code>@m.SourceCallsign</code></td>
-                <td class="numeric">@m.Payload.Length</td>
-                <td class="numeric">@(m.Ttl?.ToString() ?? "-")</td>
-                <td class="muted">@IndexModel.Age(m.CreatedAt)</td>
-            </tr>
-        }
-    }
-    </tbody>
-</table>
-
-<h2>Local inbox <span id="inbox-count" class="pill @(Model.LocalInbox.Count == 0 ? "" : "info")">@Model.LocalInbox.Count</span></h2>
-<p class="muted-inline">Messages arrived for apps on this node, waiting for the app to ack via MQTT (<code>dapps/ack/&lt;app&gt;</code>) or REST.</p>
-<table id="inbox-table">
-    <thead>
-        <tr>
-            <th>Id</th>
-            <th>App</th>
-            <th>From</th>
-            <th class="numeric">Bytes</th>
-            <th class="numeric">TTL</th>
-            <th>Age</th>
-        </tr>
-    </thead>
-    <tbody id="inbox-body">
-    @if (Model.LocalInbox.Count == 0)
-    {
-        <tr><td colspan="6" class="muted" style="text-align:center;">No undelivered messages for local apps.</td></tr>
-    }
-    else
-    {
-        @foreach (var m in Model.LocalInbox)
-        {
-            var atIdx = m.Destination.IndexOf('@');
-            var app = atIdx > 0 ? m.Destination.Substring(0, atIdx) : m.Destination;
-            <tr>
-                <td><code>@m.Id</code></td>
-                <td><code>@app</code></td>
-                <td><code>@m.SourceCallsign</code></td>
-                <td class="numeric">@m.Payload.Length</td>
-                <td class="numeric">@(m.Ttl?.ToString() ?? "-")</td>
-                <td class="muted">@IndexModel.Age(m.CreatedAt)</td>
-            </tr>
-        }
-    }
-    </tbody>
-</table>
-
-<script>
-    // Poll /Events/queue every 5s and rerender just the two
-    // <tbody>s + the count pills. No full-page reload - keeps
-    // scroll position, open <details>, focus, etc.
-    (function () {
-        const fmtAge = (s) => {
-            if (s < 90) return `${s}s`;
-            const m = Math.floor(s / 60);
-            if (m < 90) return `${m}m`;
-            const h = Math.floor(s / 3600);
-            if (h < 36) return `${h}h`;
-            return `${Math.floor(s / 86400)}d`;
-        };
-        const escape = (s) => String(s).replace(/[&<>"']/g, c =>
-            ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-        const render = (rows, cols) => {
-            if (!rows.length) {
-                return `<tr><td colspan="${cols.length}" class="muted" style="text-align:center;">empty</td></tr>`;
-            }
-            return rows.map(r => '<tr>' + cols.map(c => c(r)).join('') + '</tr>').join('');
-        };
-        const outboundCols = [
-            r => `<td><code>${escape(r.id)}</code></td>`,
-            r => `<td><code>${escape(r.destination)}</code></td>`,
-            r => `<td><code>${escape(r.sourceCallsign)}</code></td>`,
-            r => `<td class="numeric">${r.bytes}</td>`,
-            r => `<td class="numeric">${r.ttl ?? '-'}</td>`,
-            r => `<td class="muted">${fmtAge(r.ageSeconds)}</td>`,
-        ];
-        const inboxCols = [
-            r => `<td><code>${escape(r.id)}</code></td>`,
-            r => `<td><code>${escape(r.app)}</code></td>`,
-            r => `<td><code>${escape(r.sourceCallsign)}</code></td>`,
-            r => `<td class="numeric">${r.bytes}</td>`,
-            r => `<td class="numeric">${r.ttl ?? '-'}</td>`,
-            r => `<td class="muted">${fmtAge(r.ageSeconds)}</td>`,
-        ];
-        async function poll() {
-            try {
-                const res = await fetch('/Events/queue', { credentials: 'same-origin' });
-                if (!res.ok) return;
-                const d = await res.json();
-                document.getElementById('outbound-body').innerHTML = render(d.outbound, outboundCols);
-                document.getElementById('inbox-body').innerHTML = render(d.localInbox, inboxCols);
-                const oc = document.getElementById('outbound-count');
-                oc.textContent = d.outbound.length;
-                oc.className = 'pill' + (d.outbound.length ? ' warn' : '');
-                const ic = document.getElementById('inbox-count');
-                ic.textContent = d.localInbox.length;
-                ic.className = 'pill' + (d.localInbox.length ? ' info' : '');
-            } catch { /* swallow; try again next tick */ }
-        }
-        setInterval(poll, 5000);
-    })();
-</script>
-
-<h2>Neighbours</h2>
-@if (Model.Neighbours.Count == 0)
-{
-    <p class="muted">No neighbours configured.</p>
-}
-else
-{
-    <table>
-        <thead>
-            <tr>
-                <th>Callsign</th>
-                <th>Bearer port</th>
-                <th>UDP endpoint</th>
-                <th>Connect script</th>
-                <th></th>
-            </tr>
-        </thead>
-        <tbody>
-        @foreach (var n in Model.Neighbours)
-        {
-            var scriptStepCount = dapps.client.ConnectScript.FromJson(n.ConnectScriptJson)?.Steps.Count ?? 0;
-            <tr>
-                <td>@n.Callsign</td>
-                <td class="numeric">@(n.BearerPort?.ToString() ?? "-")</td>
-                <td>@(n.UdpEndpoint ?? "-")</td>
-                <td>@(scriptStepCount > 0 ? $"{scriptStepCount} step(s)" : "-")</td>
-                <td><button class="link-btn" onclick="dappsDeleteNeighbour('@n.Callsign')">remove</button></td>
-            </tr>
-        }
-        </tbody>
-    </table>
-}
-<details class="edit-block">
-    <summary>Add / update neighbour</summary>
-    <form class="edit-form" onsubmit="dappsAddNeighbour(event)">
-        <label>Callsign <input name="callsign" required placeholder="GB7XYZ" /></label>
-        <label>Bearer port <input name="bearerPort" type="number" min="0" max="255" placeholder="0" /></label>
-        <label>UDP endpoint (optional) <input name="udpEndpoint" placeholder="host:port" /></label>
-        <label>
-            Connect script (optional)
-            <textarea name="connectScript" rows="5" placeholder="C G0NODE2|Connected to G0NODE2&#10;C G0NODE3|Connected to G0NODE3&#10;DAPPS|DAPPSv1>|60" style="width: 100%; font-family: var(--font-code, monospace); font-size: 0.85rem;"></textarea>
-            <small class="muted">One step per line, <code>send|expect</code> or <code>send|expect|timeoutSeconds</code>. Use to reach a peer through a chain of intermediate non-DAPPS packet nodes (operator's manual <code>C node1 / C node2 / ... / DAPPS</code> sequence). The final step's expect must contain <code>DAPPSv1&gt;</code>. Re-submitting with an empty box clears the script.</small>
-        </label>
-        <button type="submit">Add / update</button>
-    </form>
-</details>
-
-<h2>Discovery channels
-    @{
-        var atb = Model.DiscoveryAirtimeBudgetSecondsPerHour;
-        var atc = Model.DiscoveryAirtimeConsumedSecondsLastHour;
-        var atPctText = atb > 0
-            ? $"{atc:0.0}/{atb}s/h ({(int)Math.Min(100, Math.Round(atc * 100.0 / atb))}%)"
-            : $"{atc:0.0}s/h (unlimited)";
-        var atClass = atb > 0 && atc / atb >= 0.9 ? "warn" : "";
-    }
-    <span class="pill @atClass" title="Plan B7 - total discovery airtime in the trailing hour. Set DiscoveryAirtimeBudgetSecondsPerHour in /Config to enforce a cap, and per-channel caps below.">@atPctText</span>
-</h2>
-@if (Model.DiscoveryChannels.Count == 0)
-{
-    <p class="muted">No discovery channels configured.</p>
-}
-else
-{
-    <table>
-        <thead>
-            <tr>
-                <th>Bearer</th>
-                <th>Channel</th>
-                <th>Link class</th>
-                <th>Cost</th>
-                <th>Beacon every</th>
-                <th>Advertised TTL</th>
-                <th title="Per-channel airtime cap (B7). 0 = use the global budget only.">Channel budget</th>
-                <th title="Scheduled-solicit cadence (B6.2). 0 = disabled. Reservations gate through the airtime budget.">Solicit every</th>
-                <th>Enabled</th>
-                <th></th>
-            </tr>
-        </thead>
-        <tbody>
-        @foreach (var c in Model.DiscoveryChannels)
-        {
-            <tr>
-                <td>@c.Bearer</td>
-                <td><code>@c.ChannelKey</code></td>
-                <td>@c.LinkClass</td>
-                <td class="numeric">@c.CostHint</td>
-                <td class="numeric">@c.BeaconIntervalSeconds s</td>
-                <td class="numeric">@c.AdvertisedTtlSeconds s</td>
-                <td class="numeric">@(c.AirtimeBudgetSecondsPerHour > 0 ? $"{c.AirtimeBudgetSecondsPerHour}s/h" : "-")</td>
-                <td class="numeric">@(c.SolicitIntervalSeconds > 0 ? $"{c.SolicitIntervalSeconds} s" : "-")</td>
-                <td>@(c.Enabled ? "yes" : "no")</td>
-                <td>
-                    <button class="link-btn" onclick="dappsSolicitChannel(@c.Id)" title="Send a 'who's there?' solicit on this channel; reachable peers reply with their normal beacon (B6.2)">solicit</button>
-                    <button class="link-btn" onclick="dappsDeleteChannel(@c.Id)">remove</button>
-                </td>
-            </tr>
-        }
-        </tbody>
-    </table>
-}
-<details class="edit-block">
-    <summary>Add discovery channel</summary>
-    <form class="edit-form" onsubmit="dappsAddChannel(event)">
-        <label>Bearer
-            <select name="bearer">
-                <option value="agw">agw</option>
-                <option value="udp">udp</option>
-            </select>
-        </label>
-        <label>Channel key <input name="channelKey" required placeholder="0 (bearer port) or 239.0.0.1:54321" /></label>
-        <label>Link class
-            <select name="linkClass">
-                <option>VhfUhfFm</option>
-                <option>MeshCore</option>
-                <option>Hf</option>
-                <option>LanMulticast</option>
-                <option>InternetIp</option>
-            </select>
-        </label>
-        <label>Channel airtime budget (seconds/hour, 0 = unlimited) <input name="airtimeBudgetSecondsPerHour" type="number" min="0" max="3600" value="0" /></label>
-        <label>Scheduled solicit interval (seconds, 0 = disabled) <input name="solicitIntervalSeconds" type="number" min="0" max="86400" value="0" /></label>
-        <button type="submit">Add / update</button>
-    </form>
-</details>
-
-<h2>Discovered peers</h2>
-@if (Model.DiscoveredPeers.Count == 0)
-{
-    <p class="muted">No peers heard yet.</p>
-}
-else
-{
-    <table>
-        <thead>
-            <tr>
-                <th>Callsign</th>
-                <th>Bearer</th>
-                <th>Channel</th>
-                <th>Link class</th>
-                <th>Cost</th>
-                <th>Hops</th>
-                <th>Source</th>
-                <th>Last seen</th>
-                <th>TTL</th>
-            </tr>
-        </thead>
-        <tbody>
-        @foreach (var p in Model.DiscoveredPeers)
-        {
-            <tr>
-                <td>@p.Callsign</td>
-                <td>@p.Bearer</td>
-                <td><code>@p.ChannelKey</code></td>
-                <td>@p.LinkClass</td>
-                <td class="numeric">@p.CostHint</td>
-                <td class="numeric">@p.Hops</td>
-                <td>@(p.UdpEndpoint ?? (p.BearerPort is { } bp ? $"bearer port {bp}" : "-"))</td>
-                <td>@IndexModel.Age(p.LastSeen) ago</td>
-                <td class="numeric">@p.TtlSeconds s</td>
-            </tr>
-        }
-        </tbody>
-    </table>
-}
-
-<h2>Probed nodes <span id="probes-state" class="pill @(Model.Options.ProbingEnabled ? "ok" : "")">@(Model.Options.ProbingEnabled ? $"every {Model.Options.ProbeIntervalHours}h" : "off")</span></h2>
-<p class="muted-inline">Plan B6.1 - connected-mode probe-and-map. Walks known peers (manual neighbours + AGW-bearer discovered peers) and confirms <code>DAPPSv1&gt;</code> is reachable. <span class="muted">Off by default; enable in <em>Edit configuration</em>. Auto-refreshes every 30s.</span></p>
-<div class="probes-toolbar">
-    <button class="btn" type="button" onclick="dappsRunSweep()">Probe all now</button>
-</div>
-<table id="probes-table">
-    <thead>
-        <tr>
-            <th>Callsign</th>
-            <th>Source</th>
-            <th>Last port</th>
-            <th>Last probed</th>
-            <th>Last success</th>
-            <th class="numeric">Fails</th>
-            <th class="numeric">Successes</th>
-            <th>Last error</th>
-            <th>Opt-out</th>
-            <th>Actions</th>
-        </tr>
-    </thead>
-    <tbody id="probes-body">
-        <tr><td colspan="10" class="muted" style="text-align:center;">No probes recorded yet.</td></tr>
-    </tbody>
-</table>
-
-<script>
-    (function () {
-        const fmtAt = (iso) => iso ? new Date(iso).toISOString().replace('T', ' ').substring(0, 19) : '-';
-        const fmtAgo = (iso) => {
-            if (!iso) return '-';
-            const s = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
-            if (s < 90) return `${s}s ago`;
-            const m = Math.floor(s / 60);
-            if (m < 90) return `${m}m ago`;
-            const h = Math.floor(s / 3600);
-            if (h < 36) return `${h}h ago`;
-            return `${Math.floor(s / 86400)}d ago`;
-        };
-        const escape = (s) => String(s ?? '').replace(/[&<>"']/g, c =>
-            ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-        async function poll() {
-            try {
-                const res = await fetch('/Probes', { credentials: 'same-origin' });
-                if (!res.ok) return;
-                const rows = await res.json();
-                const body = document.getElementById('probes-body');
-                if (!rows.length) {
-                    body.innerHTML = '<tr><td colspan="10" class="muted" style="text-align:center;">No probes recorded yet.</td></tr>';
-                    return;
-                }
-                body.innerHTML = rows.map(r => {
-                    const reachable = r.lastSuccessAt && r.consecutiveFailures === 0;
-                    const stale = r.lastProbedAt && !reachable;
-                    const callPill = reachable
-                        ? `<span class="pill ok">${escape(r.callsign)}</span>`
-                        : (stale ? `<span class="pill warn">${escape(r.callsign)}</span>`
-                                 : `<code>${escape(r.callsign)}</code>`);
-                    // Source pill: "neighbour" / "discovered" plain;
-                    // "via:CALLSIGN" gets an info pill so transitive
-                    // candidates stand out in the table.
-                    const src = r.source || 'neighbour';
-                    const srcPill = src.startsWith('via:')
-                        ? `<span class="pill info" title="learned from ${escape(src.substring(4))}'s peers list">${escape(src)}</span>`
-                        : `<span class="muted">${escape(src)}</span>`;
-                    const callQs = encodeURIComponent(r.callsign);
-                    return `<tr>` +
-                        `<td>${callPill}</td>` +
-                        `<td>${srcPill}</td>` +
-                        `<td class="numeric">${r.lastBearerPort ?? '-'}</td>` +
-                        `<td class="muted">${fmtAgo(r.lastProbedAt)}</td>` +
-                        `<td class="muted">${fmtAgo(r.lastSuccessAt)}</td>` +
-                        `<td class="numeric">${r.consecutiveFailures}</td>` +
-                        `<td class="numeric">${r.successCount}</td>` +
-                        `<td class="muted">${escape(r.lastError || '-')}</td>` +
-                        `<td><input type="checkbox" ${r.optOut ? 'checked' : ''} onchange="dappsSetOptOut('${callQs}', this.checked)" /></td>` +
-                        `<td>` +
-                        `<button class="btn" type="button" onclick="dappsProbeOne('${callQs}')">Probe</button> ` +
-                        `<button class="btn" type="button" onclick="dappsForgetProbe('${callQs}')">Forget</button>` +
-                        `</td>` +
-                        `</tr>`;
-                }).join('');
-            } catch { /* try again next tick */ }
-        }
-        poll();
-        setInterval(poll, 30000);
-        // expose poll() for action handlers below
-        window.dappsRefreshProbes = poll;
-    })();
-</script>
-
-<h2>Polled nodes <span id="polls-state" class="pill @(Model.Options.ScheduledPollEnabled ? "ok" : "")">@(Model.Options.ScheduledPollEnabled ? $"every {Model.Options.PollIntervalHours}h" : "off")</span></h2>
-<p class="muted-inline">Plan F3b - scheduled poll. Walks AGW-reachable manual neighbours, sends <code>rev</code>, drains queued mail. Off by default; opportunistic poll on every push (<code>OpportunisticPollEnabled</code>) covers most cases for free. Enable in <em>Edit configuration</em> for nodes that don't push often. <span class="muted">Auto-refreshes every 30s.</span></p>
-<div class="probes-toolbar">
-    <button class="btn" type="button" onclick="dappsRunPollSweep()">Poll all now</button>
-</div>
-<table id="polls-table">
-    <thead>
-        <tr>
-            <th>Callsign</th>
-            <th>Last polled</th>
-            <th>Last success</th>
-            <th class="numeric">Fails</th>
-            <th class="numeric">Drained (total)</th>
-            <th>Last error</th>
-            <th>Opt-out</th>
-            <th>Actions</th>
-        </tr>
-    </thead>
-    <tbody id="polls-body">
-        <tr><td colspan="8" class="muted" style="text-align:center;">No polls recorded yet.</td></tr>
-    </tbody>
-</table>
-
-<script>
-    (function () {
-        const fmtAgo = (iso) => {
-            if (!iso) return '-';
-            const s = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
-            if (s < 90) return `${s}s ago`;
-            const m = Math.floor(s / 60);
-            if (m < 90) return `${m}m ago`;
-            const h = Math.floor(s / 3600);
-            if (h < 36) return `${h}h ago`;
-            return `${Math.floor(s / 86400)}d ago`;
-        };
-        const escape = (s) => String(s ?? '').replace(/[&<>"']/g, c =>
-            ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-        async function poll() {
-            try {
-                const res = await fetch('/Polls', { credentials: 'same-origin' });
-                if (!res.ok) return;
-                const rows = await res.json();
-                const body = document.getElementById('polls-body');
-                if (!rows.length) {
-                    body.innerHTML = '<tr><td colspan="8" class="muted" style="text-align:center;">No polls recorded yet.</td></tr>';
-                    return;
-                }
-                body.innerHTML = rows.map(r => {
-                    const reachable = r.lastSuccessAt && r.consecutiveFailures === 0;
-                    const stale = r.lastPolledAt && !reachable;
-                    const callPill = reachable
-                        ? `<span class="pill ok">${escape(r.callsign)}</span>`
-                        : (stale ? `<span class="pill warn">${escape(r.callsign)}</span>`
-                                 : `<code>${escape(r.callsign)}</code>`);
-                    const callQs = encodeURIComponent(r.callsign);
-                    return `<tr>` +
-                        `<td>${callPill}</td>` +
-                        `<td class="muted">${fmtAgo(r.lastPolledAt)}</td>` +
-                        `<td class="muted">${fmtAgo(r.lastSuccessAt)}</td>` +
-                        `<td class="numeric">${r.consecutiveFailures}</td>` +
-                        `<td class="numeric">${r.messagesDrained}</td>` +
-                        `<td class="muted">${escape(r.lastError || '-')}</td>` +
-                        `<td><input type="checkbox" ${r.optOut ? 'checked' : ''} onchange="dappsSetPollOptOut('${callQs}', this.checked)" /></td>` +
-                        `<td>` +
-                        `<button class="btn" type="button" onclick="dappsPollOne('${callQs}')">Poll</button> ` +
-                        `<button class="btn" type="button" onclick="dappsForgetPoll('${callQs}')">Forget</button>` +
-                        `</td>` +
-                        `</tr>`;
-                }).join('');
-            } catch { /* try again next tick */ }
-        }
-        poll();
-        setInterval(poll, 30000);
-        window.dappsRefreshPolls = poll;
-    })();
-</script>
-
-<h2>Recently dropped <span id="dropped-count" class="pill">-</span></h2>
-<p class="muted-inline">Messages DAPPS threw away (TTL expired in queue, etc.) instead of forwarding or delivering. Soft-deleted from the active queues so you can see what happened during RF testing. <span class="muted">Auto-refreshes every 5s.</span></p>
-<table id="dropped-table">
-    <thead>
-        <tr>
-            <th>Dropped</th>
-            <th>Reason</th>
-            <th>Id</th>
-            <th>Destination</th>
-            <th>From</th>
-            <th class="numeric">Bytes</th>
-            <th class="numeric">TTL</th>
-            <th>Lived for</th>
-        </tr>
-    </thead>
-    <tbody id="dropped-body">
-        <tr><td colspan="8" class="muted" style="text-align:center;">No drops yet.</td></tr>
-    </tbody>
-</table>
-
-<script>
-    (function () {
-        const fmtAgo = (s) => {
-            if (s < 90) return `${s}s`;
-            const m = Math.floor(s / 60);
-            if (m < 90) return `${m}m`;
-            const h = Math.floor(s / 3600);
-            if (h < 36) return `${h}h`;
-            return `${Math.floor(s / 86400)}d`;
-        };
-        const escape = (s) => String(s ?? '').replace(/[&<>"']/g, c =>
-            ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-        async function poll() {
-            try {
-                const res = await fetch('/Events/dropped', { credentials: 'same-origin' });
-                if (!res.ok) return;
-                const rows = await res.json();
-                const body = document.getElementById('dropped-body');
-                const count = document.getElementById('dropped-count');
-                count.textContent = rows.length;
-                count.className = 'pill' + (rows.length ? ' warn' : '');
-                if (!rows.length) {
-                    body.innerHTML = '<tr><td colspan="8" class="muted" style="text-align:center;">No drops yet.</td></tr>';
-                    return;
-                }
-                body.innerHTML = rows.map(r => {
-                    const droppedAt = new Date(r.droppedAt);
-                    const lived = Math.max(0, Math.floor(
-                        (droppedAt.getTime() - new Date(r.createdAt).getTime()) / 1000));
-                    const ts = droppedAt.toISOString().substring(11, 19);
-                    const droppedSecsAgo = Math.max(0, Math.floor(
-                        (Date.now() - droppedAt.getTime()) / 1000));
-                    return `<tr>` +
-                        `<td><code>${ts}</code> <span class="muted">(${fmtAgo(droppedSecsAgo)} ago)</span></td>` +
-                        `<td><span class="pill warn">${escape(r.reason)}</span></td>` +
-                        `<td><code>${escape(r.id)}</code></td>` +
-                        `<td><code>${escape(r.destination)}</code></td>` +
-                        `<td><code>${escape(r.sourceCallsign)}</code></td>` +
-                        `<td class="numeric">${r.bytes}</td>` +
-                        `<td class="numeric">${r.ttl ?? '-'}</td>` +
-                        `<td class="muted">${fmtAgo(lived)}</td>` +
-                        `</tr>`;
-                }).join('');
-            } catch { /* try again next tick */ }
-        }
-        poll();
-        setInterval(poll, 5000);
-    })();
-</script>
-
-<h2>Live inbound <span id="sse-status" class="pill">connecting</span></h2>
-<p class="muted">
-    Server-Sent Events feed of messages arriving at this node. Clears
-    on page reload - the queue tables above carry the persistent state.
-</p>
-<table id="sse-table">
-    <thead>
-        <tr>
-            <th>Time (UTC)</th>
-            <th>Id</th>
-            <th>Source</th>
-            <th>Destination</th>
-            <th>Bytes</th>
-            <th>TTL</th>
-        </tr>
-    </thead>
-    <tbody id="sse-body">
-        <tr id="sse-empty"><td colspan="6" class="muted">Waiting for inbound traffic…</td></tr>
-    </tbody>
-</table>
-
-<script>
-    (function () {
-        const status = document.getElementById('sse-status');
-        const body = document.getElementById('sse-body');
-        const empty = document.getElementById('sse-empty');
-        const es = new EventSource('/Events/inbound');
-        es.onopen = () => {
-            status.textContent = 'live';
-            status.className = 'pill ok';
-            status.innerHTML = '<span class="dot live"></span> live';
-        };
-        es.onerror = () => {
-            status.textContent = 'reconnecting';
-            status.className = 'pill warn';
-        };
-        es.addEventListener('inbound', (e) => {
-            const ev = JSON.parse(e.data);
-            if (empty) empty.remove();
-            const row = document.createElement('tr');
-            const ts = new Date(ev.receivedAt).toISOString().substring(11, 19);
-            row.innerHTML =
-                `<td><code>${ts}</code></td>` +
-                `<td><code>${ev.id}</code></td>` +
-                `<td>${ev.sourceCallsign}</td>` +
-                `<td>${ev.destination}</td>` +
-                `<td class="numeric">${ev.payloadLength}</td>` +
-                `<td class="numeric">${ev.ttl ?? '-'}</td>`;
-            body.insertBefore(row, body.firstChild);
-            // Keep at most 50 rows so the page doesn't grow unbounded.
-            while (body.children.length > 50) body.removeChild(body.lastChild);
-        });
-    })();
-</script>
-
-<h2>Send a test message</h2>
-<p class="muted-inline">
-    Drops an outbound message into the queue exactly as an app would via MQTT or REST.
-    Useful for verifying a link to another node - give it the destination's <em>callsign</em>
-    and the destination must have a DAPPS instance running an app with the same name (or
-    just be willing to receive - apps don't need to exist for the message to land in the
-    inbox).
-</p>
-<form class="inline" method="post" asp-page-handler="Send">
-    <label for="send-app">App name</label>
-    <input type="text" id="send-app" name="Send.App" value="@Model.Send.App" placeholder="chat" required />
-    <small class="muted">A short identifier - e.g. <code>chat</code>, <code>weather</code>, <code>ping</code>. Apps subscribe to <code>dapps/in/&lt;name&gt;</code> on their local broker.</small>
-
-    <label for="send-dest">Destination callsign</label>
-    <input type="text" id="send-dest" name="Send.Destination" value="@Model.Send.Destination" placeholder="GB7RDG-4" required />
-    <small class="muted">Where the message is going. Full callsign with SSID. Must be reachable through a configured neighbour or via routing.</small>
-
-    <label for="send-payload">Payload</label>
-    <input type="text" id="send-payload" name="Send.Payload" value="@Model.Send.Payload" placeholder="hello world" required />
-    <small class="muted">Any UTF-8 text. DAPPS treats it as opaque bytes - apps decide what to do with it.</small>
-
-    <button type="submit">Queue message</button>
+<!-- Quick test send -->
+<h2>Quick send</h2>
+<form class="panel" method="post" asp-page-handler="Send">
+    <p class="panel-sub">Submit a one-off message via the same code path your apps use, without touching MQTT. Use this to verify a hop end-to-end.</p>
+    <div class="field-grid">
+        <div class="field">
+            <label for="App">App</label>
+            <input id="App" type="text" name="@nameof(IndexModel.Send).@nameof(IndexModel.SendForm.App)" value="@Model.Send.App" placeholder="mail" required />
+            <span class="hint">application slug, e.g. <code>mail</code> or <code>chat</code></span>
+        </div>
+        <div class="field">
+            <label for="Destination">Destination callsign</label>
+            <input id="Destination" type="text" name="@nameof(IndexModel.Send).@nameof(IndexModel.SendForm.Destination)" value="@Model.Send.Destination" placeholder="M0LTE-1" required />
+            <span class="hint">case-insensitive, normalised to upper-case before submit</span>
+        </div>
+        <div class="field" style="grid-column: 1 / -1;">
+            <label for="Payload">Payload (UTF-8 text)</label>
+            <input id="Payload" type="text" name="@nameof(IndexModel.Send).@nameof(IndexModel.SendForm.Payload)" value="@Model.Send.Payload" placeholder="hello world" />
+            <span class="hint">For binary payloads or fine-grained control use <a href="/Compose">Compose</a>.</span>
+        </div>
+    </div>
+    <div style="margin-top: 0.85rem; display: flex; gap: 0.5rem;">
+        <button class="btn" type="submit">Submit to queue</button>
+        <a class="btn ghost" href="/Compose">Open full compose</a>
+    </div>
 </form>
 
 <script>
-    // Inline edit handlers for the configuration / neighbour / channel
-    // forms. Each posts JSON to the existing controllers and reloads on
-    // success - auth piggy-backs on the dapps.admin cookie the dashboard
-    // is already loaded under.
-    async function dappsPostJson(url, body, method) {
-        const res = await fetch(url, {
-            method: method || 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: body == null ? null : JSON.stringify(body),
-        });
-        if (!res.ok && res.status !== 204) {
-            const text = await res.text();
-            alert(`Request failed (${res.status}): ${text}`);
-            return false;
-        }
-        return true;
-    }
-
-    async function dappsSaveConfig(ev) {
-        ev.preventDefault();
-        const f = ev.target;
-        const body = {
-            Callsign: f.Callsign.value,
-            NodeHost: f.NodeHost.value,
-            NodeBearer: f.NodeBearer.value,
-            AgwPort: parseInt(f.AgwPort.value, 10),
-            RhpPort: parseInt(f.RhpPort.value, 10),
-            RhpUser: f.RhpUser.value,
-            RhpPass: f.RhpPass.value,
-            DefaultBearerPort: parseInt(f.DefaultBearerPort.value, 10),
-            MqttPort: parseInt(f.MqttPort.value, 10),
-            UdpListenPort: parseInt(f.UdpListenPort.value, 10),
-            AuthRequired: f.AuthRequired.checked,
-            UpdateCheckEnabled: f.UpdateCheckEnabled.checked,
-            ProbingEnabled: f.ProbingEnabled.checked,
-            ProbeIntervalHours: parseInt(f.ProbeIntervalHours.value, 10),
-            ProbeStrategy: f.ProbeStrategy.value,
-            ProbeOvernightStartHour: parseInt(f.ProbeOvernightStartHour.value, 10),
-            ProbeOvernightEndHour: parseInt(f.ProbeOvernightEndHour.value, 10),
-            ProbeQuietWindowSeconds: parseInt(f.ProbeQuietWindowSeconds.value, 10),
-            OpportunisticPollEnabled: f.OpportunisticPollEnabled.checked,
-            ScheduledPollEnabled: f.ScheduledPollEnabled.checked,
-            PollIntervalHours: parseInt(f.PollIntervalHours.value, 10),
-            DiscoveryAirtimeBudgetSecondsPerHour: parseInt(f.DiscoveryAirtimeBudgetSecondsPerHour.value, 10),
-            HeartbeatEnabled: f.HeartbeatEnabled.checked,
-            HeartbeatIntervalSeconds: parseInt(f.HeartbeatIntervalSeconds.value, 10),
-            AutoDiscoverViaNodeCall: f.AutoDiscoverViaNodeCall.checked,
-            NodePromptApplicationCommand: f.NodePromptApplicationCommand.value,
+    (function () {
+        // --- Hero state from snapshot ---
+        const set = (id, txt) => { const el = document.getElementById(id); if (el != null) el.textContent = txt; };
+        const setHTML = (id, txt) => { const el = document.getElementById(id); if (el != null) el.innerHTML = txt; };
+        const fmtAgo = (iso) => {
+            if (!iso) return '-';
+            const s = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+            if (s < 90) return `${s}s ago`;
+            if (s < 5400) return `${Math.floor(s / 60)}m ago`;
+            if (s < 129600) return `${Math.floor(s / 3600)}h ago`;
+            return `${Math.floor(s / 86400)}d ago`;
         };
-        if (await dappsPostJson('/Config', body)) location.reload();
-    }
+        const escape = (s) => String(s ?? '').replace(/[&<>"']/g, c =>
+            ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-    async function dappsRotatePassword(ev) {
-        ev.preventDefault();
-        const pwd = ev.target.password.value;
-        if (await dappsPostJson('/Config/admin-password', { password: pwd })) {
-            ev.target.reset();
-            alert('Password updated.');
+        // --- Sparkline state ---
+        const ringSize = 60;        // 1 sample / 5s = last 5 minutes visible
+        const ring = new Array(ringSize).fill(null);
+        let lastForwardSuccess = null;
+        function pushSample(value) {
+            ring.shift(); ring.push(value);
+            renderSpark();
         }
-    }
-
-    async function dappsAddNeighbour(ev) {
-        ev.preventDefault();
-        const f = ev.target;
-        const body = {
-            Callsign: f.callsign.value,
-            BearerPort: f.bearerPort.value === '' ? null : parseInt(f.bearerPort.value, 10),
-            UdpEndpoint: f.udpEndpoint.value || null,
-            ConnectScript: f.connectScript.value || null,
-        };
-        if (await dappsPostJson('/Neighbours', body)) location.reload();
-    }
-
-    async function dappsDeleteNeighbour(callsign) {
-        if (!confirm(`Remove neighbour ${callsign}?`)) return;
-        if (await dappsPostJson('/Neighbours/' + encodeURIComponent(callsign), null, 'DELETE')) {
-            location.reload();
+        function renderSpark() {
+            const valid = ring.filter(v => v != null);
+            const max = Math.max(1, ...valid);
+            const w = 200, h = 60;
+            const step = w / (ringSize - 1);
+            let line = '', area = '';
+            for (let i = 0; i < ringSize; i++) {
+                const v = ring[i];
+                if (v == null) continue;
+                const x = (i * step).toFixed(2);
+                const y = (h - (v / max) * (h - 4) - 2).toFixed(2);
+                line += (line ? ' L' : 'M') + x + ' ' + y;
+            }
+            if (line) {
+                area = line + ` L${w} ${h} L0 ${h} Z`;
+            }
+            const lineEl = document.getElementById('spark-line');
+            const areaEl = document.getElementById('spark-area');
+            if (lineEl) lineEl.setAttribute('d', line);
+            if (areaEl) areaEl.setAttribute('d', area);
         }
-    }
 
-    async function dappsAddChannel(ev) {
-        ev.preventDefault();
-        const f = ev.target;
-        const body = {
-            Bearer: f.bearer.value,
-            ChannelKey: f.channelKey.value,
-            LinkClass: f.linkClass.value,
-            AirtimeBudgetSecondsPerHour: parseInt(f.airtimeBudgetSecondsPerHour.value, 10) || 0,
-            SolicitIntervalSeconds: parseInt(f.solicitIntervalSeconds.value, 10) || 0,
-        };
-        if (await dappsPostJson('/DiscoveryChannels', body)) location.reload();
-    }
-
-    async function dappsDeleteChannel(id) {
-        if (!confirm(`Remove discovery channel ${id}?`)) return;
-        if (await dappsPostJson('/DiscoveryChannels/' + id, null, 'DELETE')) {
-            location.reload();
+        // --- Decision ticker ---
+        function renderTicker(events) {
+            const t = document.getElementById('ticker');
+            if (!t) return;
+            if (!events || !events.length) {
+                t.innerHTML = '<div class="row"><span class="t">-</span><span class="k">quiet</span><span class="m">no recent decisions</span></div>';
+                return;
+            }
+            const rows = events.slice(0, 20).map(ev => {
+                const k = (ev.kind || '').toString();
+                let kc = '';
+                if (k.endsWith('.ok') || k.includes('learned')) kc = 'ok';
+                else if (k.includes('fail') || k.includes('drop') || k.includes('expired') || k.includes('mismatch')) kc = 'err';
+                else if (k.includes('skip') || k.includes('budget') || k.includes('warn')) kc = 'warn';
+                const t = ev.atUtc ? new Date(ev.atUtc).toISOString().substring(11, 19) : '?';
+                return `<div class="row"><span class="t">${escape(t)}</span><span class="k ${kc}">${escape(k)}</span><span class="m" title="${escape(ev.detail || '')}">${escape(ev.detail || '')}</span></div>`;
+            }).join('');
+            t.innerHTML = rows;
         }
-    }
 
-    async function dappsSolicitChannel(id) {
-        // B6.2 - fire-and-forget. Replies arrive on the regular beacon
-        // path and populate "Discovered peers" automatically; no UI
-        // refresh needed beyond the existing 30s poll.
-        if (await dappsPostJson('/DiscoveryChannels/' + id + '/solicit', null)) {
-            // Tiny user feedback so the operator knows the click landed.
-            // No alert/reload - we don't want to disrupt their viewing.
+        // --- Alerts compute ---
+        function computeAlerts(s) {
+            const out = [];
+            if (!s.nodeReachable) {
+                out.push({ tone: 'err', title: 'Packet node not answering',
+                          body: 'TCP connect to the bearer port failed. Check linbpq/xrouter is running and bearer port matches Settings.' });
+            }
+            if (!s.callsignConfigured) {
+                out.push({ tone: 'warn', title: 'Callsign not set',
+                          body: 'DAPPS will not transmit until a callsign is configured.' });
+            }
+            if (s.neighbourCount === 0 && s.discoveredPeerCount === 0) {
+                out.push({ tone: 'warn', title: 'No neighbours and no discovered peers',
+                          body: 'Nothing to forward to. Add a neighbour in Topology or enable discovery.' });
+            }
+            const dropped = s.tables?.dropped ?? [];
+            if (dropped.length > 0) {
+                out.push({ tone: 'warn', title: `${dropped.length} message(s) dropped recently`,
+                          body: 'See Messages -> Dropped for the reason on each.' });
+            }
+            const probedBad = (s.tables?.probedNodes ?? []).filter(p => (p.consecutiveFailures || 0) >= 3);
+            if (probedBad.length > 0) {
+                out.push({ tone: 'warn', title: `${probedBad.length} probed peer(s) failing`,
+                          body: probedBad.slice(0, 3).map(p => p.callsign).join(', ') + (probedBad.length > 3 ? ', ...' : '') + ' - 3 or more consecutive failures.' });
+            }
+            const used = s.airtimeConsumedSecondsLastHour || 0;
+            const budget = s.airtimeBudgetSecondsPerHour || 0;
+            if (budget > 0 && used / budget >= 0.9) {
+                out.push({ tone: used / budget >= 1 ? 'err' : 'warn',
+                          title: `Discovery airtime ${used / budget >= 1 ? 'exhausted' : 'almost exhausted'}`,
+                          body: `${Math.round(used)}s of ${budget}s used in the last hour.` });
+            }
+            const upd = s.tables?.update;
+            if (upd && upd.isAvailable && upd.latest && !upd.isDevBuild) {
+                out.push({ tone: 'info', title: `Update available: v${upd.latest}`,
+                          body: 'Apply from the build chip on the top bar or from Overview hero.' });
+            }
+            return out;
         }
-    }
-
-    async function dappsRunSweep() {
-        if (!confirm('Probe every known peer now? Uses other operators\' airtime.')) return;
-        if (await dappsPostJson('/Probes/run', null)) {
-            await (window.dappsRefreshSnap?.());
-            window.dappsRefreshProbes && window.dappsRefreshProbes();
+        function renderAlerts(s) {
+            const arr = computeAlerts(s);
+            const c = document.getElementById('alerts');
+            const empty = document.getElementById('alerts-empty');
+            if (!c) return;
+            if (arr.length === 0) {
+                c.innerHTML = '<div class="empty">Nothing flagged. The node is happy.</div>';
+                return;
+            }
+            c.innerHTML = arr.map(a => {
+                const tone = a.tone || 'info';
+                const led = tone === 'err' ? 'err' : (tone === 'warn' ? 'warn' : 'on');
+                return `<div class="tile is-${tone === 'err' ? 'err' : (tone === 'warn' ? 'warn' : 'on')}">
+                    <div class="head"><span class="led ${led}"></span><span class="lbl">${escape(a.title)}</span></div>
+                    <div class="sub" style="font-size: 0.85rem;">${escape(a.body)}</div>
+                </div>`;
+            }).join('');
         }
-    }
 
-    async function dappsProbeOne(callsign) {
-        // /Probes/run/{callsign} returns the row JSON, but a simple
-        // POST + refresh is fine for the dashboard - we don't need to
-        // surface a per-probe banner.
-        const url = '/Probes/run/' + callsign;
-        const res = await fetch(url, { method: 'POST' });
-        if (!res.ok && res.status !== 200 && res.status !== 204) {
-            const text = await res.text();
-            alert(`Probe failed (${res.status}): ${text}`);
-            return;
+        // --- Apply snapshot ---
+        let lastSampleAt = 0;
+        function apply(s) {
+            // Hero - node
+            const nodeTile = document.getElementById('hero-node');
+            if (nodeTile) {
+                nodeTile.classList.toggle('is-on', !!s.nodeReachable);
+                nodeTile.classList.toggle('is-err', !s.nodeReachable);
+                const led = nodeTile.querySelector('.led');
+                led.classList.remove('on', 'err'); led.classList.add(s.nodeReachable ? 'on' : 'err');
+            }
+            set('hero-node-pill', s.nodeReachable ? 'reachable' : 'down');
+            const pill = document.getElementById('hero-node-pill');
+            if (pill) { pill.classList.remove('ok','err','warn'); pill.classList.add(s.nodeReachable ? 'ok' : 'err'); }
+
+            // Hero - MQTT
+            const mqttTile = document.getElementById('hero-mqtt');
+            if (mqttTile) {
+                mqttTile.classList.toggle('is-on', !!s.mqttBrokerUp);
+                mqttTile.classList.toggle('is-warn', !s.mqttBrokerUp);
+                const led = mqttTile.querySelector('.led');
+                led.classList.remove('on', 'warn'); led.classList.add(s.mqttBrokerUp ? 'on' : 'warn');
+            }
+            const mqttPill = document.getElementById('hero-mqtt-pill');
+            if (mqttPill) {
+                mqttPill.classList.remove('ok','warn');
+                mqttPill.classList.add(s.mqttBrokerUp ? 'ok' : 'warn');
+                mqttPill.textContent = s.mqttBrokerUp ? 'up' : 'down';
+            }
+
+            // Hero - update
+            const upd = s.tables?.update ?? null;
+            const updLed = document.getElementById('hero-update-led');
+            const updPill = document.getElementById('hero-update-pill');
+            if (upd) {
+                if (upd.isDevBuild) {
+                    set('hero-update-v', upd.current);
+                    updLed.classList.remove('on','warn','err'); updLed.classList.add('warn');
+                    updPill.classList.remove('ok','warn'); updPill.classList.add('warn');
+                    updPill.textContent = 'dev';
+                    set('hero-update-meta', 'dev builds do not auto-update');
+                } else if (upd.isAvailable && upd.latest) {
+                    set('hero-update-v', `v${upd.current} -> v${upd.latest}`);
+                    updLed.classList.remove('on','err'); updLed.classList.add('warn');
+                    updPill.classList.remove('ok','err'); updPill.classList.add('warn');
+                    updPill.textContent = 'available';
+                    set('hero-update-meta', upd.fetchedAt ? `last checked ${fmtAgo(upd.fetchedAt)}` : 'release fetched');
+                    const action = document.getElementById('hero-update-action');
+                    if (action) {
+                        action.style.display = '';
+                        action.textContent = 'Apply update';
+                        action.onclick = async (ev) => {
+                            ev.preventDefault();
+                            if (!confirm(`Apply v${upd.latest}? Dapps will restart and roll back if it fails to come up.`)) return;
+                            await fetch('/Update/apply', { method: 'POST' });
+                            await window.dappsRefreshSnap?.();
+                        };
+                    }
+                } else {
+                    set('hero-update-v', `v${upd.current}`);
+                    updLed.classList.remove('warn','err'); updLed.classList.add('on');
+                    updPill.classList.remove('warn','err'); updPill.classList.add('ok');
+                    updPill.textContent = 'current';
+                    set('hero-update-meta', upd.fetchedAt ? `up to date - checked ${fmtAgo(upd.fetchedAt)}` : 'up to date');
+                    const action = document.getElementById('hero-update-action');
+                    if (action) action.style.display = 'none';
+                }
+            }
+
+            // Sparkline + counters
+            const successDelta = (lastForwardSuccess == null) ? 0 : Math.max(0, (s.forwardSuccess || 0) - lastForwardSuccess);
+            lastForwardSuccess = s.forwardSuccess || 0;
+            const now = Date.now();
+            if (lastSampleAt === 0 || now - lastSampleAt > 4000) {
+                pushSample(successDelta * 12); // scale 5s tick to /minute
+                lastSampleAt = now;
+            }
+            set('spark-now', successDelta * 12);
+            set('spark-lifetime', s.forwardSuccess || 0);
+            set('spark-summary', s.lastForwardSuccessAt ? `last forward ${fmtAgo(s.lastForwardSuccessAt)}` : 'no forwards yet');
+
+            renderTicker(s.recentEvents);
+
+            // Queue summary
+            set('ov-pending-out', s.pendingOutboundCount ?? '-');
+            set('ov-fwd-success', s.forwardSuccess ?? '-');
+            set('ov-pending-local', s.undeliveredLocalCount ?? '-');
+            set('ov-total', s.totalMessagesCount ?? '-');
+
+            // Airtime panel
+            const used = Math.round(s.airtimeConsumedSecondsLastHour || 0);
+            const budget = s.airtimeBudgetSecondsPerHour || 0;
+            const fill = document.getElementById('ov-air-fill');
+            if (budget > 0) {
+                const ratio = Math.min(1.5, used / budget);
+                set('ov-air-value', `${Math.round((used / budget) * 100)}%`);
+                set('ov-air-caption', `${used}s used of ${budget}s/hour budget`);
+                if (fill) fill.style.transform = `scaleX(${Math.min(1, ratio)})`;
+            } else {
+                set('ov-air-value', `${used}s`);
+                set('ov-air-caption', 'no budget set - all transmissions allowed');
+                if (fill) fill.style.transform = 'scaleX(0)';
+            }
+
+            renderAlerts(s);
         }
-        window.dappsRefreshProbes && window.dappsRefreshProbes();
-    }
 
-    async function dappsSetOptOut(callsign, optOut) {
-        await dappsPostJson('/Probes/' + callsign + '/optout', { OptOut: optOut });
-        // No reload - the checkbox already shows the new state.
-    }
-
-    async function dappsForgetProbe(callsign) {
-        if (!confirm(`Forget probe row for ${decodeURIComponent(callsign)}?`)) return;
-        if (await dappsPostJson('/Probes/' + callsign, null, 'DELETE')) {
-            await (window.dappsRefreshSnap?.());
-            window.dappsRefreshProbes && window.dappsRefreshProbes();
-        }
-    }
-
-    async function dappsRunPollSweep() {
-        if (!confirm('Poll every neighbour for queued mail now?')) return;
-        if (await dappsPostJson('/Polls/run', null)) {
-            await (window.dappsRefreshSnap?.());
-            window.dappsRefreshPolls && window.dappsRefreshPolls();
-        }
-    }
-
-    async function dappsPollOne(callsign) {
-        const url = '/Polls/run/' + callsign;
-        const res = await fetch(url, { method: 'POST' });
-        if (!res.ok && res.status !== 200 && res.status !== 204) {
-            const text = await res.text();
-            alert(`Poll failed (${res.status}): ${text}`);
-            return;
-        }
-        window.dappsRefreshPolls && window.dappsRefreshPolls();
-    }
-
-    async function dappsSetPollOptOut(callsign, optOut) {
-        await dappsPostJson('/Polls/' + callsign + '/optout', { OptOut: optOut });
-    }
-
-    async function dappsForgetPoll(callsign) {
-        if (!confirm(`Forget poll row for ${decodeURIComponent(callsign)}?`)) return;
-        if (await dappsPostJson('/Polls/' + callsign, null, 'DELETE')) {
-            await (window.dappsRefreshSnap?.());
-            window.dappsRefreshPolls && window.dappsRefreshPolls();
-        }
-    }
+        if (window.__dappsSnap) apply(window.__dappsSnap);
+        if (window.dappsOnSnap) window.dappsOnSnap(apply);
+    })();
 </script>
-
-</main>

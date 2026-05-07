@@ -1,0 +1,360 @@
+@page
+@model TopologyModel
+@{
+    ViewData["Title"] = $"DAPPS - topology ({Model.Options.Callsign})";
+    ViewData["Active"] = "topology";
+    ViewData["PageTitle"] = "Topology";
+    ViewData["PageSubtitle"] = "Neighbours, discovery channels, peers heard, and connectivity state.";
+    var tab = Model.Tab;
+}
+
+@section Tabs {
+    <a href="/Topology?tab=neighbours" class="@(tab == "neighbours" ? "active" : "")">Neighbours <span class="count" id="cnt-neigh">0</span></a>
+    <a href="/Topology?tab=channels" class="@(tab == "channels" ? "active" : "")">Discovery channels <span class="count" id="cnt-chan">0</span></a>
+    <a href="/Topology?tab=peers" class="@(tab == "peers" ? "active" : "")">Discovered peers <span class="count" id="cnt-peers">0</span></a>
+    <a href="/Topology?tab=probes" class="@(tab == "probes" ? "active" : "")">Probed nodes <span class="count" id="cnt-probes">0</span></a>
+    <a href="/Topology?tab=polls" class="@(tab == "polls" ? "active" : "")">Polled nodes <span class="count" id="cnt-polls">0</span></a>
+}
+
+@if (tab == "neighbours")
+{
+    <div class="panel">
+        <h3>Manual neighbours</h3>
+        <p class="panel-sub">Callsigns this node will forward through. Re-POSTing the same callsign updates it. Connect-script lets you reach a peer through a chain of intermediate non-DAPPS nodes (one <code>send|expect</code> step per line, final expect must contain <code>DAPPSv1&gt;</code>).</p>
+        <form id="neigh-form" class="row-form" onsubmit="dappsAddNeighbour(event)" style="margin-bottom: 1rem;">
+            <div class="field"><label>Callsign</label><input name="callsign" placeholder="GB7XYZ" required /></div>
+            <div class="field"><label>Bearer port</label><input name="bearerPort" type="number" min="0" max="255" placeholder="(default)" /></div>
+            <div class="field"><label>UDP endpoint (optional)</label><input name="udpEndpoint" placeholder="host:port" /></div>
+            <div class="field" style="grid-column: 1 / -1;">
+                <label>Connect script (optional)</label>
+                <textarea name="connectScript" rows="3" placeholder="C G0NODE2|Connected to G0NODE2&#10;C G0NODE3|Connected to G0NODE3&#10;DAPPS|DAPPSv1>|60"></textarea>
+                <span class="hint">One step per line: <code>send|expect</code> or <code>send|expect|timeoutSeconds</code>. Empty box clears the script.</span>
+            </div>
+            <button class="btn" type="submit">Add / update</button>
+        </form>
+        <table>
+            <thead>
+                <tr><th>Callsign</th><th class="numeric">Port</th><th>UDP</th><th>Script</th><th></th></tr>
+            </thead>
+            <tbody id="neigh-body"><tr><td colspan="5" class="muted" style="text-align:center;">loading</td></tr></tbody>
+        </table>
+    </div>
+}
+else if (tab == "channels")
+{
+    <div class="panel">
+        <h3>Discovery channels</h3>
+        <p class="panel-sub">Per-bearer, per-port beacon configuration. Per-channel airtime budget is the trailing-hour cap; 0 means use only the global budget.</p>
+        <form id="chan-form" class="row-form" onsubmit="dappsAddChannel(event)" style="margin-bottom: 1rem;">
+            <div class="field"><label>Bearer</label>
+                <select name="bearer">
+                    <option value="agw">agw</option>
+                    <option value="udp">udp</option>
+                </select>
+            </div>
+            <div class="field"><label>Channel key</label><input name="channelKey" required placeholder="0 or 239.0.0.1:54321" /></div>
+            <div class="field"><label>Link class</label>
+                <select name="linkClass">
+                    <option>VhfUhfFm</option>
+                    <option>MeshCore</option>
+                    <option>Hf</option>
+                    <option>LanMulticast</option>
+                    <option>InternetIp</option>
+                </select>
+            </div>
+            <div class="field"><label>Airtime budget (s/h, 0 = unlimited)</label><input name="airtimeBudgetSecondsPerHour" type="number" min="0" max="3600" value="0" /></div>
+            <div class="field"><label>Solicit interval (s, 0 = off)</label><input name="solicitIntervalSeconds" type="number" min="0" max="86400" value="0" /></div>
+            <button class="btn" type="submit">Add / update</button>
+        </form>
+        <table>
+            <thead>
+                <tr>
+                    <th>Bearer</th><th>Channel</th><th>Class</th>
+                    <th class="numeric">Cost</th><th class="numeric">Beacon</th><th class="numeric">TTL</th>
+                    <th class="numeric">Budget</th><th class="numeric">Solicit</th><th>Enabled</th><th></th>
+                </tr>
+            </thead>
+            <tbody id="chan-body"><tr><td colspan="10" class="muted" style="text-align:center;">loading</td></tr></tbody>
+        </table>
+    </div>
+}
+else if (tab == "peers")
+{
+    <div class="panel">
+        <h3>Discovered peers</h3>
+        <p class="panel-sub">Peers heard on the air via beacons or solicit replies. Auto-populated; the daemon ages them out.</p>
+        <table>
+            <thead>
+                <tr><th>Callsign</th><th>Bearer</th><th>Channel</th><th class="numeric">Hops</th><th class="numeric">Cost</th><th>Last seen</th></tr>
+            </thead>
+            <tbody id="peer-body"><tr><td colspan="6" class="muted" style="text-align:center;">loading</td></tr></tbody>
+        </table>
+    </div>
+}
+else if (tab == "probes")
+{
+    <div class="panel">
+        <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem;">
+            <div>
+                <h3>Probed nodes</h3>
+                <p class="panel-sub">Connected-mode liveness state from B6.1 probes. Three cents to spend if you want a live picture; otherwise let the scheduler do it.</p>
+            </div>
+            <div class="card-actions" style="margin-top: 0;">
+                <button class="btn secondary sm" type="button" onclick="dappsRunSweep()">Probe everyone now</button>
+            </div>
+        </div>
+        <table>
+            <thead>
+                <tr><th>Callsign</th><th>Source</th><th class="numeric">Port</th><th>Last probed</th><th>Last success</th><th class="numeric">Failures</th><th>Last error</th><th>Opt-out</th><th></th></tr>
+            </thead>
+            <tbody id="probe-body"><tr><td colspan="9" class="muted" style="text-align:center;">loading</td></tr></tbody>
+        </table>
+    </div>
+}
+else
+{
+    <div class="panel">
+        <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem;">
+            <div>
+                <h3>Polled nodes</h3>
+                <p class="panel-sub">F3b scheduled rev-poll state. When enabled, this node walks neighbours periodically and asks them to push any queued mail addressed to us.</p>
+            </div>
+            <div class="card-actions" style="margin-top: 0;">
+                <button class="btn secondary sm" type="button" onclick="dappsRunPollSweep()">Poll everyone now</button>
+            </div>
+        </div>
+        <table>
+            <thead>
+                <tr><th>Callsign</th><th>Last polled</th><th>Last success</th><th class="numeric">Failures</th><th class="numeric">Drained</th><th>Last error</th><th>Opt-out</th><th></th></tr>
+            </thead>
+            <tbody id="poll-body"><tr><td colspan="8" class="muted" style="text-align:center;">loading</td></tr></tbody>
+        </table>
+    </div>
+}
+
+<script>
+(function () {
+    const tab = '@tab';
+    const escape = (s) => String(s ?? '').replace(/[&<>"']/g, c =>
+        ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const fmtAt = (iso) => {
+        if (!iso) return '-';
+        try { return new Date(iso).toISOString().replace('T', ' ').substring(0, 19); }
+        catch { return iso; }
+    };
+    const fmtAgo = (iso) => {
+        if (!iso) return '-';
+        const s = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+        if (s < 90) return `${s}s ago`;
+        if (s < 5400) return `${Math.floor(s / 60)}m ago`;
+        if (s < 129600) return `${Math.floor(s / 3600)}h ago`;
+        return `${Math.floor(s / 86400)}d ago`;
+    };
+
+    function setCount(id, n) { const el = document.getElementById(id); if (el) el.textContent = n; }
+
+    async function dappsPostJson(url, body, method) {
+        const res = await fetch(url, {
+            method: method || 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: body == null ? null : JSON.stringify(body),
+        });
+        if (!res.ok && res.status !== 204) {
+            const text = await res.text();
+            alert(`Request failed (${res.status}): ${text}`);
+            return false;
+        }
+        return true;
+    }
+
+    window.dappsAddNeighbour = async (ev) => {
+        ev.preventDefault();
+        const f = ev.target;
+        const body = {
+            Callsign: f.callsign.value,
+            BearerPort: f.bearerPort.value === '' ? null : parseInt(f.bearerPort.value, 10),
+            UdpEndpoint: f.udpEndpoint.value || null,
+            ConnectScript: f.connectScript.value || null,
+        };
+        if (await dappsPostJson('/Neighbours', body)) location.reload();
+    };
+    window.dappsDeleteNeighbour = async (callsign) => {
+        if (!confirm(`Remove neighbour ${callsign}?`)) return;
+        if (await dappsPostJson('/Neighbours/' + encodeURIComponent(callsign), null, 'DELETE')) location.reload();
+    };
+    window.dappsAddChannel = async (ev) => {
+        ev.preventDefault();
+        const f = ev.target;
+        const body = {
+            Bearer: f.bearer.value,
+            ChannelKey: f.channelKey.value,
+            LinkClass: f.linkClass.value,
+            AirtimeBudgetSecondsPerHour: parseInt(f.airtimeBudgetSecondsPerHour.value, 10) || 0,
+            SolicitIntervalSeconds: parseInt(f.solicitIntervalSeconds.value, 10) || 0,
+        };
+        if (await dappsPostJson('/DiscoveryChannels', body)) location.reload();
+    };
+    window.dappsDeleteChannel = async (id) => {
+        if (!confirm(`Remove discovery channel ${id}?`)) return;
+        if (await dappsPostJson('/DiscoveryChannels/' + id, null, 'DELETE')) location.reload();
+    };
+    window.dappsSolicitChannel = async (id) => {
+        await dappsPostJson('/DiscoveryChannels/' + id + '/solicit', null);
+    };
+    window.dappsRunSweep = async () => {
+        if (!confirm('Probe every known peer now? Uses other operators\' airtime.')) return;
+        if (await dappsPostJson('/Probes/run', null)) await window.dappsRefreshSnap?.();
+    };
+    window.dappsProbeOne = async (callsign) => {
+        const res = await fetch('/Probes/run/' + callsign, { method: 'POST' });
+        if (!res.ok && res.status !== 200 && res.status !== 204) {
+            alert(`Probe failed (${res.status}): ${await res.text()}`);
+            return;
+        }
+        await window.dappsRefreshSnap?.();
+    };
+    window.dappsSetOptOut = async (callsign, optOut) => {
+        await dappsPostJson('/Probes/' + callsign + '/optout', { OptOut: optOut });
+    };
+    window.dappsForgetProbe = async (callsign) => {
+        if (!confirm(`Forget probe row for ${decodeURIComponent(callsign)}?`)) return;
+        if (await dappsPostJson('/Probes/' + callsign, null, 'DELETE')) await window.dappsRefreshSnap?.();
+    };
+    window.dappsRunPollSweep = async () => {
+        if (!confirm('Poll every neighbour for queued mail now?')) return;
+        if (await dappsPostJson('/Polls/run', null)) await window.dappsRefreshSnap?.();
+    };
+    window.dappsPollOne = async (callsign) => {
+        const res = await fetch('/Polls/run/' + callsign, { method: 'POST' });
+        if (!res.ok && res.status !== 200 && res.status !== 204) {
+            alert(`Poll failed (${res.status}): ${await res.text()}`);
+            return;
+        }
+        await window.dappsRefreshSnap?.();
+    };
+    window.dappsSetPollOptOut = async (callsign, optOut) => {
+        await dappsPostJson('/Polls/' + callsign + '/optout', { OptOut: optOut });
+    };
+    window.dappsForgetPoll = async (callsign) => {
+        if (!confirm(`Forget poll row for ${decodeURIComponent(callsign)}?`)) return;
+        if (await dappsPostJson('/Polls/' + callsign, null, 'DELETE')) await window.dappsRefreshSnap?.();
+    };
+
+    function apply(s) {
+        const t = s.tables ?? {};
+        setCount('cnt-neigh', (t.neighbours || []).length);
+        setCount('cnt-chan',  (t.discoveryChannels || []).length);
+        setCount('cnt-peers', (t.discoveredPeers || []).length);
+        setCount('cnt-probes',(t.probedNodes || []).length);
+        setCount('cnt-polls', (t.polledNodes || []).length);
+
+        if (tab === 'neighbours') {
+            const body = document.getElementById('neigh-body');
+            const ns = t.neighbours || [];
+            if (!ns.length) {
+                body.innerHTML = '<tr><td colspan="5" class="empty" style="text-align:center;">No neighbours yet. Add one above.</td></tr>';
+            } else {
+                body.innerHTML = ns.map(n => `<tr>
+                    <td><code>${escape(n.callsign)}</code></td>
+                    <td class="numeric">${n.bearerPort != null ? n.bearerPort : '<span class="muted">default</span>'}</td>
+                    <td>${n.udpEndpoint ? '<code>' + escape(n.udpEndpoint) + '</code>' : '<span class="muted">-</span>'}</td>
+                    <td>${n.connectScriptJson ? 'script' : '<span class="muted">-</span>'}</td>
+                    <td><div class="actions">
+                        <button class="link-btn" onclick="dappsProbeOne('${escape(n.callsign)}')">probe</button>
+                        <button class="link-btn danger" onclick="dappsDeleteNeighbour('${escape(n.callsign)}')">remove</button>
+                    </div></td>
+                </tr>`).join('');
+            }
+        }
+
+        if (tab === 'channels') {
+            const body = document.getElementById('chan-body');
+            const cs = t.discoveryChannels || [];
+            if (!cs.length) {
+                body.innerHTML = '<tr><td colspan="10" class="empty" style="text-align:center;">No discovery channels yet. Add one above.</td></tr>';
+            } else {
+                body.innerHTML = cs.map(c => `<tr>
+                    <td>${escape(c.bearer)}</td>
+                    <td><code>${escape(c.channelKey)}</code></td>
+                    <td>${escape(c.linkClass)}</td>
+                    <td class="numeric">${c.costHint}</td>
+                    <td class="numeric">${c.beaconIntervalSeconds}s</td>
+                    <td class="numeric">${c.advertisedTtlSeconds}s</td>
+                    <td class="numeric">${c.airtimeBudgetSecondsPerHour > 0 ? c.airtimeBudgetSecondsPerHour + 's/h' : '<span class="muted">-</span>'}</td>
+                    <td class="numeric">${c.solicitIntervalSeconds > 0 ? c.solicitIntervalSeconds + 's' : '<span class="muted">-</span>'}</td>
+                    <td>${c.enabled ? '<span class="pill ok">yes</span>' : '<span class="pill warn">no</span>'}</td>
+                    <td><div class="actions">
+                        <button class="link-btn" onclick="dappsSolicitChannel(${c.id})" title="Send a one-shot 'who's there?'">solicit</button>
+                        <button class="link-btn danger" onclick="dappsDeleteChannel(${c.id})">remove</button>
+                    </div></td>
+                </tr>`).join('');
+            }
+        }
+
+        if (tab === 'peers') {
+            const body = document.getElementById('peer-body');
+            const ps = t.discoveredPeers || [];
+            if (!ps.length) {
+                body.innerHTML = '<tr><td colspan="6" class="empty" style="text-align:center;">No peers heard yet. Try a solicit on a channel.</td></tr>';
+            } else {
+                body.innerHTML = ps.map(p => `<tr>
+                    <td><code>${escape(p.callsign)}</code></td>
+                    <td>${escape(p.bearer)}</td>
+                    <td><code>${escape(p.channelKey)}</code></td>
+                    <td class="numeric">${p.hops}</td>
+                    <td class="numeric">${p.costHint}</td>
+                    <td>${fmtAgo(p.lastSeen)}</td>
+                </tr>`).join('');
+            }
+        }
+
+        if (tab === 'probes') {
+            const body = document.getElementById('probe-body');
+            const xs = t.probedNodes || [];
+            if (!xs.length) {
+                body.innerHTML = '<tr><td colspan="9" class="empty" style="text-align:center;">No probes recorded yet.</td></tr>';
+            } else {
+                body.innerHTML = xs.map(p => `<tr class="${p.consecutiveFailures >= 3 ? 'warn' : ''}">
+                    <td><code>${escape(p.callsign)}</code></td>
+                    <td>${escape(p.source || 'neighbour')}</td>
+                    <td class="numeric">${p.lastBearerPort != null ? p.lastBearerPort : '<span class="muted">-</span>'}</td>
+                    <td>${fmtAgo(p.lastProbedAt)}</td>
+                    <td>${p.lastSuccessAt ? fmtAgo(p.lastSuccessAt) : '<span class="muted">never</span>'}</td>
+                    <td class="numeric">${p.consecutiveFailures}</td>
+                    <td><span class="muted">${escape(p.lastError || '-')}</span></td>
+                    <td><label style="display:inline-flex; align-items:center; gap:0.3rem;"><input type="checkbox" ${p.optOut ? 'checked' : ''} onchange="dappsSetOptOut('${escape(p.callsign)}', this.checked)" /> opt-out</label></td>
+                    <td><div class="actions">
+                        <button class="link-btn" onclick="dappsProbeOne('${escape(p.callsign)}')">probe now</button>
+                        <button class="link-btn danger" onclick="dappsForgetProbe('${escape(p.callsign)}')">forget</button>
+                    </div></td>
+                </tr>`).join('');
+            }
+        }
+
+        if (tab === 'polls') {
+            const body = document.getElementById('poll-body');
+            const xs = t.polledNodes || [];
+            if (!xs.length) {
+                body.innerHTML = '<tr><td colspan="8" class="empty" style="text-align:center;">No polls recorded yet (enable scheduled poll in Settings, or use the button above).</td></tr>';
+            } else {
+                body.innerHTML = xs.map(p => `<tr class="${p.consecutiveFailures >= 3 ? 'warn' : ''}">
+                    <td><code>${escape(p.callsign)}</code></td>
+                    <td>${fmtAgo(p.lastPolledAt)}</td>
+                    <td>${p.lastSuccessAt ? fmtAgo(p.lastSuccessAt) : '<span class="muted">never</span>'}</td>
+                    <td class="numeric">${p.consecutiveFailures}</td>
+                    <td class="numeric">${p.messagesDrained}</td>
+                    <td><span class="muted">${escape(p.lastError || '-')}</span></td>
+                    <td><label style="display:inline-flex; align-items:center; gap:0.3rem;"><input type="checkbox" ${p.optOut ? 'checked' : ''} onchange="dappsSetPollOptOut('${escape(p.callsign)}', this.checked)" /> opt-out</label></td>
+                    <td><div class="actions">
+                        <button class="link-btn" onclick="dappsPollOne('${escape(p.callsign)}')">poll now</button>
+                        <button class="link-btn danger" onclick="dappsForgetPoll('${escape(p.callsign)}')">forget</button>
+                    </div></td>
+                </tr>`).join('');
+            }
+        }
+    }
+
+    if (window.__dappsSnap) apply(window.__dappsSnap);
+    if (window.dappsOnSnap) window.dappsOnSnap(apply);
+})();
+</script>

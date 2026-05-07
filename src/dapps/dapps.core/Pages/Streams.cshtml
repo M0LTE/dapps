@@ -1,54 +1,27 @@
 @page
 @model StreamsModel
 @{
-    ViewData["Title"] = $"DAPPS - streams (@{Model.Options.Callsign})";
+    ViewData["Title"] = $"DAPPS - streams ({Model.Options.Callsign})";
+    ViewData["Active"] = "streams";
+    ViewData["PageTitle"] = "Streams";
+    ViewData["PageSubtitle"] = "Per-(remote, stream-id) state for opt-in message ordering. Set StreamId on outbound submissions to opt in. Receive cursors gate local delivery on the next-expected sequence.";
     var now = DateTime.UtcNow;
 }
 
-<header class="app-header">
-    <span class="brand">
-        <span class="dot"></span>
-        DAPPS
-        <span class="callsign">@Model.Options.Callsign</span>
-        <span style="color: var(--text-muted); font-weight: 500; margin-left: 0.4rem;">- streams</span>
-    </span>
-    <span class="spacer"></span>
-    <a href="/">dashboard</a>
-    <a href="/Inbound">inbound</a>
-    <a href="/IHave">ihave</a>
-    <a href="/Transmissions">audit</a>
-    @if (User.Identity?.IsAuthenticated == true)
-    {
-        <a href="/Logout" class="signout">sign out</a>
-    }
-</header>
-
-<main>
-    <h2>Opt-in ordered streams</h2>
-    <p class="muted-inline">
-        Per-(remote, stream-id) state for opt-in message ordering.
-        Set <code>StreamId</code> on outbound submissions to opt in;
-        the daemon mints monotonic <code>sn=</code> values from the send-side
-        counters below. Receive-side cursors gate local delivery on the
-        next-expected seq, with parked rows held until the gap fills or
-        (when <code>gt &gt; 0</code>) the gap deadline elapses.
-    </p>
-
+<div class="panel">
     <h3>Send state</h3>
+    <p class="panel-sub">Monotonic <code>sn=</code> counters minted for each (local, remote, stream) tuple.</p>
     @if (Model.SendStates.Count == 0)
     {
-        <p class="muted-inline">No outbound streams have been used yet.</p>
+        <div class="empty">No outbound streams have been used yet.</div>
     }
     else
     {
         <table>
             <thead>
                 <tr>
-                    <th>Local</th>
-                    <th>Remote</th>
-                    <th>Stream id</th>
-                    <th class="numeric">Next sn</th>
-                    <th>Updated</th>
+                    <th>Local</th><th>Remote</th><th>Stream id</th>
+                    <th class="numeric">Next sn</th><th>Updated</th>
                 </tr>
             </thead>
             <tbody>
@@ -65,24 +38,25 @@
             </tbody>
         </table>
     }
+</div>
 
-    <h3 style="margin-top: 1.5rem;">Receive state</h3>
+<div class="panel" style="margin-top: 1rem;">
+    <h3>Receive state</h3>
+    <p class="panel-sub">
+        Highlighted rows have parked messages awaiting an earlier <code>sn</code>. Strict streams (<code>gt=0</code>) show no gap deadline; in timeout mode the deadline is when the gap sweeper (1-minute cadence) skips past the missing seq and drains.
+    </p>
     @if (Model.RecvStates.Count == 0)
     {
-        <p class="muted-inline">No inbound streams have been seen yet.</p>
+        <div class="empty">No inbound streams have been seen yet.</div>
     }
     else
     {
         <table>
             <thead>
                 <tr>
-                    <th>Sender</th>
-                    <th>Stream id</th>
-                    <th class="numeric">Next sn</th>
-                    <th class="numeric">Pending</th>
-                    <th>Oldest pending</th>
-                    <th>Gap deadline</th>
-                    <th>Last seen</th>
+                    <th>Sender</th><th>Stream id</th>
+                    <th class="numeric">Next sn</th><th class="numeric">Pending</th>
+                    <th>Oldest pending</th><th>Gap deadline</th><th>Last seen</th>
                 </tr>
             </thead>
             <tbody>
@@ -107,7 +81,7 @@
                         <td>
                             @if (row.State.GapDeadline == DateTime.MinValue)
                             {
-                                <span class="muted-inline">-</span>
+                                <span class="muted">-</span>
                             }
                             else
                             {
@@ -120,10 +94,5 @@
                 }
             </tbody>
         </table>
-        <p class="muted-inline" style="margin-top: 0.5rem;">
-            Highlighted rows have parked messages awaiting an earlier <code>sn</code>.
-            Strict streams (<code>gt=0</code>) show no gap deadline; in timeout mode the deadline
-            is when the gap sweeper (1-minute cadence) will skip past the missing seq and drain.
-        </p>
     }
-</main>
+</div>
