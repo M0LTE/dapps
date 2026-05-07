@@ -534,7 +534,15 @@
            Forms
            ======================================================== */
         label { color: var(--text-muted); font-size: 0.78rem; font-weight: 600; }
-        input[type=text], input[type=password], input[type=number], textarea, select {
+        /* Match inputs whether or not the author wrote an explicit
+           type attribute. `input[type=text]` does NOT match a bare
+           `<input>` because attribute selectors require the attribute
+           to be present, so we list every text-like type plus `:not([type])`
+           for the implicit default. */
+        input:not([type]),
+        input[type=text], input[type=password], input[type=number],
+        input[type=email], input[type=search], input[type=url], input[type=tel],
+        textarea, select {
             background: var(--bg-2); color: var(--text);
             border: 1px solid var(--border-strong);
             border-radius: var(--radius-sm);
@@ -548,6 +556,24 @@
         }
         textarea { resize: vertical; min-height: 4rem; font-family: var(--font-mono); }
 
+        /* Block browser autofill from painting Edge's blue-on-blue
+           "saved credential" highlight over our inputs - it makes the
+           form look like the box has a different background colour
+           from its neighbours. The 1000px inset shadow is the standard
+           webkit override; the long transition keeps it stable while
+           the user types. */
+        input:-webkit-autofill,
+        input:-webkit-autofill:hover,
+        input:-webkit-autofill:focus,
+        input:-webkit-autofill:active,
+        textarea:-webkit-autofill,
+        select:-webkit-autofill {
+            -webkit-box-shadow: 0 0 0 1000px var(--bg-2) inset !important;
+            -webkit-text-fill-color: var(--text) !important;
+            caret-color: var(--text) !important;
+            transition: background-color 600000s 0s, color 600000s 0s;
+        }
+
         .field-grid {
             display: grid;
             gap: 0.85rem 0.95rem;
@@ -560,14 +586,19 @@
         .field .hint { font-size: 0.75rem; color: var(--text-dim); margin-top: 0.15rem; line-height: 1.4; }
         .field-checkbox {
             display: flex; align-items: flex-start; gap: 0.55rem;
-            font-size: 0.86rem; color: var(--text);
+            font-size: 0.78rem; color: var(--text-muted);
+            font-weight: 600;
             line-height: 1.4;
         }
         .field-checkbox input[type=checkbox] {
             width: 16px; height: 16px;
-            margin: 2px 0 0; accent-color: var(--accent); flex-shrink: 0;
+            margin: 1px 0 0; accent-color: var(--accent); flex-shrink: 0;
         }
-        .field-checkbox .hint { color: var(--text-muted); }
+        .field-checkbox .hint {
+            display: block; margin-top: 0.2rem;
+            color: var(--text-dim); font-weight: 400;
+            font-size: 0.75rem; text-transform: none; letter-spacing: 0;
+        }
 
         .btn, button.btn {
             display: inline-flex; align-items: center; justify-content: center;

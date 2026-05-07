@@ -9,7 +9,19 @@
     var ps = Model.Options.ProbeStrategy;
 }
 
-<form id="settings-form" onsubmit="dappsSaveConfig(event)">
+<style>
+    /* Mask RHPv2 password without using <input type="password">, so
+       Edge's password manager doesn't treat the (RhpUser, RhpPass)
+       pair as credentials and paint a dark overlay over both fields. */
+    input.masked {
+        -webkit-text-security: disc;
+        text-security: disc;
+        font-family: var(--font-mono);
+        letter-spacing: 0.18em;
+    }
+</style>
+
+<form id="settings-form" onsubmit="dappsSaveConfig(event)" autocomplete="off">
     <div class="panel">
         <h3>Identity &amp; packet-node bearer</h3>
         <p class="panel-sub">How DAPPS identifies itself and which packet node it rides on. Bearer port changes are picked up on the next forwarder tick (no restart).</p>
@@ -27,8 +39,15 @@
             </div>
             <div class="field"><label>AGW port</label><input name="AgwPort" type="number" min="1" max="65535" value="@Model.Options.AgwPort" required /></div>
             <div class="field"><label>RHPv2 port</label><input name="RhpPort" type="number" min="1" max="65535" value="@Model.Options.RhpPort" required /></div>
-            <div class="field"><label>RHPv2 user</label><input name="RhpUser" type="text" value="@Model.Options.RhpUser" /><span class="hint">blank if no auth</span></div>
-            <div class="field"><label>RHPv2 password</label><input name="RhpPass" type="password" value="@Model.Options.RhpPass" /></div>
+            <div class="field"><label>RHPv2 user</label>
+                <input name="RhpUser" type="text" value="@Model.Options.RhpUser"
+                       autocomplete="off" data-form-type="other" data-1p-ignore="true" data-lpignore="true" />
+                <span class="hint">blank if no auth</span></div>
+            <div class="field"><label>RHPv2 password</label>
+                <input name="RhpPass" type="text" value="@Model.Options.RhpPass"
+                       autocomplete="off" data-form-type="other" data-1p-ignore="true" data-lpignore="true"
+                       class="masked" />
+                <span class="hint">stored on this node, not a sysop credential</span></div>
             <div class="field"><label>Default bearer port</label><input name="DefaultBearerPort" type="number" min="0" max="255" value="@Model.Options.DefaultBearerPort" required />
                 <span class="hint">0-indexed; used when a neighbour has no per-row override</span></div>
         </div>
@@ -122,7 +141,7 @@
     <p class="panel-sub">Existing sessions stay valid until logout or 90-day expiry. Only future logins use the new password.</p>
     <form class="row-form" onsubmit="dappsRotatePassword(event)">
         <div class="field" style="grid-column: 1 / -1;"><label>New password</label>
-            <input name="password" type="password" required minlength="8" />
+            <input name="password" type="password" required minlength="8" autocomplete="new-password" />
         </div>
         <button class="btn" type="submit">Set password</button>
     </form>
