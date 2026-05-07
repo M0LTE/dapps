@@ -1,0 +1,359 @@
+@page
+@model MessagesModel
+@{
+    ViewData["Title"] = $"DAPPS - messages ({Model.Options.Callsign})";
+    ViewData["Active"] = "messages";
+    ViewData["PageTitle"] = "Messages";
+    ViewData["PageSubtitle"] = "Outbound queue, local inbox, dropped, and live arrivals - all in one place.";
+    var tab = Model.Tab;
+}
+
+@section Actions {
+    <a class="btn sm" href="/Compose">Compose</a>
+}
+
+@section Tabs {
+    <a href="/Messages?tab=outbound" class="@(tab == "outbound" ? "active" : "")">Outbound queue <span class="count" id="cnt-outbound">0</span></a>
+    <a href="/Messages?tab=inbox" class="@(tab == "inbox" ? "active" : "")">Local inbox <span class="count" id="cnt-inbox">0</span></a>
+    <a href="/Messages?tab=dropped" class="@(tab == "dropped" ? "active" : "")">Dropped <span class="count" id="cnt-dropped">0</span></a>
+    <a href="/Messages?tab=live" class="@(tab == "live" ? "active" : "")">Live arrivals <span id="sse-state" class="pill">connecting</span></a>
+}
+
+@if (tab == "outbound")
+{
+    <div class="panel">
+        <h3>Outbound queue</h3>
+        <p class="panel-sub">Messages addressed to a remote destination, waiting to be forwarded. The auto-forwarder runs every 5 seconds.</p>
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 8.5rem;">Id</th>
+                    <th>Destination</th>
+                    <th>Source</th>
+                    <th class="numeric">Bytes</th>
+                    <th>Age</th>
+                    <th>State</th>
+                </tr>
+            </thead>
+            <tbody id="outbound-body"><tr><td colspan="6" class="muted" style="text-align:center;">loading</td></tr></tbody>
+        </table>
+    </div>
+}
+else if (tab == "inbox")
+{
+    <div class="panel">
+        <h3>Local inbox</h3>
+        <p class="panel-sub">Messages destined for an app on this node, awaiting acknowledgement on <code>dapps/ack/&lt;app&gt;</code>. A growing inbox usually means an app is subscribed but not acking.</p>
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 8.5rem;">Id</th>
+                    <th>Destination</th>
+                    <th>Source</th>
+                    <th class="numeric">Bytes</th>
+                    <th>Age</th>
+                    <th>State</th>
+                </tr>
+            </thead>
+            <tbody id="inbox-body"><tr><td colspan="6" class="muted" style="text-align:center;">loading</td></tr></tbody>
+        </table>
+    </div>
+}
+else if (tab == "dropped")
+{
+    <div class="panel">
+        <h3>Recently dropped</h3>
+        <p class="panel-sub">TTL-expired, no-route, or hash-mismatch drops. Use this view to answer "where did message X go?".</p>
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 8.5rem;">Id</th>
+                    <th>Destination</th>
+                    <th>Source</th>
+                    <th>Reason</th>
+                    <th>When</th>
+                </tr>
+            </thead>
+            <tbody id="dropped-body"><tr><td colspan="5" class="muted" style="text-align:center;">loading</td></tr></tbody>
+        </table>
+    </div>
+}
+else
+{
+    <div class="panel">
+        <h3>Live arrivals</h3>
+        <p class="panel-sub">Server-sent events from <code>/Events/inbound</code>. Every message landed by the inbox layer (after persist + MQTT inject) appears here. Click a row to fetch its payload preview.</p>
+        <div class="row-form" style="margin-bottom: 1rem;">
+            <div class="field">
+                <label for="filter-app">App</label>
+                <input id="filter-app" type="text" placeholder="e.g. mail" />
+            </div>
+            <div class="field">
+                <label for="filter-callsign">Source callsign</label>
+                <input id="filter-callsign" type="text" placeholder="e.g. M0LTE" />
+            </div>
+            <div class="field">
+                <label for="filter-dest">Destination</label>
+                <input id="filter-dest" type="text" placeholder="substring" />
+            </div>
+            <button class="btn ghost sm" type="button" id="filter-clear">Clear</button>
+        </div>
+        <span class="muted" id="filter-summary" style="font-size: 0.78rem;">showing all rows</span>
+        <table id="inbound-table">
+            <thead>
+                <tr>
+                    <th style="width: 11rem;">Received (UTC)</th>
+                    <th style="width: 7rem;">Id</th>
+                    <th style="width: 9rem;">Source</th>
+                    <th>Destination</th>
+                    <th class="numeric" style="width: 6rem;">Bytes</th>
+                    <th class="numeric" style="width: 5rem;">TTL</th>
+                </tr>
+            </thead>
+            <tbody id="inbound-body">
+                <tr><td colspan="6" class="muted" style="text-align:center;">waiting for events</td></tr>
+            </tbody>
+        </table>
+        <p class="muted-inline" style="margin-top: 0.6rem;">
+            Showing the last <span id="inbound-count">0</span> event(s) since this tab opened.
+        </p>
+    </div>
+    <style>
+        tr.inbound-row { cursor: pointer; }
+        tr.inbound-row.selected td { background: var(--accent-soft); }
+        tr.payload-row td { background: var(--bg-2); }
+        tr.payload-row pre {
+            max-height: 24rem; overflow: auto; margin: 0; padding: 0.5rem;
+            font-size: 0.78rem; white-space: pre-wrap; word-break: break-all;
+            font-family: var(--font-mono);
+        }
+        .payload-meta { font-size: 0.78rem; color: var(--text-muted); margin-bottom: 0.4rem; }
+        .payload-tabs button {
+            font-size: 0.75rem; padding: 0.15rem 0.55rem; margin-right: 0.25rem;
+            border-radius: 4px; cursor: pointer;
+            background: var(--surface-2); color: var(--text); border: 1px solid var(--border);
+        }
+        .payload-tabs button.active { background: var(--accent); color: white; border-color: var(--accent); }
+    </style>
+}
+
+<script>
+(function () {
+    const tab = '@tab';
+    const escape = (s) => String(s ?? '').replace(/[&<>"']/g, c =>
+        ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const fmtAt = (iso) => {
+        if (!iso) return '-';
+        try { return new Date(iso).toISOString().replace('T', ' ').substring(0, 19); }
+        catch { return iso; }
+    };
+    const ageOf = (iso) => {
+        if (!iso) return '-';
+        const s = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
+        if (s < 90) return `${s}s`;
+        if (s < 5400) return `${Math.floor(s / 60)}m`;
+        if (s < 129600) return `${Math.floor(s / 3600)}h`;
+        return `${Math.floor(s / 86400)}d`;
+    };
+    const ageStr = (s) => {
+        if (s == null) return '-';
+        if (s < 90) return `${s}s`;
+        if (s < 5400) return `${Math.floor(s / 60)}m`;
+        if (s < 129600) return `${Math.floor(s / 3600)}h`;
+        return `${Math.floor(s / 86400)}d`;
+    };
+
+    function applyTabSnap(s) {
+        // Update tab counters from snapshot regardless of which tab is open
+        const dropped = (s.tables?.dropped ?? []);
+        const out = (s.tables?.outbound ?? []);
+        const inb = (s.tables?.localInbox ?? []);
+        const setCount = (id, n) => { const el = document.getElementById(id); if (el) el.textContent = n; };
+        setCount('cnt-outbound', out.length);
+        setCount('cnt-inbox', inb.length);
+        setCount('cnt-dropped', dropped.length);
+
+        if (tab === 'outbound') {
+            const body = document.getElementById('outbound-body');
+            if (!body) return;
+            if (out.length === 0) {
+                body.innerHTML = '<tr><td colspan="6" class="muted" style="text-align:center;">queue is empty</td></tr>';
+                return;
+            }
+            body.innerHTML = out.map(m =>
+                '<tr>'
+                + `<td><code>${escape(m.id)}</code></td>`
+                + `<td><code>${escape(m.destination)}</code></td>`
+                + `<td><code>${escape(m.sourceCallsign)}</code></td>`
+                + `<td class="numeric">${m.bytes ?? '-'}</td>`
+                + `<td>${ageStr(m.ageSeconds)}</td>`
+                + '<td><span class="pill">queued</span></td>'
+                + '</tr>'
+            ).join('');
+        }
+        if (tab === 'inbox') {
+            const body = document.getElementById('inbox-body');
+            if (!body) return;
+            if (inb.length === 0) {
+                body.innerHTML = '<tr><td colspan="6" class="muted" style="text-align:center;">inbox is empty</td></tr>';
+                return;
+            }
+            body.innerHTML = inb.map(m =>
+                '<tr>'
+                + `<td><code>${escape(m.id)}</code></td>`
+                + `<td><code>${escape(m.destination)}</code></td>`
+                + `<td><code>${escape(m.sourceCallsign)}</code></td>`
+                + `<td class="numeric">${m.bytes ?? '-'}</td>`
+                + `<td>${ageStr(m.ageSeconds)}</td>`
+                + '<td><span class="pill warn">awaiting ack</span></td>'
+                + '</tr>'
+            ).join('');
+        }
+        if (tab === 'dropped') {
+            const body = document.getElementById('dropped-body');
+            if (!body) return;
+            if (dropped.length === 0) {
+                body.innerHTML = '<tr><td colspan="5" class="muted" style="text-align:center;">no recent drops</td></tr>';
+                return;
+            }
+            body.innerHTML = dropped.map(m =>
+                '<tr>'
+                + `<td><code>${escape(m.id)}</code></td>`
+                + `<td><code>${escape(m.destination)}</code></td>`
+                + `<td><code>${escape(m.sourceCallsign)}</code></td>`
+                + `<td>${escape(m.reason ?? '-')}</td>`
+                + `<td>${fmtAt(m.droppedAt)}</td>`
+                + '</tr>'
+            ).join('');
+        }
+    }
+
+    if (window.__dappsSnap) applyTabSnap(window.__dappsSnap);
+    if (window.dappsOnSnap) window.dappsOnSnap(applyTabSnap);
+
+    // -- Live tab: SSE bridge --
+    if (tab === 'live') {
+        const tbody = document.getElementById('inbound-body');
+        const status = document.getElementById('sse-state');
+        const counter = document.getElementById('inbound-count');
+        const fApp = document.getElementById('filter-app');
+        const fCall = document.getElementById('filter-callsign');
+        const fDest = document.getElementById('filter-dest');
+        const fSummary = document.getElementById('filter-summary');
+        const fClear = document.getElementById('filter-clear');
+        let count = 0;
+        let cleared = false;
+
+        const appOf = (dest) => {
+            const at = String(dest ?? '').indexOf('@@');
+            return at > 0 ? String(dest).substring(0, at) : String(dest ?? '');
+        };
+        const matchesFilter = (row) => {
+            const a = (fApp.value || '').trim().toLowerCase();
+            const c = (fCall.value || '').trim().toLowerCase();
+            const d = (fDest.value || '').trim().toLowerCase();
+            if (a && !appOf(row.dataset.dest).toLowerCase().includes(a)) return false;
+            if (c && !row.dataset.src.toLowerCase().includes(c)) return false;
+            if (d && !row.dataset.dest.toLowerCase().includes(d)) return false;
+            return true;
+        };
+        const applyFilters = () => {
+            let visible = 0;
+            for (const tr of tbody.querySelectorAll('tr.inbound-row')) {
+                const show = matchesFilter(tr);
+                tr.style.display = show ? '' : 'none';
+                const next = tr.nextElementSibling;
+                if (next && next.classList.contains('payload-row')) next.style.display = show ? '' : 'none';
+                if (show) visible += 1;
+            }
+            const anyFilter = (fApp.value || fCall.value || fDest.value).trim().length > 0;
+            fSummary.textContent = anyFilter
+                ? `showing ${visible} of ${tbody.querySelectorAll('tr.inbound-row').length} rows`
+                : 'showing all rows';
+        };
+        fApp.addEventListener('input', applyFilters);
+        fCall.addEventListener('input', applyFilters);
+        fDest.addEventListener('input', applyFilters);
+        fClear.addEventListener('click', () => { fApp.value = ''; fCall.value = ''; fDest.value = ''; applyFilters(); });
+
+        const togglePayload = async (row) => {
+            const id = row.dataset.id;
+            const next = row.nextElementSibling;
+            if (next && next.classList.contains('payload-row') && next.dataset.id === id) {
+                next.remove(); row.classList.remove('selected'); return;
+            }
+            tbody.querySelectorAll('tr.payload-row').forEach(r => r.remove());
+            tbody.querySelectorAll('tr.inbound-row.selected').forEach(r => r.classList.remove('selected'));
+            row.classList.add('selected');
+            const tr = document.createElement('tr');
+            tr.className = 'payload-row';
+            tr.dataset.id = id;
+            tr.innerHTML = `<td colspan="6"><div class="payload-meta">loading payload for <code>${escape(id)}</code>...</div></td>`;
+            row.parentNode.insertBefore(tr, row.nextSibling);
+            try {
+                const res = await fetch('/Events/payload/' + encodeURIComponent(id), { credentials: 'same-origin' });
+                if (res.status === 404) { tr.innerHTML = `<td colspan="6"><div class="payload-meta">payload for <code>${escape(id)}</code> not found - row may have been swept</div></td>`; return; }
+                if (!res.ok) { tr.innerHTML = `<td colspan="6"><div class="payload-meta">payload fetch failed: HTTP ${res.status}</div></td>`; return; }
+                const p = await res.json();
+                const meta = `${p.byteLength} byte(s)` +
+                    (p.truncated ? ' - preview truncated' : '') +
+                    (p.textValid ? '' : ' - not valid UTF-8, showing hex') +
+                    ` - src <code>${escape(p.sourceCallsign)}</code>` +
+                    ` - dst <code>${escape(p.destination)}</code>`;
+                const showText = p.textValid;
+                tr.innerHTML = `<td colspan="6">
+                    <div class="payload-meta">${meta}</div>
+                    <div class="payload-tabs">
+                        <button type="button" data-mode="text" class="${showText ? 'active' : ''}" ${showText ? '' : 'disabled'}>text</button>
+                        <button type="button" data-mode="hex" class="${showText ? '' : 'active'}">hex</button>
+                    </div>
+                    <pre data-mode="text" style="${showText ? '' : 'display:none;'}">${escape(p.text || '')}</pre>
+                    <pre data-mode="hex" style="${showText ? 'display:none;' : ''}">${escape(p.hex || '')}</pre>
+                </td>`;
+                tr.querySelectorAll('.payload-tabs button').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const mode = btn.dataset.mode;
+                        tr.querySelectorAll('.payload-tabs button').forEach(b => b.classList.toggle('active', b === btn));
+                        tr.querySelectorAll('pre').forEach(pre => pre.style.display = pre.dataset.mode === mode ? '' : 'none');
+                    });
+                });
+            } catch (e) {
+                tr.innerHTML = `<td colspan="6"><div class="payload-meta">payload fetch failed: ${escape(e.message ?? e)}</div></td>`;
+            }
+        };
+
+        const es = new EventSource('/Events/inbound');
+        es.onopen = () => { status.textContent = 'live'; status.className = 'pill ok'; };
+        es.onerror = () => { status.textContent = 'reconnecting'; status.className = 'pill warn'; };
+        es.addEventListener('inbound', (ev) => {
+            if (!cleared) { tbody.innerHTML = ''; cleared = true; }
+            try {
+                const d = JSON.parse(ev.data);
+                const row = document.createElement('tr');
+                row.className = 'inbound-row';
+                row.dataset.id = d.id;
+                row.dataset.src = d.sourceCallsign ?? '';
+                row.dataset.dest = d.destination ?? '';
+                row.innerHTML =
+                    '<td>' + escape(fmtAt(d.receivedAt)) + '</td>' +
+                    '<td><code>' + escape(d.id) + '</code></td>' +
+                    '<td>' + escape(d.sourceCallsign) + '</td>' +
+                    '<td>' + escape(d.destination) + '</td>' +
+                    '<td class="numeric">' + escape(d.payloadLength) + '</td>' +
+                    '<td class="numeric">' + (d.ttl == null ? '-' : escape(d.ttl)) + '</td>';
+                row.addEventListener('click', () => togglePayload(row));
+                if (!matchesFilter(row)) row.style.display = 'none';
+                tbody.insertBefore(row, tbody.firstChild);
+                count += 1; counter.textContent = count;
+                while (tbody.querySelectorAll('tr.inbound-row').length > 500) {
+                    const last = [...tbody.querySelectorAll('tr.inbound-row')].pop();
+                    const sib = last.nextElementSibling;
+                    if (sib && sib.classList.contains('payload-row')) sib.remove();
+                    last.remove();
+                }
+                applyFilters();
+            } catch (e) { console.error('inbound parse failed', e); }
+        });
+    }
+})();
+</script>

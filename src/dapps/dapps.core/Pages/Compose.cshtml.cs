@@ -15,15 +15,15 @@ namespace dapps.core.Pages;
 /// field - TTL, the upcoming on-air ihave preview - for debugging
 /// the protocol layer without writing an app.
 /// </summary>
-public sealed class IHaveModel(
+public sealed class ComposeModel(
     Database database,
     IOptionsMonitor<SystemOptions> options,
-    ILogger<IHaveModel> logger) : PageModel
+    ILogger<ComposeModel> logger) : PageModel
 {
     public SystemOptions Options { get; private set; } = new();
 
     [BindProperty]
-    public IHaveForm Form { get; set; } = new();
+    public ComposeForm Form { get; set; } = new();
 
     public string? FlashOk { get; set; }
     public string? FlashError { get; set; }
@@ -85,7 +85,7 @@ public sealed class IHaveModel(
         return Page();
     }
 
-    public sealed class IHaveForm
+    public sealed class ComposeForm
     {
         public string? App { get; set; } = "chat";
         public string? Destination { get; set; }

@@ -1,0 +1,68 @@
+@page
+@model ComposeModel
+@{
+    ViewData["Title"] = $"DAPPS - compose ({Model.Options.Callsign})";
+    ViewData["Active"] = "compose";
+    ViewData["PageTitle"] = "Compose";
+    ViewData["PageSubtitle"] = "Hand-crafted ihave - same code path as your apps, with every header field surfaced. Useful for debugging payload edge cases without writing a subscriber.";
+}
+
+@if (Model.FlashOk is not null)
+{
+    <div class="ok-banner">@Model.FlashOk</div>
+}
+@if (Model.FlashError is not null)
+{
+    <div class="err-banner">@Model.FlashError</div>
+}
+
+<form class="panel" method="post">
+    <div class="field-grid">
+        <div class="field">
+            <label for="App">App</label>
+            <input id="App" type="text" name="@nameof(ComposeModel.Form).@nameof(ComposeModel.ComposeForm.App)" value="@Model.Form.App" required />
+            <span class="hint">application slug; the receiver subscribes to <code>dapps/in/&lt;app&gt;</code></span>
+        </div>
+        <div class="field">
+            <label for="Destination">Destination callsign</label>
+            <input id="Destination" type="text" name="@nameof(ComposeModel.Form).@nameof(ComposeModel.ComposeForm.Destination)" value="@Model.Form.Destination" required placeholder="M0LTE-1" />
+            <span class="hint">includes optional SSID; case-insensitive, normalised to upper-case</span>
+        </div>
+        <div class="field">
+            <label for="Ttl">Residual TTL (seconds)</label>
+            <input id="Ttl" type="text" name="@nameof(ComposeModel.Form).@nameof(ComposeModel.ComposeForm.TtlSeconds)" value="@Model.Form.TtlSeconds" />
+            <span class="hint">empty = no expiry; each forwarding hop decrements by queue-dwell time and drops on zero</span>
+        </div>
+        <div class="field" style="grid-column: 1 / -1;">
+            <label for="Payload">Payload (UTF-8 text)</label>
+            <input id="Payload" type="text" name="@nameof(ComposeModel.Form).@nameof(ComposeModel.ComposeForm.Payload)" value="@Model.Form.Payload" />
+            <span class="hint">UTF-8 bytes go on the wire. For binary use the REST <code>/AppApi/outbound</code> endpoint.</span>
+        </div>
+    </div>
+    <div style="margin-top: 1rem; display: flex; gap: 0.5rem; justify-content: flex-end;">
+        <a class="btn ghost" href="/Messages?tab=outbound">View queue</a>
+        <button class="btn" type="submit">Submit ihave</button>
+    </div>
+</form>
+
+@if (Model.LastSubmittedId is not null)
+{
+    <div class="panel" style="margin-top: 1rem;">
+        <h3>Last submission</h3>
+        <p class="panel-sub">The forwarder will pick this up on its next 5-second tick.</p>
+        <div class="grid">
+            <div class="card">
+                <div class="label">Message id</div>
+                <div class="value mono"><code>@Model.LastSubmittedId</code></div>
+            </div>
+            <div class="card">
+                <div class="label">Bytes</div>
+                <div class="value">@Model.LastPayloadBytes</div>
+            </div>
+            <div class="card" style="grid-column: span 2;">
+                <div class="label">On-the-wire preview</div>
+                <div class="value mono" style="font-size: 0.95rem;">@Model.LastIhavePreview</div>
+            </div>
+        </div>
+    </div>
+}
