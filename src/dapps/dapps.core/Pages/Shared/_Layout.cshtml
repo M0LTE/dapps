@@ -788,6 +788,23 @@
             .topbar-actions a span.label { display: none; }
         }
     </style>
+    <script>
+        // --- Snapshot bus bootstrap ---
+        // Page-level scripts run BEFORE the topbar pull loop at the
+        // bottom of the layout (Razor renders RenderBody then the
+        // closing layout script), so any page that does
+        // `window.dappsOnSnap(apply)` would no-op against an undefined
+        // function. Defining the registration surface in <head>
+        // guarantees pages can register before the snap arrives.
+        window.__dappsSnap = null;
+        window.__dappsSnapListeners = [];
+        window.dappsOnSnap = function (fn) {
+            window.__dappsSnapListeners.push(fn);
+            if (window.__dappsSnap) {
+                try { fn(window.__dappsSnap); } catch (e) { console.error(e); }
+            }
+        };
+    </script>
 </head>
 <body>
     @if (hasShell)
@@ -942,12 +959,10 @@
             //     window.__dappsSnap for any page that wants the snapshot
             //     instead of polling itself. ---
             (function () {
-                window.__dappsSnap = null;
-                window.__dappsSnapListeners = [];
-                window.dappsOnSnap = function (fn) {
-                    window.__dappsSnapListeners.push(fn);
-                    if (window.__dappsSnap) try { fn(window.__dappsSnap); } catch (e) { console.error(e); }
-                };
+                // window.__dappsSnap, .__dappsSnapListeners, .dappsOnSnap
+                // are bootstrapped in <head> so page scripts (which run
+                // before this block, since they're emitted inside
+                // RenderBody) can register listeners reliably.
                 const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
                 const led = (chip, cls) => {
                     if (!chip) return;
