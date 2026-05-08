@@ -146,10 +146,30 @@ EOF
 start_service() {
     say "systemctl daemon-reload"
     systemctl daemon-reload
-    say "Enabling and starting dapps.service"
-    systemctl enable --now dapps.service
-    say "Enabling and starting dapps-updater.timer"
-    systemctl enable --now dapps-updater.timer
+
+    # `systemctl enable --now` starts a unit only if it's NOT already
+    # active, so on a re-run it'd leave the old PID running against the
+    # new on-disk binary - the operator sees the previous version on
+    # the dashboard until the next reboot. Detect already-active units
+    # and restart them explicitly.
+    if systemctl is-active --quiet dapps.service; then
+        say "Restarting dapps.service to pick up the new binary"
+        systemctl restart dapps.service
+    else
+        say "Enabling and starting dapps.service"
+        systemctl enable --now dapps.service
+    fi
+
+    if systemctl is-active --quiet dapps-updater.timer; then
+        # Timer doesn't carry the binary, but reload its definition in
+        # case the unit file changed (e.g. cadence tweak in a future
+        # install.sh).
+        say "Reloading dapps-updater.timer"
+        systemctl restart dapps-updater.timer
+    else
+        say "Enabling and starting dapps-updater.timer"
+        systemctl enable --now dapps-updater.timer
+    fi
 }
 
 # Block until the HTTP listener is actually accepting connections, so
