@@ -75,6 +75,13 @@
             --sidebar-w-collapsed: 64px;
         }
 
+        /* Tie the browser's color-scheme to the theme attribute so the
+           native UI (scrollbars, default form-control chrome) tracks
+           dark <-> light. Without this the meta-tag hint left
+           Chromium painting a dark scrollbar over the light theme. */
+        html[data-theme="dark"]  { color-scheme: dark; }
+        html[data-theme="light"] { color-scheme: light; }
+
         html[data-theme="light"] {
             --bg-0: #f4f6fb;
             --bg-1: #eef2f8;
@@ -615,7 +622,15 @@
             white-space: nowrap;
             transition: background 120ms, border-color 120ms, color 120ms;
         }
-        html[data-theme="dark"] .btn { color: #06121e; }
+        /* Primary .btn in dark mode: dark text on the bright accent
+           fill is the readable combination. Scoped via :not() so it
+           DOESN'T paint .btn.secondary / .btn.ghost / .btn.danger,
+           whose own rules below pick a contrasting colour against
+           their transparent / red backgrounds - without the :not()
+           the higher-specificity `html[data-theme] .btn` selector
+           overrode the variants and rendered "Inspect outbound" /
+           "Live arrivals" / etc. as dark-on-dark. */
+        html[data-theme="dark"] .btn:not(.secondary):not(.ghost):not(.danger) { color: #06121e; }
         .btn:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
         .btn:disabled, .btn[disabled] { opacity: 0.55; cursor: not-allowed; }
         .btn.secondary {
