@@ -1,0 +1,76 @@
+using AwesomeAssertions;
+using Microsoft.Playwright;
+
+namespace dapps.core.uitests;
+
+/// <summary>
+/// Overview page (/): hero status row, sparkline + decision ticker,
+/// queue summary, "needs attention" panel, and the quick-send form.
+/// </summary>
+[Collection(LoggedInUiCollection.Name)]
+public sealed class OverviewTests(LoggedInWebAppFixture app, PlaywrightFixture pw)
+{
+    [Fact]
+    public async Task Overview_Hero_Tiles_All_Render()
+    {
+        await using var ctx = await pw.Browser.NewLoggedInContextAsync(app);
+        var page = await ctx.NewPageAsync();
+        await page.GotoAsync(app.BaseUrl);
+
+        // Four hero tiles: node, MQTT, TX gate, build.
+        foreach (var id in new[] { "hero-node", "hero-mqtt", "hero-tx", "hero-update" })
+        {
+            (await page.Locator($"#{id}").CountAsync())
+                .Should().Be(1, $"#{id} hero tile is on the overview");
+        }
+
+        // Sparkline + ticker + the three queue/airtime panels.
+        (await page.Locator("#spark").CountAsync()).Should().Be(1);
+        (await page.Locator("#ticker").CountAsync()).Should().Be(1);
+        (await page.Locator("#alerts").CountAsync()).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Overview_Quick_Send_Submits_And_Banners_Success()
+    {
+        await using var ctx = await pw.Browser.NewLoggedInContextAsync(app);
+        var page = await ctx.NewPageAsync();
+        await page.GotoAsync(app.BaseUrl);
+
+        // The topbar carries its own form[method='post'] (the TX-stop
+        // killbutton), so target the in-page panel form by its visible
+        // submit-button text rather than a generic form selector.
+        await page.FillAsync("input#App", "uitest");
+        await page.FillAsync("input#Destination", "TEST-1");
+        await page.FillAsync("input#Payload", "hello from quick-send");
+        await page.ClickAsync("button[type='submit']:has-text('Submit to queue')");
+
+        await page.WaitForSelectorAsync(".ok-banner",
+            new PageWaitForSelectorOptions { Timeout = 5_000 });
+        var banner = await page.Locator(".ok-banner").InnerTextAsync();
+        banner.Should().Contain("Queued message",
+            "successful submission shows a Queued message <id> for <app>@<dest> banner");
+    }
+
+    [Fact]
+    public async Task Overview_Quick_Send_Validation_Shows_Error_Banner()
+    {
+        await using var ctx = await pw.Browser.NewLoggedInContextAsync(app);
+        var page = await ctx.NewPageAsync();
+        await page.GotoAsync(app.BaseUrl);
+
+        // The quick-send form has required attributes on all three
+        // fields, so to land on the server-side validation we have to
+        // bypass the required-attribute path. Submit via JS form.submit()
+        // to skip the browser's HTML5 validation gate. Target the
+        // in-page panel form specifically - the topbar TX-stop form is
+        // the first form[method='post'] in DOM order and would otherwise
+        // be the one we submit.
+        await page.EvaluateAsync(
+            "() => document.querySelector(\"form.panel[method='post']\").submit()");
+        await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+
+        (await page.Locator(".err-banner").CountAsync()).Should().Be(1,
+            "blank submit lands on the server-rendered error banner");
+    }
+}

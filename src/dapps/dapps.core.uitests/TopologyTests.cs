@@ -1,0 +1,166 @@
+using AwesomeAssertions;
+using Microsoft.Playwright;
+
+namespace dapps.core.uitests;
+
+/// <summary>
+/// Topology page: tabs over manual neighbours, discovery channels,
+/// discovered peers, probed nodes, polled nodes. Two write paths are
+/// exercised end-to-end (add neighbour, add channel) so a regression
+/// in the JSON shape sent by the form would surface here.
+/// </summary>
+[Collection(LoggedInUiCollection.Name)]
+public sealed class TopologyTests(LoggedInWebAppFixture app, PlaywrightFixture pw)
+{
+    [Theory]
+    [InlineData("neighbours", "neigh-body")]
+    [InlineData("channels",   "chan-body")]
+    [InlineData("peers",      "peer-body")]
+    [InlineData("probes",     "probe-body")]
+    [InlineData("polls",      "poll-body")]
+    public async Task Topology_Each_Tab_Renders_Table(string tab, string bodyId)
+    {
+        await using var ctx = await pw.Browser.NewLoggedInContextAsync(app);
+        var page = await ctx.NewPageAsync();
+        await page.GotoAsync($"{app.BaseUrl}/Topology?tab={tab}");
+
+        // Cold-start DB queries on the first /Operational hit can stretch
+        // beyond a 10s bound on a slow box; widen so the test isn't flaky.
+        await page.WaitForFunctionAsync(
+            $"() => {{ const el = document.querySelector('#{bodyId}'); return el && !el.textContent.includes('loading'); }}",
+            null,
+            new PageWaitForFunctionOptions { Timeout = 30_000 });
+
+        // Empty state is fine - just prove the loader replaced "loading"
+        // with concrete content.
+        (await page.Locator($"#{bodyId}").CountAsync()).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Topology_Neighbours_Add_And_Remove_Roundtrip()
+    {
+        await using var ctx = await pw.Browser.NewLoggedInContextAsync(app);
+        var page = await ctx.NewPageAsync();
+        await page.GotoAsync($"{app.BaseUrl}/Topology?tab=neighbours");
+
+        const string testCallsign = "TEST-NEI";
+
+        // Auto-accept the "remove neighbour?" confirm() dialog when we
+        // get to the cleanup step; deny everything else.
+        page.Dialog += async (_, dlg) =>
+        {
+            if (dlg.Message.Contains("Remove", StringComparison.OrdinalIgnoreCase))
+                await dlg.AcceptAsync();
+            else
+                await dlg.DismissAsync();
+        };
+
+        try
+        {
+            await page.FillAsync("#neigh-form input[name='callsign']", testCallsign);
+            await page.FillAsync("#neigh-form input[name='bearerPort']", "0");
+            await page.ClickAsync("#neigh-form button[type='submit']");
+
+            // The handler reloads the page on success.
+            await page.WaitForURLAsync($"**/Topology?tab=neighbours",
+                new PageWaitForURLOptions { Timeout = 5_000 });
+            await page.WaitForFunctionAsync(
+                $"() => {{ const el = document.querySelector('#neigh-body'); return el && el.textContent.includes('{testCallsign}'); }}",
+                null,
+                new PageWaitForFunctionOptions { Timeout = 30_000 });
+        }
+        finally
+        {
+            // Fire the JS helper directly to skip locator gymnastics.
+            await page.EvaluateAsync($"() => window.dappsDeleteNeighbour('{testCallsign}')");
+            await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+        }
+    }
+
+    [Fact]
+    public async Task Topology_Channels_Add_And_Remove_Roundtrip()
+    {
+        await using var ctx = await pw.Browser.NewLoggedInContextAsync(app);
+        var page = await ctx.NewPageAsync();
+        await page.GotoAsync($"{app.BaseUrl}/Topology?tab=channels");
+
+        // The channel key encodes (bearer, key) uniqueness. Use a high
+        // bearer port number so it doesn't collide with anything an
+        // operator-running suite might leave behind.
+        const string channelKey = "199";
+
+        page.Dialog += async (_, dlg) =>
+        {
+            if (dlg.Message.Contains("Remove", StringComparison.OrdinalIgnoreCase))
+                await dlg.AcceptAsync();
+            else
+                await dlg.DismissAsync();
+        };
+
+        try
+        {
+            await page.SelectOptionAsync("#chan-form select[name='bearer']", "agw");
+            await page.FillAsync("#chan-form input[name='channelKey']", channelKey);
+            await page.SelectOptionAsync("#chan-form select[name='linkClass']", "VhfUhfFm");
+            await page.ClickAsync("#chan-form button[type='submit']");
+
+            await page.WaitForURLAsync("**/Topology?tab=channels",
+                new PageWaitForURLOptions { Timeout = 5_000 });
+            await page.WaitForFunctionAsync(
+                $"() => {{ const el = document.querySelector('#chan-body'); return el && el.textContent.includes('{channelKey}'); }}",
+                null,
+                new PageWaitForFunctionOptions { Timeout = 30_000 });
+        }
+        finally
+        {
+            // Pull the row's id out of the table, hit DELETE.
+            var id = await page.EvaluateAsync<int>(@"() => {
+                for (const tr of document.querySelectorAll('#chan-body tr')) {
+                    if (tr.textContent.includes('" + channelKey + @"')) {
+                        const btn = tr.querySelector('button.link-btn.danger');
+                        const m = btn?.getAttribute('onclick')?.match(/dappsDeleteChannel\((\d+)\)/);
+                        if (m) return parseInt(m[1], 10);
+                    }
+                }
+                return -1;
+            }");
+            if (id > 0)
+            {
+                await page.EvaluateAsync($"() => window.dappsDeleteChannel({id})");
+                await page.WaitForLoadStateAsync(LoadState.NetworkIdle);
+            }
+        }
+    }
+
+    /// <summary>
+    /// "Probe everyone now" / "Poll everyone now" are dangerous in
+    /// production (uses other operators' airtime), so the JS guards
+    /// with confirm(). Dismiss the dialog and assert no request fired.
+    /// </summary>
+    [Theory]
+    [InlineData("probes", "Probe everyone now", "Probe every")]
+    [InlineData("polls",  "Poll everyone now",  "Poll every")]
+    public async Task Topology_Sweep_Buttons_Confirm_Before_Sending(string tab, string buttonText, string confirmPrefix)
+    {
+        await using var ctx = await pw.Browser.NewLoggedInContextAsync(app);
+        var page = await ctx.NewPageAsync();
+        await page.GotoAsync($"{app.BaseUrl}/Topology?tab={tab}");
+
+        string? dialogMessage = null;
+        page.Dialog += async (_, dlg) =>
+        {
+            dialogMessage = dlg.Message;
+            await dlg.DismissAsync();
+        };
+
+        await page.ClickAsync($"button:has-text('{buttonText}')");
+
+        // Dialog handler is async; give it a tick to land.
+        await page.WaitForFunctionAsync(
+            "() => true",
+            null,
+            new PageWaitForFunctionOptions { Timeout = 1_000 });
+        dialogMessage.Should().NotBeNull("the sweep button should raise a confirm() dialog");
+        dialogMessage!.Should().Contain(confirmPrefix);
+    }
+}

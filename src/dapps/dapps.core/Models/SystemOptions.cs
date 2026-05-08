@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using SQLite;
 
 namespace dapps.core.Models;
@@ -11,7 +12,12 @@ public class DbSystemOption
 }
 
 /// <summary>Plan B7 - probe-scheduler strategy. See
-/// <see cref="SystemOptions.ProbeStrategy"/>.</summary>
+/// <see cref="SystemOptions.ProbeStrategy"/>. Serialised as the enum
+/// name (e.g. <c>"Overnight"</c>) so the Settings form can POST the
+/// value the &lt;select&gt; control yields without a per-field int
+/// translation; without this, a string body fails validation and any
+/// /Config save (even unrelated fields like Callsign) returns 400.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum ProbeStrategy
 {
     /// <summary>Pre-B7 behaviour - sweep every
