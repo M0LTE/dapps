@@ -773,19 +773,119 @@
         }
 
         /* ========================================================
+           Hamburger button - hidden by default; only relevant on the
+           mobile breakpoint where the sidebar is replaced by a drawer.
+           ======================================================== */
+        .hamburger {
+            display: none;
+            background: transparent;
+            border: 1px solid var(--border-strong);
+            border-radius: var(--radius-sm);
+            color: var(--text);
+            padding: 0.4rem 0.5rem;
+            margin-right: 0.25rem;
+            cursor: pointer;
+            font: inherit;
+            line-height: 0;
+        }
+        .hamburger svg { width: 18px; height: 18px; display: block; }
+        .hamburger:hover { background: var(--surface); }
+        .sidebar-backdrop { display: none; }
+
+        /* ========================================================
            Responsive
            ======================================================== */
         @@media (max-width: 1100px) {
             .topbar-status .status-chip.optional { display: none; }
         }
         @@media (max-width: 880px) {
-            .sidebar { display: none; }
+            /* Mobile shell: collapse the sidebar into an off-canvas
+               drawer, surfaced via a hamburger button on the left of
+               the topbar. The drawer toggles `body.nav-open` which
+               slides the sidebar in and shows a tap-to-close backdrop. */
+            .hamburger { display: inline-flex; align-items: center; }
             main { padding: 1rem; }
+
+            /* Status chips collapse to a single inline LED + label so
+               the topbar stops forcing the page wider than the
+               viewport. The .lbl text reads as a small caps tag, the
+               .v reading is hidden. */
+            .topbar { padding: 0 0.75rem; gap: 0.5rem; }
+            .topbar .callsign-chip { font-size: 0.78rem; padding: 0.15rem 0.45rem; }
+            .topbar-status { gap: 0.35rem; flex-wrap: nowrap; margin-left: 0.25rem; }
+            .topbar-status .status-chip {
+                padding: 0.2rem 0.4rem;
+                font-size: 0.7rem;
+            }
+            .topbar-status .status-chip .v,
+            .topbar-status .status-chip .gauge { display: none; }
+
+            /* Drawer mechanics */
+            .sidebar {
+                position: fixed;
+                top: var(--topbar-h);
+                left: 0;
+                bottom: 0;
+                width: min(280px, 80vw);
+                height: auto;
+                z-index: 35;
+                transform: translateX(-100%);
+                transition: transform 200ms ease;
+                box-shadow: 8px 0 24px rgba(0,0,0,0.45);
+            }
+            body.nav-open .sidebar { transform: translateX(0); }
+            .sidebar-backdrop {
+                display: block;
+                position: fixed;
+                top: var(--topbar-h);
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(0,0,0,0.5);
+                opacity: 0;
+                pointer-events: none;
+                transition: opacity 200ms ease;
+                z-index: 34;
+            }
+            body.nav-open .sidebar-backdrop {
+                opacity: 1;
+                pointer-events: auto;
+            }
+
+            /* Wide tables: scroll *inside* their panel instead of
+               forcing the whole page to be wider than the viewport.
+               The table's own border-radius/overflow:hidden would clip
+               cells past 100% width, so on mobile we drop both and let
+               the panel be the scroll boundary. min-width:max-content
+               keeps the columns at their natural widths so nothing
+               wraps awkwardly inside a too-narrow cell. */
+            .panel { overflow-x: auto; }
+            .panel table {
+                overflow: visible;
+                border-radius: 0;
+                min-width: max-content;
+            }
+
+            /* Page-head actions - stack below the title rather than
+               crushing the buttons into a 0-width column. */
+            .page-head { flex-direction: column; align-items: stretch; }
+            .page-head .actions { margin-left: 0; }
+
+            /* Ghost button contrast - the default ghost border on dark
+               mode is barely visible against the panel background. */
+            .btn.ghost { border-color: var(--border); background: var(--surface-2); }
         }
         @@media (max-width: 720px) {
-            .topbar { padding: 0 0.85rem; gap: 0.5rem; }
-            .topbar .callsign-chip { font-size: 0.78rem; padding: 0.15rem 0.45rem; }
             .topbar-actions a span.label { display: none; }
+            /* Status chips reduce to LED-only - the operator has the
+               page's hero tile or the page's own surface for detail. */
+            .topbar-status .status-chip .lbl { display: none; }
+            .topbar-status .status-chip { padding: 0.3rem; }
+            /* Stop-TX button: keep it a one-line emergency affordance. */
+            .tx-killbtn { padding: 0.32rem 0.5rem; font-size: 0.7rem; }
+            .tx-killbtn .led { display: none; }
+            /* Theme toggle becomes label-less to save room. */
+            .theme-toggle .label { display: none; }
         }
     </style>
     <script>
@@ -824,6 +924,9 @@
             </div>
         }
         <header class="topbar">
+            <button type="button" class="hamburger" id="nav-toggle" aria-label="Open navigation" aria-controls="sidebar" aria-expanded="false">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" /></svg>
+            </button>
             <a class="brand" href="/" title="DAPPS overview">
                 <span class="brand-mark" aria-hidden="true"></span>
                 <span class="brand-name">DAPPS</span>
@@ -873,6 +976,7 @@
             </div>
         </header>
         <div class="shell">
+            <div class="sidebar-backdrop" id="sidebar-backdrop" aria-hidden="true"></div>
             <aside class="sidebar" id="sidebar">
                 <div class="nav-group">
                     <div class="nav-section">Operate</div>
@@ -934,6 +1038,34 @@
         </div>
 
         <script>
+            // --- Mobile nav drawer ---
+            // Below the 880px breakpoint the sidebar is offscreen by
+            // default and slides in when body.nav-open is set. Tapping
+            // the backdrop or any nav link closes it. The button's
+            // aria-expanded mirrors the state for screen readers.
+            (function () {
+                const btn = document.getElementById('nav-toggle');
+                const backdrop = document.getElementById('sidebar-backdrop');
+                const sidebar = document.getElementById('sidebar');
+                const setOpen = (open) => {
+                    document.body.classList.toggle('nav-open', open);
+                    if (btn) btn.setAttribute('aria-expanded', String(!!open));
+                };
+                if (btn) btn.addEventListener('click', () =>
+                    setOpen(!document.body.classList.contains('nav-open')));
+                if (backdrop) backdrop.addEventListener('click', () => setOpen(false));
+                if (sidebar) {
+                    for (const a of sidebar.querySelectorAll('a.nav-link')) {
+                        a.addEventListener('click', () => setOpen(false));
+                    }
+                }
+                // Auto-close if the viewport grows past the mobile
+                // breakpoint (e.g. a phone rotated to landscape).
+                window.addEventListener('resize', () => {
+                    if (window.matchMedia('(min-width: 881px)').matches) setOpen(false);
+                });
+            })();
+
             // --- Theme toggle ---
             (function () {
                 const btn = document.getElementById('theme-toggle');
