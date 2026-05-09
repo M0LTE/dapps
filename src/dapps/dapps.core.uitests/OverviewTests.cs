@@ -130,6 +130,35 @@ public sealed class OverviewTests(LoggedInWebAppFixture app, PlaywrightFixture p
         msg.Should().Contain("AGW socket connected", "the summary text should render alongside the kind");
     }
 
+    /// <summary>
+    /// The Outbound queue / Local inbox / Discovery airtime panels
+    /// share a row in .grid-3 and should have equal heights so the
+    /// row reads as one visual unit. The default browser grid stretch
+    /// wasn't applying in practice (different intrinsic content
+    /// heights per panel); the explicit `height: 100%; display: flex`
+    /// rule on grid-3 children makes them line up.
+    /// </summary>
+    [Fact]
+    public async Task Overview_Queue_Summary_Panels_Have_Equal_Height()
+    {
+        await using var ctx = await pw.Browser.NewLoggedInContextAsync(app,
+            new BrowserNewContextOptions { ViewportSize = new ViewportSize { Width = 1280, Height = 900 } });
+        var page = await ctx.NewPageAsync();
+        await page.GotoAsync(app.BaseUrl);
+        await page.WaitForTimeoutAsync(800); // let the snapshot land + the JS render the panels
+
+        var heights = await page.EvaluateAsync<double[]>(@"() =>
+            Array.from(document.querySelectorAll('.grid-3 > .panel'))
+                .map(p => p.getBoundingClientRect().height)");
+
+        heights.Should().HaveCountGreaterThanOrEqualTo(3,
+            "the queue summary row exposes outbound / inbox / airtime panels");
+        var min = heights.Min();
+        var max = heights.Max();
+        (max - min).Should().BeLessThan(2.0,
+            $"all panels in the same .grid-3 row should be equal height; saw {string.Join(", ", heights)}");
+    }
+
     [Fact]
     public async Task Overview_Quick_Send_Validation_Shows_Error_Banner()
     {

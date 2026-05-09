@@ -370,6 +370,84 @@ public sealed class UpdateTests(LoggedInWebAppFixture app, PlaywrightFixture pw)
             .Should().BeFalse("re-checking GitHub is pointless during a swap; hide the link");
     }
 
+    /// <summary>
+    /// After an apply lands successfully the operator's open page is
+    /// serving stale assets (HTML + cshtml-emitted JS were rendered by
+    /// the previous binary). The layout's pull loop tracks the
+    /// previous phase across snaps and schedules a hard refresh when
+    /// the phase transitions from any non-Success state to Success.
+    /// </summary>
+    [Fact]
+    public async Task Apply_Update_Success_Transition_Schedules_Hard_Refresh()
+    {
+        await using var ctx = await pw.Browser.NewLoggedInContextAsync(app);
+        var page = await ctx.NewPageAsync();
+
+        // First snap: Verifying. Subsequent snap: Success. The route
+        // handler tracks call count so the second pull() returns the
+        // transitioned state.
+        var calls = 0;
+        await page.RouteAsync("**/Operational*", async route =>
+        {
+            calls++;
+            var phase = calls == 1 ? "Verifying" : "Success";
+            var fields = new UpdateFields(
+                Current: calls == 1 ? CurrentVersion : LatestVersion,
+                IsDevBuild: false, IsAvailable: false,
+                Latest: LatestVersion, RequestPending: calls == 1,
+                Phase: phase, FromVersion: CurrentVersion, ToVersion: LatestVersion);
+            var json = BuildSnapJson(fields);
+            await route.FulfillAsync(new RouteFulfillOptions
+            {
+                ContentType = "application/json",
+                Body = json,
+            });
+        });
+
+        await page.GotoAsync(app.BaseUrl);
+        // First pull lands -> phase=Verifying recorded.
+        await page.WaitForFunctionAsync(
+            "() => window.__dappsLastSeenPhase === 'Verifying'",
+            null,
+            new PageWaitForFunctionOptions { Timeout = 10_000 });
+
+        // Force the next pull -> phase=Success transition triggers the
+        // refresh-schedule flag.
+        await page.EvaluateAsync("() => window.dappsRefreshSnap()");
+        await page.WaitForFunctionAsync(
+            "() => window.__dappsReloadScheduled === true",
+            null,
+            new PageWaitForFunctionOptions { Timeout = 10_000 });
+    }
+
+    [Fact]
+    public async Task Apply_Update_Success_On_First_Load_Does_Not_Auto_Refresh()
+    {
+        await using var ctx = await pw.Browser.NewLoggedInContextAsync(app);
+        var page = await ctx.NewPageAsync();
+
+        // Stub the snap with phase=Success on the very first response.
+        // This mimics an operator opening a tab on a node that updated
+        // some time ago - we should NOT auto-refresh because they
+        // didn't witness a transition. The guard keys on
+        // __dappsLastSeenPhase being a non-Success value, which it
+        // isn't on cold load.
+        await StubOperationalAsync(page,
+            new UpdateFields(LatestVersion, IsDevBuild: false, IsAvailable: false,
+                Phase: "Success", FromVersion: CurrentVersion, ToVersion: LatestVersion));
+
+        await page.GotoAsync(app.BaseUrl);
+        await page.WaitForFunctionAsync(
+            "() => window.__dappsLastSeenPhase === 'Success'",
+            null,
+            new PageWaitForFunctionOptions { Timeout = 10_000 });
+
+        var scheduled = await page.EvaluateAsync<bool>(
+            "() => window.__dappsReloadScheduled === true");
+        scheduled.Should().BeFalse(
+            "no auto-refresh on cold-load when phase is already Success");
+    }
+
     [Fact]
     public async Task Topbar_Build_Chip_Mirrors_InFlight_Phase()
     {
@@ -452,6 +530,23 @@ public sealed class UpdateTests(LoggedInWebAppFixture app, PlaywrightFixture pw)
     /// </summary>
     private static Task StubOperationalAsync(IPage page, UpdateFields fields)
     {
+        var json = BuildSnapJson(fields);
+        return page.RouteAsync("**/Operational*", async route =>
+        {
+            await route.FulfillAsync(new RouteFulfillOptions
+            {
+                ContentType = "application/json",
+                Body = json,
+            });
+        });
+    }
+
+    /// <summary>Build the minimal-but-complete /Operational JSON for a
+    /// given <see cref="UpdateFields"/> shape. Extracted so dynamic-
+    /// per-call route handlers (e.g. the apply-success transition test)
+    /// can rebuild the body on each tick.</summary>
+    private static string BuildSnapJson(UpdateFields fields)
+    {
         var snap = new
         {
             callsign = LoggedInWebAppFixture.Callsign,
@@ -522,15 +617,7 @@ public sealed class UpdateTests(LoggedInWebAppFixture app, PlaywrightFixture pw)
                 },
             },
         };
-        var json = JsonSerializer.Serialize(snap);
-        return page.RouteAsync("**/Operational*", async route =>
-        {
-            await route.FulfillAsync(new RouteFulfillOptions
-            {
-                ContentType = "application/json",
-                Body = json,
-            });
-        });
+        return JsonSerializer.Serialize(snap);
     }
 
     /// <summary>Wait for the topbar build chip's value text to land on

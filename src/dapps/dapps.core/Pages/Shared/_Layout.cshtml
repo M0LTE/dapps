@@ -413,6 +413,22 @@
         .grid-2 { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
         .grid-3 { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
 
+        /* Equal-height panels in grid-2/grid-3 rows. Default
+           `align-items: stretch` should already handle this, but in
+           practice browsers leave the panels at their intrinsic
+           content-driven heights here - probably because the inner
+           cards size against max-content. Pinning height: 100% +
+           flex-direction: column makes the panels fill the row, and
+           pushing direct-child .card-actions to margin-top: auto
+           pins the action row to the bottom so the visible content
+           shape lines up across cells. (Discovery airtime's
+           card-actions is *inside* its inner .card, so this rule
+           leaves it untouched - exactly what we want.) */
+        .grid-2 > .panel,
+        .grid-3 > .panel { height: 100%; display: flex; flex-direction: column; }
+        .grid-2 > .panel > .card-actions,
+        .grid-3 > .panel > .card-actions { margin-top: auto; }
+
         .card {
             background: var(--surface);
             border: 1px solid var(--border);
@@ -1194,6 +1210,29 @@
                             set('ts-version-v', `v${s.version}`);
                             led(tsVer, null);
                         }
+
+                        // Hard-refresh on apply-update Success
+                        // transition. We track the previous phase
+                        // across snaps; when it flips from any non-
+                        // Success state to Success the operator just
+                        // witnessed an update land, and the page they
+                        // have open is now serving stale assets from
+                        // the previous binary. Reload after a 2s grace
+                        // so they get a beat to see the green
+                        // "updated" state before the page swaps.
+                        // (We never reload if the previous phase was
+                        // null or already Success - that'd auto-refresh
+                        // every page load on a node that had recently
+                        // updated, which is wrong.)
+                        const newPhase = upd?.lastRun?.phase ?? null;
+                        if (newPhase === 'Success'
+                            && window.__dappsLastSeenPhase
+                            && window.__dappsLastSeenPhase !== 'Success'
+                            && !window.__dappsReloadScheduled) {
+                            window.__dappsReloadScheduled = true;
+                            setTimeout(() => location.reload(), 2000);
+                        }
+                        window.__dappsLastSeenPhase = newPhase;
 
                         for (const fn of window.__dappsSnapListeners) {
                             try { fn(s); } catch (e) { console.error(e); }
