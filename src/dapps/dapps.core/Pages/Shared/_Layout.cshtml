@@ -717,7 +717,16 @@
             padding: 1rem 1.1rem;
             box-shadow: var(--shadow-sm);
         }
+        /* Stacked-panel spacing for vertically-flowing layouts (e.g.
+           the Settings form). MUST be excluded inside grid containers
+           where the grid's own gap already handles spacing - leaving
+           the sibling-margin rule active there shifts the 2nd and 3rd
+           grid items down by 1rem each, breaking row alignment with
+           the unmoved 1st item. */
         .panel + .panel { margin-top: 1rem; }
+        .grid > .panel + .panel,
+        .grid-2 > .panel + .panel,
+        .grid-3 > .panel + .panel { margin-top: 0; }
         .panel h3 { margin: 0 0 0.5rem; font-size: 1rem; font-weight: 600; }
         .panel .panel-sub { font-size: 0.85rem; color: var(--text-muted); margin: 0 0 1rem; line-height: 1.45; }
 
