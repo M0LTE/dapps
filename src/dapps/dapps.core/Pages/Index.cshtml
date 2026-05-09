@@ -84,8 +84,9 @@
             <span class="pill" id="hero-update-pill">-</span>
         </div>
         <div class="v" id="hero-update-v">checking</div>
-        <div class="sub" id="hero-update-sub">
+        <div class="sub" id="hero-update-sub" style="display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: baseline;">
             <a href="#" id="hero-update-action" class="link-btn" style="display:none;">Apply update</a>
+            <a href="#" id="hero-update-check" class="link-btn">Check now</a>
             <span id="hero-update-meta" class="muted">checking GitHub</span>
         </div>
     </div>
@@ -379,6 +380,7 @@
             const updLed = document.getElementById('hero-update-led');
             const updPill = document.getElementById('hero-update-pill');
             const updAction = document.getElementById('hero-update-action');
+            const updCheck = document.getElementById('hero-update-check');
             const setPill = (cls, text) => {
                 updLed.classList.remove('on','warn','err');
                 updLed.classList.add(cls);
@@ -490,6 +492,44 @@
                         // Force a snap refresh so requestPending=true
                         // flips quickly without waiting for the 5s tick.
                         await window.dappsRefreshSnap?.();
+                    };
+                }
+
+                // "Check now" link: visible whenever the operator
+                // could meaningfully act on the result (i.e. *not* in
+                // the middle of an apply, since polling GitHub during
+                // the swap is pointless and the meta line is already
+                // narrating the phase). Show in all other states,
+                // including dev-build, current, available, and the
+                // failed/rolled-back terminals.
+                if (updCheck) {
+                    const inFlightOrQueued = upd.requestPending || isInFlight(phase);
+                    updCheck.style.display = inFlightOrQueued ? 'none' : '';
+                    updCheck.onclick = async (ev) => {
+                        ev.preventDefault();
+                        // Repaint the meta line so the operator sees
+                        // their click registered, regardless of the
+                        // /Update/check round-trip latency.
+                        const previousMeta = document.getElementById('hero-update-meta')?.textContent ?? '';
+                        set('hero-update-meta', 'checking GitHub...');
+                        updCheck.style.display = 'none';
+                        try {
+                            const res = await fetch('/Update/check', { method: 'POST' });
+                            if (!res.ok) {
+                                set('hero-update-meta', `check failed: HTTP ${res.status}`);
+                                updCheck.style.display = '';
+                                return;
+                            }
+                            // The /Update/check response is the full
+                            // status, but the next snap will repaint
+                            // the tile from /Operational anyway -
+                            // skip the manual rendering and just nudge
+                            // the snap forward.
+                            await window.dappsRefreshSnap?.();
+                        } catch (e) {
+                            set('hero-update-meta', `check failed: ${e.message ?? e}`);
+                            updCheck.style.display = '';
+                        }
                     };
                 }
             }

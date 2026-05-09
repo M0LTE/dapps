@@ -315,6 +315,61 @@ public sealed class UpdateTests(LoggedInWebAppFixture app, PlaywrightFixture pw)
             .Should().BeFalse("apply link hides as soon as the request is in flight");
     }
 
+    /// <summary>
+    /// "Check now" link on the Overview hero update tile triggers
+    /// POST /Update/check (the manual GitHub re-poll). The operator's
+    /// expected entry-point for "is there a new version?" rather
+    /// than navigating to Settings -> Updates.
+    /// </summary>
+    [Fact]
+    public async Task Hero_Update_Check_Now_Posts_Update_Check()
+    {
+        await using var ctx = await pw.Browser.NewLoggedInContextAsync(app);
+        var page = await ctx.NewPageAsync();
+        await StubOperationalAsync(page,
+            new UpdateFields(CurrentVersion, IsDevBuild: false, IsAvailable: false));
+
+        var stubBody = """
+        {"current":"0.33.7","isDevBuild":false,"latest":null,"releaseUrl":null,"isAvailable":false,"fetchedAt":"2026-05-09T00:00:00Z","requestPending":false,"lastRun":null}
+        """;
+        await page.RouteAsync("**/Update/check", async route =>
+        {
+            await route.FulfillAsync(new RouteFulfillOptions
+            {
+                Status = 200,
+                ContentType = "application/json",
+                Body = stubBody,
+            });
+        });
+
+        await page.GotoAsync(app.BaseUrl);
+        await WaitTextAsync(page, "#hero-update-pill", "current");
+        (await page.Locator("#hero-update-check").IsVisibleAsync())
+            .Should().BeTrue("Check now link should be visible in the up-to-date state");
+
+        var requestTask = page.WaitForRequestAsync(
+            req => req.Url.EndsWith("/Update/check", StringComparison.Ordinal) && req.Method == "POST",
+            new PageWaitForRequestOptions { Timeout = 5_000 });
+        await page.ClickAsync("#hero-update-check");
+        await requestTask;
+    }
+
+    [Fact]
+    public async Task Hero_Update_Check_Now_Hidden_While_Apply_In_Flight()
+    {
+        await using var ctx = await pw.Browser.NewLoggedInContextAsync(app);
+        var page = await ctx.NewPageAsync();
+        await StubOperationalAsync(page,
+            new UpdateFields(CurrentVersion, IsDevBuild: false, IsAvailable: true,
+                Latest: LatestVersion, RequestPending: true,
+                Phase: "Downloading", FromVersion: CurrentVersion, ToVersion: LatestVersion));
+
+        await page.GotoAsync(app.BaseUrl);
+        await WaitTextAsync(page, "#hero-update-pill", "applying");
+        (await page.Locator("#hero-update-check").IsVisibleAsync())
+            .Should().BeFalse("re-checking GitHub is pointless during a swap; hide the link");
+    }
+
     [Fact]
     public async Task Topbar_Build_Chip_Mirrors_InFlight_Phase()
     {
