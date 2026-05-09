@@ -23,7 +23,13 @@
         <p class="panel-sub">Callsigns this node will forward through. Re-POSTing the same callsign updates it. Connect-script lets you reach a peer through a chain of intermediate non-DAPPS nodes (one <code>send|expect</code> step per line, final expect must contain <code>DAPPSv1&gt;</code>).</p>
         <form id="neigh-form" class="row-form" onsubmit="dappsAddNeighbour(event)" style="margin-bottom: 1rem;">
             <div class="field"><label>Callsign</label><input name="callsign" placeholder="GB7XYZ" required /></div>
-            <div class="field"><label>Bearer port</label><input name="bearerPort" type="number" min="0" max="255" placeholder="(default)" /></div>
+            <div class="field" data-port-picker="bearerPort">
+                <label>Radio port</label>
+                <select name="bearerPort">
+                    <option value="">(default - port 0)</option>
+                </select>
+                <span class="hint" data-port-picker-hint>loading from BPQ...</span>
+            </div>
             <div class="field"><label>UDP endpoint (optional)</label><input name="udpEndpoint" placeholder="host:port" /></div>
             <div class="field" style="grid-column: 1 / -1;">
                 <label>Connect script (optional)</label>
@@ -34,7 +40,7 @@
         </form>
         <table>
             <thead>
-                <tr><th>Callsign</th><th class="numeric">Port</th><th>UDP</th><th>Script</th><th></th></tr>
+                <tr><th>Callsign</th><th>Port</th><th>UDP</th><th>Script</th><th></th></tr>
             </thead>
             <tbody id="neigh-body"><tr><td colspan="5" class="muted" style="text-align:center;">loading</td></tr></tbody>
         </table>
@@ -52,7 +58,14 @@ else if (tab == "channels")
                     <option value="udp">udp</option>
                 </select>
             </div>
-            <div class="field"><label>Channel key</label><input name="channelKey" required placeholder="0 or 239.0.0.1:54321" /></div>
+            <div class="field" id="chan-channelKey-field">
+                <label>Channel key</label>
+                <!-- Replaced on page load + on bearer-dropdown change.
+                     For AGW: a <select> populated from /Bearer/agw/ports.
+                     For UDP: a free-text <input> for the multicast addr. -->
+                <div id="chan-channelKey-control"></div>
+                <span class="hint" id="chan-channelKey-hint"></span>
+            </div>
             <div class="field"><label>Link class</label>
                 <select name="linkClass">
                     <option>VhfUhfFm</option>
@@ -153,6 +166,35 @@ else
 
     function setCount(id, n) { const el = document.getElementById(id); if (el) el.textContent = n; }
 
+    // -- Shared AGW port query --
+    // Cached for the lifetime of the page so the neighbour form and
+    // the channel form share one round-trip to BPQ instead of two.
+    // Returns { ports: [{index, description}, ...] } on success, or
+    // { error: '...' } when /Bearer/agw/ports answers !ok or throws.
+    let __dappsAgwPortsPromise = null;
+    function loadAgwPorts(force = false) {
+        if (force || __dappsAgwPortsPromise == null) {
+            __dappsAgwPortsPromise = (async () => {
+                try {
+                    const res = await fetch('/Bearer/agw/ports', { credentials: 'same-origin' });
+                    if (!res.ok) return { error: (await res.text()) || `HTTP ${res.status}` };
+                    const ports = await res.json();
+                    // Expose an index->description map so the
+                    // neighbours/channels tables can show "Port 0 (VHF
+                    // FM 1200)" instead of just "0".
+                    const map = {};
+                    for (const p of ports) map[p.index] = p.description;
+                    window.__dappsAgwPortMap = map;
+                    return { ports };
+                } catch (e) { return { error: e.message ?? String(e) }; }
+            })();
+        }
+        return __dappsAgwPortsPromise;
+    }
+    // Kick off the port query early so the snap-driven table renders
+    // can already see __dappsAgwPortMap on first paint.
+    loadAgwPorts();
+
     async function dappsPostJson(url, body, method) {
         const res = await fetch(url, {
             method: method || 'POST',
@@ -240,6 +282,75 @@ else
         if (await dappsPostJson('/Polls/' + callsign, null, 'DELETE')) await window.dappsRefreshSnap?.();
     };
 
+    // -- Port-picker bootstraps for the per-tab forms --
+    if (tab === 'neighbours') {
+        // Replace the "(default - port 0)" placeholder with the real
+        // BPQ port list. Falls back gracefully if AGW isn't available
+        // (e.g. RHPv2 bearer): we surface the error in the hint and
+        // swap the <select> for a free-text port-number input so the
+        // operator isn't stuck.
+        (async () => {
+            const wrap = document.querySelector('#neigh-form [data-port-picker="bearerPort"]');
+            if (!wrap) return;
+            const select = wrap.querySelector('select');
+            const hint = wrap.querySelector('[data-port-picker-hint]');
+            const r = await loadAgwPorts();
+            if (r.error) {
+                wrap.innerHTML = `<label>Radio port</label>
+                    <input name="bearerPort" type="number" min="0" max="255" placeholder="0" />
+                    <span class="hint">couldn't query BPQ: ${escape(r.error)}. Type a 0-indexed port number.</span>`;
+                return;
+            }
+            for (const p of r.ports) {
+                const opt = document.createElement('option');
+                opt.value = String(p.index);
+                opt.textContent = `Port ${p.index} - ${p.description}`;
+                select.appendChild(opt);
+            }
+            hint.textContent = `${r.ports.length} port${r.ports.length === 1 ? '' : 's'} from BPQ. Leave at default to inherit port 0.`;
+        })();
+    }
+
+    if (tab === 'channels') {
+        // Channel key changes shape with the bearer dropdown:
+        //   AGW -> dropdown of BPQ-advertised radio ports
+        //   UDP -> free-text input for the multicast addr (host:port)
+        // Re-renders the inner control on every bearer change so the
+        // form always submits a sensibly-shaped channelKey value.
+        (async () => {
+            const bearerSel = document.querySelector('#chan-form select[name="bearer"]');
+            const wrap = document.getElementById('chan-channelKey-control');
+            const hint = document.getElementById('chan-channelKey-hint');
+            if (!bearerSel || !wrap || !hint) return;
+
+            async function render() {
+                const bearer = (bearerSel.value || 'agw').toLowerCase();
+                if (bearer === 'udp') {
+                    wrap.innerHTML = `<input name="channelKey" required placeholder="239.0.0.1:54321" />`;
+                    hint.textContent = 'multicast IP and port for the UDP backhaul';
+                    return;
+                }
+                // AGW path - show port dropdown.
+                const r = await loadAgwPorts();
+                if (r.error) {
+                    wrap.innerHTML = `<input name="channelKey" type="number" min="0" max="255" required placeholder="0" />`;
+                    hint.textContent = `couldn't query BPQ: ${r.error}. Type a 0-indexed port number.`;
+                    return;
+                }
+                const opts = r.ports.map(p =>
+                    `<option value="${p.index}">Port ${p.index} - ${escape(p.description)}</option>`).join('');
+                wrap.innerHTML = `<select name="channelKey" required>
+                    <option value="">(pick a port)</option>
+                    ${opts}
+                </select>`;
+                hint.textContent = `${r.ports.length} port${r.ports.length === 1 ? '' : 's'} from BPQ`;
+            }
+
+            bearerSel.addEventListener('change', render);
+            render();
+        })();
+    }
+
     function apply(s) {
         const t = s.tables ?? {};
         setCount('cnt-neigh', (t.neighbours || []).length);
@@ -251,12 +362,21 @@ else
         if (tab === 'neighbours') {
             const body = document.getElementById('neigh-body');
             const ns = t.neighbours || [];
+            // Resolve port descriptions if BPQ's port list has loaded;
+            // otherwise just show the index. Best-effort - the table
+            // refreshes every snap so a later resolve will pick up.
+            const portMap = window.__dappsAgwPortMap || {};
+            const fmtPort = (idx) => {
+                if (idx == null) return '<span class="muted">default</span>';
+                const desc = portMap[idx];
+                return desc ? `${idx} <span class="muted">(${escape(desc)})</span>` : String(idx);
+            };
             if (!ns.length) {
                 body.innerHTML = '<tr><td colspan="5" class="empty" style="text-align:center;">No neighbours yet. Add one above.</td></tr>';
             } else {
                 body.innerHTML = ns.map(n => `<tr>
                     <td><code>${escape(n.callsign)}</code></td>
-                    <td class="numeric">${n.bearerPort != null ? n.bearerPort : '<span class="muted">default</span>'}</td>
+                    <td>${fmtPort(n.bearerPort)}</td>
                     <td>${n.udpEndpoint ? '<code>' + escape(n.udpEndpoint) + '</code>' : '<span class="muted">-</span>'}</td>
                     <td>${n.connectScriptJson ? 'script' : '<span class="muted">-</span>'}</td>
                     <td><div class="actions">
@@ -270,12 +390,23 @@ else
         if (tab === 'channels') {
             const body = document.getElementById('chan-body');
             const cs = t.discoveryChannels || [];
+            // For AGW channels the channelKey is a 0-indexed port
+            // number; resolve the human description so the row reads
+            // "0 (VHF FM 1200 baud)" instead of just "0". UDP rows
+            // (multicast addr) keep their key verbatim.
+            const portMap = window.__dappsAgwPortMap || {};
+            const fmtKey = (c) => {
+                if (c.bearer === 'agw' && portMap[c.channelKey]) {
+                    return `<code>${escape(c.channelKey)}</code> <span class="muted">(${escape(portMap[c.channelKey])})</span>`;
+                }
+                return `<code>${escape(c.channelKey)}</code>`;
+            };
             if (!cs.length) {
                 body.innerHTML = '<tr><td colspan="10" class="empty" style="text-align:center;">No discovery channels yet. Add one above.</td></tr>';
             } else {
                 body.innerHTML = cs.map(c => `<tr>
                     <td>${escape(c.bearer)}</td>
-                    <td><code>${escape(c.channelKey)}</code></td>
+                    <td>${fmtKey(c)}</td>
                     <td>${escape(c.linkClass)}</td>
                     <td class="numeric">${c.costHint}</td>
                     <td class="numeric">${c.beaconIntervalSeconds}s</td>

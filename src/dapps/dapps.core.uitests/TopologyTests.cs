@@ -133,6 +133,33 @@ public sealed class TopologyTests(LoggedInWebAppFixture app, PlaywrightFixture p
     }
 
     /// <summary>
+    /// AGW port-query picker: when /Bearer/agw/ports answers !ok (e.g.
+    /// because BPQ isn't reachable - which is the test fixture's
+    /// state), the JS swaps the &lt;select&gt; for a free-text input
+    /// so the operator isn't stuck. Asserts both halves of that
+    /// fallback - a name="bearerPort" input lands and an explanatory
+    /// hint surfaces.
+    /// </summary>
+    [Fact]
+    public async Task Topology_Neighbours_Port_Picker_Falls_Back_To_Free_Text_When_Bpq_Unreachable()
+    {
+        await using var ctx = await pw.Browser.NewLoggedInContextAsync(app);
+        var page = await ctx.NewPageAsync();
+        await page.GotoAsync($"{app.BaseUrl}/Topology?tab=neighbours");
+
+        // Wait for the JS to hit /Bearer/agw/ports, see the 503, and
+        // swap in the fallback input.
+        await page.WaitForFunctionAsync(
+            "() => document.querySelector('#neigh-form input[name=\"bearerPort\"]') != null",
+            null,
+            new PageWaitForFunctionOptions { Timeout = 10_000 });
+
+        var hint = await page.Locator("#neigh-form [data-port-picker='bearerPort'] .hint, #neigh-form .hint:has-text('couldn')").AllInnerTextsAsync();
+        hint.Should().Contain(t => t.Contains("couldn't query BPQ"),
+            "the hint should explain why we fell back to a text input");
+    }
+
+    /// <summary>
     /// "Probe everyone now" / "Poll everyone now" are dangerous in
     /// production (uses other operators' airtime), so the JS guards
     /// with confirm(). Dismiss the dialog and assert no request fired.

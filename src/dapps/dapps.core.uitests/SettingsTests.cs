@@ -133,7 +133,6 @@ public sealed class SettingsTests(LoggedInWebAppFixture app, PlaywrightFixture p
         // AGW selected on first paint (the fixture's setup picked agw).
         await page.SelectOptionAsync("select[name='NodeBearer']", "agw");
         (await page.Locator("input[name='AgwPort']").IsVisibleAsync()).Should().BeTrue();
-        (await page.Locator("input[name='DefaultBearerPort']").IsVisibleAsync()).Should().BeTrue();
         (await page.Locator("input[name='RhpPort']").IsVisibleAsync()).Should().BeFalse();
         (await page.Locator("input[name='RhpUser']").IsVisibleAsync()).Should().BeFalse();
         (await page.Locator("input[name='RhpPass']").IsVisibleAsync()).Should().BeFalse();
@@ -141,7 +140,6 @@ public sealed class SettingsTests(LoggedInWebAppFixture app, PlaywrightFixture p
         // Flip to RHPv2: AGW-specific fields hide; RHPv2 fields surface.
         await page.SelectOptionAsync("select[name='NodeBearer']", "rhpv2");
         (await page.Locator("input[name='AgwPort']").IsVisibleAsync()).Should().BeFalse();
-        (await page.Locator("input[name='DefaultBearerPort']").IsVisibleAsync()).Should().BeFalse();
         (await page.Locator("input[name='RhpPort']").IsVisibleAsync()).Should().BeTrue();
         (await page.Locator("input[name='RhpUser']").IsVisibleAsync()).Should().BeTrue();
         (await page.Locator("input[name='RhpPass']").IsVisibleAsync()).Should().BeTrue();

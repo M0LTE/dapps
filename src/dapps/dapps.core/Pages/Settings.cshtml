@@ -21,7 +21,7 @@
     }
 </style>
 
-<form id="settings-form" onsubmit="dappsSaveConfig(event)" autocomplete="off">
+<form id="settings-form" onsubmit="dappsSaveConfig(event)" autocomplete="off" data-default-bearer-port="@Model.Options.DefaultBearerPort">
     <div class="panel">
         <h3>Identity &amp; packet-node bearer</h3>
         <p class="panel-sub">How DAPPS identifies itself and which packet node it rides on. Bearer port changes are picked up on the next forwarder tick (no restart).</p>
@@ -50,8 +50,12 @@
                        autocomplete="off" data-form-type="other" data-1p-ignore="true" data-lpignore="true"
                        class="masked" />
                 <span class="hint">stored on this node, not a sysop credential</span></div>
-            <div class="field" data-bearer="agw"><label>Default radio port number</label><input name="DefaultBearerPort" type="number" min="0" max="255" value="@Model.Options.DefaultBearerPort" required />
-                <span class="hint">Which BPQ radio port (RF channel) outbound DAPPS connections leave on by default - matches BPQ's <code>PORT</code> numbering minus 1, so BPQ <code>PORT 1</code> = <code>0</code> here. Per-neighbour overrides live in Topology - Neighbours.</span></div>
+            <!-- DefaultBearerPort retired from the UI: with per-
+                 neighbour radio-port assignment (now picked from a
+                 BPQ-supplied dropdown in Topology -> Neighbours) the
+                 global default added more confusion than value. The
+                 model field stays in SystemOptions for back-compat
+                 with stored configs and is preserved on save below. -->
         </div>
     </div>
 
@@ -178,7 +182,12 @@ async function dappsSaveConfig(ev) {
         RhpPort: parseInt(f.RhpPort.value, 10),
         RhpUser: f.RhpUser.value,
         RhpPass: f.RhpPass.value,
-        DefaultBearerPort: parseInt(f.DefaultBearerPort.value, 10),
+        // DefaultBearerPort is no longer exposed on this form (Topology
+        // -> Neighbours has a per-row port picker that supersedes it).
+        // Send the existing persisted value back so we don't zero it
+        // out on save - rendered server-side into the form's data
+        // attribute on first paint.
+        DefaultBearerPort: parseInt(f.dataset.defaultBearerPort ?? '0', 10),
         MqttPort: parseInt(f.MqttPort.value, 10),
         UdpListenPort: parseInt(f.UdpListenPort.value, 10),
         AuthRequired: f.AuthRequired.checked,

@@ -44,6 +44,17 @@ public sealed class AgwInboundService(
 {
     private static readonly TimeSpan ReconnectBackoff = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan IdleBackoff = TimeSpan.FromSeconds(2);
+    /// <summary>
+    /// AGW keepalive period. BPQ closes idle AGW client connections
+    /// after ~20s of no traffic; without a periodic frame from us,
+    /// every install with a real BPQ saw an EndOfStreamException +
+    /// reconnect every 25 s (20 s idle + 5 s ReconnectBackoff). The
+    /// 'G' frame queries port count and is the cheapest no-op we can
+    /// send - BPQ replies with a 'G' frame, both directions count as
+    /// activity, BPQ's idle timer resets. 15s is comfortably under
+    /// 20s with margin for jitter.
+    /// </summary>
+    private static readonly TimeSpan KeepaliveInterval = TimeSpan.FromSeconds(15);
 
     private readonly CancellationTokenSource stoppingTokenSource = new();
     private readonly OperationalMetrics metrics = metrics ?? new OperationalMetrics();
@@ -142,6 +153,38 @@ public sealed class AgwInboundService(
         metrics.RecordAgwReconnect();
 
         var sessions = new ConcurrentDictionary<SessionKey, MultiplexedAgwSessionStream>();
+
+        // Keepalive: send 'G' (port count query) every KeepaliveInterval
+        // so BPQ doesn't drop the idle socket. The reply lands in the
+        // same Read loop below and is ignored as a default-case frame.
+        // Run in a fire-and-forget task tied to the cycle's ct so it
+        // dies when the cycle does. SemaphoreSlim guards the shared
+        // write side - inbound frame handling can also write (e.g.
+        // 'D' acknowledgements via the multiplexed sessions), and
+        // AGW is a single-stream protocol so we serialise writes.
+        using var keepaliveCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        var keepaliveTask = Task.Run(async () =>
+        {
+            try
+            {
+                while (!keepaliveCts.Token.IsCancellationRequested)
+                {
+                    await Task.Delay(KeepaliveInterval, keepaliveCts.Token);
+                    await framing.WriteFrameAsync(
+                        new AgwFrame(0, 'G', 0, "", "", []), keepaliveCts.Token);
+                }
+            }
+            catch (OperationCanceledException) { /* expected on cycle end */ }
+            catch (Exception ex)
+            {
+                // A keepalive write failure means the socket's already
+                // dead; the read side will see the same EOF and drive
+                // the reconnect. Log at debug to avoid duplicating the
+                // warn that the read side will emit.
+                logger.LogDebug(ex, "AGW keepalive write failed");
+            }
+        }, keepaliveCts.Token);
+
         try
         {
             while (!ct.IsCancellationRequested)
@@ -152,6 +195,11 @@ public sealed class AgwInboundService(
         }
         finally
         {
+            // Stop the keepalive before tearing down sessions to avoid
+            // a doomed write racing the socket close.
+            keepaliveCts.Cancel();
+            try { await keepaliveTask; } catch { /* swallow - already logged */ }
+
             // Tear down any in-flight sessions cleanly so handlers exit.
             foreach (var s in sessions.Values) s.SignalRemoteDisconnect();
             sessions.Clear();
