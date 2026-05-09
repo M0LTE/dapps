@@ -1156,13 +1156,33 @@
                             }
                         }
 
-                        // Build chip
+                        // Build chip - reflects the same five states the
+                        // Overview hero update tile shows, so an operator
+                        // who's clicked Apply on Overview and then
+                        // navigated away still sees progress in the topbar.
                         const upd = s.tables?.update ?? null;
                         const tsVer = document.getElementById('ts-version');
+                        const lr = upd?.lastRun ?? null;
+                        const phase = lr?.phase ?? null;
+                        const inFlight = phase && ['Checking','Downloading','Swapping','Restarting','Verifying'].includes(phase);
                         if (upd) {
                             if (upd.isDevBuild) {
                                 set('ts-version-v', upd.current || s.version);
                                 led(tsVer, 'warn');
+                            } else if (upd.requestPending || inFlight) {
+                                // Phase shorthand for the chip - the hero
+                                // tile carries the long-form text.
+                                const short = inFlight
+                                    ? phase.toLowerCase() + '...'
+                                    : 'queued...';
+                                set('ts-version-v', short);
+                                led(tsVer, 'live');
+                            } else if (phase === 'Success' && lr.toVersion === upd.current) {
+                                set('ts-version-v', `v${upd.current} updated`);
+                                led(tsVer, 'on');
+                            } else if (phase === 'RolledBack' || phase === 'Failed') {
+                                set('ts-version-v', phase.toLowerCase());
+                                led(tsVer, 'err');
                             } else if (upd.isAvailable && upd.latest) {
                                 set('ts-version-v', `v${upd.current} -> v${upd.latest}`);
                                 led(tsVer, 'warn');

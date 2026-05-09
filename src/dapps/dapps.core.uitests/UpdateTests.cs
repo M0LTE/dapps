@@ -229,6 +229,106 @@ public sealed class UpdateTests(LoggedInWebAppFixture app, PlaywrightFixture pw)
         postFired.Should().BeFalse("dismissing the confirm dialog must NOT POST /Update/apply");
     }
 
+    [Fact]
+    public async Task Hero_Update_Tile_RequestPending_Shows_Queued_State()
+    {
+        await using var ctx = await pw.Browser.NewLoggedInContextAsync(app);
+        var page = await ctx.NewPageAsync();
+        await StubOperationalAsync(page,
+            new UpdateFields(CurrentVersion, IsDevBuild: false, IsAvailable: true, Latest: LatestVersion, RequestPending: true));
+
+        await page.GotoAsync(app.BaseUrl);
+        await WaitTextAsync(page, "#hero-update-pill", "queued");
+        (await page.Locator("#hero-update-meta").InnerTextAsync()).Trim()
+            .Should().Contain("60s",
+                "operator should know the timer fires within a minute");
+        (await page.Locator("#hero-update-action").IsVisibleAsync())
+            .Should().BeFalse("the apply affordance hides while the request is in flight");
+    }
+
+    [Theory]
+    [InlineData("Checking",    "checking")]
+    [InlineData("Downloading", "downloading")]
+    [InlineData("Swapping",    "swapping")]
+    [InlineData("Restarting",  "restarting")]
+    [InlineData("Verifying",   "verifying")]
+    public async Task Hero_Update_Tile_InFlight_Phase_Shows_In_Meta(string phase, string metaSubstring)
+    {
+        await using var ctx = await pw.Browser.NewLoggedInContextAsync(app);
+        var page = await ctx.NewPageAsync();
+        await StubOperationalAsync(page,
+            new UpdateFields(CurrentVersion, IsDevBuild: false, IsAvailable: true,
+                Latest: LatestVersion, RequestPending: true,
+                Phase: phase, FromVersion: CurrentVersion, ToVersion: LatestVersion));
+
+        await page.GotoAsync(app.BaseUrl);
+        await WaitTextAsync(page, "#hero-update-pill", "applying");
+        var meta = (await page.Locator("#hero-update-meta").InnerTextAsync()).ToLowerInvariant();
+        meta.Should().Contain(metaSubstring, $"the {phase} phase should surface readable progress text");
+    }
+
+    [Fact]
+    public async Task Hero_Update_Tile_Failed_Phase_Surfaces_Error_And_Retry()
+    {
+        await using var ctx = await pw.Browser.NewLoggedInContextAsync(app);
+        var page = await ctx.NewPageAsync();
+        await StubOperationalAsync(page,
+            new UpdateFields(CurrentVersion, IsDevBuild: false, IsAvailable: true,
+                Latest: LatestVersion, Phase: "Failed", LastRunError: "GitHub fetch failed"));
+
+        await page.GotoAsync(app.BaseUrl);
+        await WaitTextAsync(page, "#hero-update-pill", "failed");
+        (await page.Locator("#hero-update-meta").InnerTextAsync())
+            .Should().Contain("GitHub fetch failed");
+        (await page.Locator("#hero-update-action").InnerTextAsync()).Trim()
+            .Should().Be("Retry update");
+    }
+
+    /// <summary>
+    /// Optimistic-UI assertion: clicking Apply flips the tile to a
+    /// queued state *without* waiting for the next /Operational poll
+    /// to land. The 5s gap before the snap refreshes is exactly the
+    /// silent-window the operator complained about.
+    /// </summary>
+    [Fact]
+    public async Task Apply_Update_Click_Optimistically_Repaints_Pill_To_Queued()
+    {
+        await using var ctx = await pw.Browser.NewLoggedInContextAsync(app);
+        var page = await ctx.NewPageAsync();
+        await StubOperationalAsync(page,
+            new UpdateFields(CurrentVersion, IsDevBuild: false, IsAvailable: true, Latest: LatestVersion));
+        // Stall /Update/apply long enough that the only thing repainting
+        // the pill before the response is the optimistic-UI code path.
+        await page.RouteAsync("**/Update/apply", async route =>
+        {
+            await Task.Delay(2000);
+            await route.FulfillAsync(new RouteFulfillOptions { Status = 204 });
+        });
+        page.Dialog += async (_, dlg) => await dlg.AcceptAsync();
+
+        await page.GotoAsync(app.BaseUrl);
+        await WaitTextAsync(page, "#hero-update-pill", "available");
+
+        await page.ClickAsync("#hero-update-action");
+        await WaitTextAsync(page, "#hero-update-pill", "queued");
+        (await page.Locator("#hero-update-action").IsVisibleAsync())
+            .Should().BeFalse("apply link hides as soon as the request is in flight");
+    }
+
+    [Fact]
+    public async Task Topbar_Build_Chip_Mirrors_InFlight_Phase()
+    {
+        await using var ctx = await pw.Browser.NewLoggedInContextAsync(app);
+        var page = await ctx.NewPageAsync();
+        await StubOperationalAsync(page,
+            new UpdateFields(CurrentVersion, IsDevBuild: false, IsAvailable: true,
+                Latest: LatestVersion, RequestPending: true,
+                Phase: "Downloading", FromVersion: CurrentVersion, ToVersion: LatestVersion));
+
+        await page.GotoAsync(app.BaseUrl);
+        await WaitChipAsync(page, expected: "downloading...");
+    }
+
     /// <summary>
     /// The Settings panel exposes <c>UpdateCheckEnabled</c> as a
     /// checkbox. Toggle it off, save, reload, verify the persisted
@@ -280,7 +380,13 @@ public sealed class UpdateTests(LoggedInWebAppFixture app, PlaywrightFixture pw)
         bool IsAvailable,
         string? Latest = null,
         string? ReleaseUrl = null,
-        DateTime? FetchedAt = null);
+        DateTime? FetchedAt = null,
+        bool RequestPending = false,
+        string? Phase = null,
+        string? FromVersion = null,
+        string? ToVersion = null,
+        DateTime? LastRunUpdatedAt = null,
+        string? LastRunError = null);
 
     /// <summary>
     /// Stub the layout's <c>/Operational?full=true</c> poll with a
@@ -348,8 +454,16 @@ public sealed class UpdateTests(LoggedInWebAppFixture app, PlaywrightFixture pw)
                     releaseUrl = fields.ReleaseUrl,
                     isAvailable = fields.IsAvailable,
                     fetchedAt = fields.FetchedAt,
-                    requestPending = false,
-                    lastRun = (object?)null,
+                    requestPending = fields.RequestPending,
+                    lastRun = fields.Phase is null ? null : (object)new
+                    {
+                        phase = fields.Phase,
+                        fromVersion = fields.FromVersion ?? fields.Current,
+                        toVersion = fields.ToVersion,
+                        startedAt = DateTime.UtcNow.AddMinutes(-1),
+                        updatedAt = fields.LastRunUpdatedAt ?? DateTime.UtcNow,
+                        error = fields.LastRunError,
+                    },
                 },
             },
         };
