@@ -37,19 +37,21 @@
                 </select>
                 <span class="hint">flip to switch the active inbound + outbound bearer</span>
             </div>
-            <div class="field"><label>AGW port</label><input name="AgwPort" type="number" min="1" max="65535" value="@Model.Options.AgwPort" required /></div>
-            <div class="field"><label>RHPv2 port</label><input name="RhpPort" type="number" min="1" max="65535" value="@Model.Options.RhpPort" required /></div>
-            <div class="field"><label>RHPv2 user</label>
+            <div class="field" data-bearer="agw"><label>AGW TCP port</label><input name="AgwPort" type="number" min="1" max="65535" value="@Model.Options.AgwPort" required />
+                <span class="hint">BPQ's AGW listener (default <code>8000</code>)</span></div>
+            <div class="field" data-bearer="rhpv2"><label>RHPv2 TCP port</label><input name="RhpPort" type="number" min="1" max="65535" value="@Model.Options.RhpPort" required />
+                <span class="hint">XRouter's RHPv2 listener (default <code>9000</code>)</span></div>
+            <div class="field" data-bearer="rhpv2"><label>RHPv2 user</label>
                 <input name="RhpUser" type="text" value="@Model.Options.RhpUser"
                        autocomplete="off" data-form-type="other" data-1p-ignore="true" data-lpignore="true" />
                 <span class="hint">blank if no auth</span></div>
-            <div class="field"><label>RHPv2 password</label>
+            <div class="field" data-bearer="rhpv2"><label>RHPv2 password</label>
                 <input name="RhpPass" type="text" value="@Model.Options.RhpPass"
                        autocomplete="off" data-form-type="other" data-1p-ignore="true" data-lpignore="true"
                        class="masked" />
                 <span class="hint">stored on this node, not a sysop credential</span></div>
-            <div class="field"><label>Default bearer port</label><input name="DefaultBearerPort" type="number" min="0" max="255" value="@Model.Options.DefaultBearerPort" required />
-                <span class="hint">0-indexed; used when a neighbour has no per-row override</span></div>
+            <div class="field" data-bearer="agw"><label>Default radio port number</label><input name="DefaultBearerPort" type="number" min="0" max="255" value="@Model.Options.DefaultBearerPort" required />
+                <span class="hint">Which BPQ radio port (RF channel) outbound DAPPS connections leave on by default - matches BPQ's <code>PORT</code> numbering minus 1, so BPQ <code>PORT 1</code> = <code>0</code> here. Per-neighbour overrides live in Topology - Neighbours.</span></div>
         </div>
     </div>
 
@@ -126,7 +128,11 @@
         <h3>Updates</h3>
         <div class="field-grid">
             <label class="field-checkbox"><input name="UpdateCheckEnabled" type="checkbox" @(Model.Options.UpdateCheckEnabled ? "checked" : "") />
-                <span>Check GitHub for new releases<br/><span class="hint">~once an hour, plus a one-shot check on demand from the topbar</span></span></label>
+                <span>Auto-check GitHub for new releases<br/><span class="hint">background poll runs ~once an hour. Use the button below for an immediate poll.</span></span></label>
+            <div class="field" style="grid-column: 1 / -1; align-items: flex-start;">
+                <button type="button" class="btn ghost sm" id="check-updates-btn" style="margin-top: 0.4rem;">Check for updates now</button>
+                <span class="hint" id="check-updates-status" style="margin-top: 0.5rem; min-height: 1em;"></span>
+            </div>
         </div>
     </div>
 
@@ -211,4 +217,62 @@ async function dappsRotatePassword(ev) {
         alert('Password updated.');
     }
 }
+
+// --- Bearer-conditional fields ---
+// AGW vs RHPv2 are mutually exclusive at runtime; showing all four
+// fields at once is noisy and invites the operator to "fix" the
+// inactive bearer's port without realising it does nothing. Hide the
+// inactive bearer's fields while keeping their values intact - the
+// form still serialises both, so flipping back later doesn't lose the
+// previous bearer's settings.
+(function () {
+    const select = document.querySelector("select[name='NodeBearer']");
+    const fields = document.querySelectorAll('[data-bearer]');
+    function apply() {
+        const active = (select?.value || 'agw').toLowerCase();
+        for (const el of fields) {
+            el.style.display = el.dataset.bearer === active ? '' : 'none';
+        }
+    }
+    if (select) {
+        select.addEventListener('change', apply);
+        apply();
+    }
+})();
+
+// --- Check for updates ---
+// POST /Update/check makes the daemon hit GitHub once and returns the
+// fresh status. Surface the outcome in plain English so the operator
+// knows whether they're up to date without having to look elsewhere.
+(function () {
+    const btn = document.getElementById('check-updates-btn');
+    const status = document.getElementById('check-updates-status');
+    if (!btn || !status) return;
+    btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        status.textContent = 'checking GitHub...';
+        try {
+            const res = await fetch('/Update/check', { method: 'POST' });
+            if (!res.ok) {
+                status.textContent = `check failed: HTTP ${res.status}`;
+                return;
+            }
+            const j = await res.json();
+            if (j.isDevBuild) {
+                status.textContent = `running dev build ${j.current} - no upstream comparison`;
+            } else if (j.isAvailable && j.latest) {
+                status.textContent = `update available: v${j.current} -> v${j.latest}. Apply from the Overview hero or the topbar build chip.`;
+            } else {
+                status.textContent = `up to date - v${j.current}`;
+            }
+            // Nudge the topbar build chip to repaint immediately rather
+            // than wait up to 5 s for the next /Operational poll.
+            await window.dappsRefreshSnap?.();
+        } catch (e) {
+            status.textContent = `check failed: ${e.message ?? e}`;
+        } finally {
+            btn.disabled = false;
+        }
+    });
+})();
 </script>

@@ -115,6 +115,79 @@ public sealed class SettingsTests(LoggedInWebAppFixture app, PlaywrightFixture p
         }
     }
 
+    /// <summary>
+    /// Bearer-conditional fields: switching between AGW and RHPv2 in
+    /// the Node bearer dropdown hides the unselected bearer's settings
+    /// (their other-bearer counterpart is irrelevant, and showing both
+    /// at once led operators to "fix" inactive ports without realising
+    /// they did nothing). The values themselves stay in the form so
+    /// flipping back doesn't lose the previous bearer's config.
+    /// </summary>
+    [Fact]
+    public async Task Settings_Bearer_Toggle_Hides_Inactive_Fields()
+    {
+        await using var ctx = await pw.Browser.NewLoggedInContextAsync(app);
+        var page = await ctx.NewPageAsync();
+        await page.GotoAsync($"{app.BaseUrl}/Settings");
+
+        // AGW selected on first paint (the fixture's setup picked agw).
+        await page.SelectOptionAsync("select[name='NodeBearer']", "agw");
+        (await page.Locator("input[name='AgwPort']").IsVisibleAsync()).Should().BeTrue();
+        (await page.Locator("input[name='DefaultBearerPort']").IsVisibleAsync()).Should().BeTrue();
+        (await page.Locator("input[name='RhpPort']").IsVisibleAsync()).Should().BeFalse();
+        (await page.Locator("input[name='RhpUser']").IsVisibleAsync()).Should().BeFalse();
+        (await page.Locator("input[name='RhpPass']").IsVisibleAsync()).Should().BeFalse();
+
+        // Flip to RHPv2: AGW-specific fields hide; RHPv2 fields surface.
+        await page.SelectOptionAsync("select[name='NodeBearer']", "rhpv2");
+        (await page.Locator("input[name='AgwPort']").IsVisibleAsync()).Should().BeFalse();
+        (await page.Locator("input[name='DefaultBearerPort']").IsVisibleAsync()).Should().BeFalse();
+        (await page.Locator("input[name='RhpPort']").IsVisibleAsync()).Should().BeTrue();
+        (await page.Locator("input[name='RhpUser']").IsVisibleAsync()).Should().BeTrue();
+        (await page.Locator("input[name='RhpPass']").IsVisibleAsync()).Should().BeTrue();
+
+        // Restore so the rest of the suite isn't perturbed (the toggle
+        // is visual-only - no save happens until Save is clicked - but
+        // belt-and-braces).
+        await page.SelectOptionAsync("select[name='NodeBearer']", "agw");
+    }
+
+    [Fact]
+    public async Task Settings_Check_For_Updates_Button_Posts_Update_Check()
+    {
+        await using var ctx = await pw.Browser.NewLoggedInContextAsync(app);
+        var page = await ctx.NewPageAsync();
+
+        // Stub /Update/check so the test isn't dependent on real GitHub
+        // connectivity; assert the POST fires.
+        var stubBody = """
+        {"current":"0.33.5","isDevBuild":false,"latest":null,"releaseUrl":null,"isAvailable":false,"fetchedAt":"2026-05-09T00:00:00Z","requestPending":false,"lastRun":null}
+        """;
+        await page.RouteAsync("**/Update/check", async route =>
+        {
+            await route.FulfillAsync(new RouteFulfillOptions
+            {
+                Status = 200,
+                ContentType = "application/json",
+                Body = stubBody,
+            });
+        });
+
+        await page.GotoAsync($"{app.BaseUrl}/Settings");
+        var requestTask = page.WaitForRequestAsync(
+            req => req.Url.EndsWith("/Update/check", StringComparison.Ordinal) && req.Method == "POST",
+            new PageWaitForRequestOptions { Timeout = 5_000 });
+
+        await page.ClickAsync("#check-updates-btn");
+        await requestTask;
+
+        // Status text reflects the stubbed response.
+        await page.WaitForFunctionAsync(
+            "() => document.getElementById('check-updates-status').textContent.includes('up to date')",
+            null,
+            new PageWaitForFunctionOptions { Timeout = 5_000 });
+    }
+
     [Fact]
     public async Task Settings_Rotate_Password_Form_Visible()
     {
