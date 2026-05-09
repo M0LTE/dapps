@@ -45,10 +45,50 @@ detect_rid() {
     arch=$(uname -m)
     case "$arch" in
         x86_64|amd64) echo "linux-x64" ;;
-        aarch64|arm64) echo "linux-arm64" ;;
+        aarch64|arm64)
+            # 32-bit Raspberry Pi OS on a Pi 4/5 ships a 64-bit kernel
+            # with a 32-bit (armhf) userland. uname -m reports aarch64
+            # because that comes from the kernel, but the userland's
+            # dynamic linker lives at /lib/ld-linux-armhf.so.3 and the
+            # arm64 binary's interpreter (/lib/ld-linux-aarch64.so.1)
+            # is absent. Cross-check the userland bitness via getconf
+            # and downgrade to linux-arm if the userland is 32-bit.
+            local userbits
+            userbits=$(getconf LONG_BIT 2>/dev/null || echo 64)
+            if [[ "$userbits" == "32" ]]; then
+                echo "linux-arm"
+            else
+                echo "linux-arm64"
+            fi
+            ;;
         armv7l|armv7|armhf) echo "linux-arm" ;;
         *) die "Unsupported architecture: $arch. Build from source or open an issue at https://github.com/M0LTE/dapps/issues." ;;
     esac
+}
+
+# Belt-and-braces: even with a correct RID, an exotic distro could
+# lack the dynamic linker the binary asks for (a stripped container
+# image, a custom musl-only build, a misconfigured multilib etc.).
+# Check up-front and fail with an actionable message rather than
+# letting systemd's "203/EXEC: No such file or directory" be the
+# operator's first signal.
+verify_interpreter() {
+    local rid="$1"
+    local interp
+    case "$rid" in
+        linux-x64)   interp="/lib64/ld-linux-x86-64.so.2" ;;
+        linux-arm64) interp="/lib/ld-linux-aarch64.so.1" ;;
+        linux-arm)   interp="/lib/ld-linux-armhf.so.3" ;;
+        *) return 0 ;;  # unknown RID skips the check; download will fail anyway
+    esac
+    if [[ ! -e "$interp" ]]; then
+        die "The $rid binary needs $interp at runtime but it isn't installed.
+This usually means a 32-bit userland is running on a 64-bit kernel
+(common on Raspberry Pi OS 32-bit) or a slimmed-down container image.
+Cross-check with: arch=\$(uname -m); bits=\$(getconf LONG_BIT)
+If you're on a Pi and want the 64-bit binary, reinstall on 64-bit
+Raspberry Pi OS. Otherwise install the matching libc package."
+    fi
 }
 
 ensure_user() {
@@ -182,7 +222,10 @@ start_service() {
 # the configured iface, but loopback always works once it's up.
 wait_for_http() {
     local port="${HTTP_BIND##*:}"
-    local timeout=30
+    # 90s rather than 30 to accommodate Pi-class hardware first-run
+    # JIT off an SD card. On amd64 the listener typically comes up in
+    # well under 5s.
+    local timeout=90
     say "Waiting for HTTP listener on :$port (up to ${timeout}s)"
     local i=0
     while (( i < timeout )); do
@@ -217,8 +260,9 @@ require_root
 require_systemd
 
 rid=$(detect_rid)
-say "Architecture: $rid"
+say "Architecture: $rid (kernel $(uname -m), userland $(getconf LONG_BIT 2>/dev/null || echo '?')-bit)"
 
+verify_interpreter "$rid"
 ensure_user
 ensure_dirs
 download_binary "$rid"

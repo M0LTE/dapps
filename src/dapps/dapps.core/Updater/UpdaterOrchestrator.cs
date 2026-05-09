@@ -312,12 +312,28 @@ public sealed class UpdaterOrchestrator
 
     /// <summary>Best-effort RID resolution. Mirrors the matrix in
     /// <c>.github/workflows/ci.yml</c> - the file names match
-    /// <c>dapps-{rid}</c>.</summary>
+    /// <c>dapps-{rid}</c>.
+    ///
+    /// <para>
+    /// Uses <see cref="System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture"/>
+    /// rather than <c>OSArchitecture</c> so the updater downloads the
+    /// same architecture the running binary was built for, NOT the
+    /// kernel's architecture. The 32-bit Raspberry Pi OS images on a
+    /// Pi 4/5 ship a 64-bit kernel with a 32-bit (armhf) userland;
+    /// <c>OSArchitecture</c> reports <c>Arm64</c> off the kernel and
+    /// would make us fetch <c>dapps-linux-arm64</c>, whose dynamic
+    /// linker (<c>/lib/ld-linux-aarch64.so.1</c>) doesn't exist on
+    /// that userland - the operator gets <c>203/EXEC: No such file
+    /// or directory</c> from systemd on next start. Asking the
+    /// running process's architecture gives us the right answer
+    /// regardless of how the kernel and userland are paired.
+    /// </para>
+    /// </summary>
     public static string ResolveDefaultRid()
     {
         if (OperatingSystem.IsLinux())
         {
-            return System.Runtime.InteropServices.RuntimeInformation.OSArchitecture switch
+            return System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture switch
             {
                 System.Runtime.InteropServices.Architecture.X64 => "linux-x64",
                 System.Runtime.InteropServices.Architecture.Arm64 => "linux-arm64",
