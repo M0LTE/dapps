@@ -251,8 +251,15 @@
                 if (k.endsWith('.ok') || k.includes('learned')) kc = 'ok';
                 else if (k.includes('fail') || k.includes('drop') || k.includes('expired') || k.includes('mismatch')) kc = 'err';
                 else if (k.includes('skip') || k.includes('budget') || k.includes('warn')) kc = 'warn';
-                const t = ev.atUtc ? new Date(ev.atUtc).toISOString().substring(11, 19) : '?';
-                return `<div class="row"><span class="t">${escape(t)}</span><span class="k ${kc}">${escape(k)}</span><span class="m" title="${escape(ev.detail || '')}">${escape(ev.detail || '')}</span></div>`;
+                // OperationalEvent serialises as { at, kind, summary }
+                // (the C# record's property names lowercased by the
+                // default camelCase policy). The previous code looked
+                // for ev.atUtc and ev.detail, which were undefined, so
+                // the time column collapsed to "?" and the message
+                // column was blank for every row.
+                const t = ev.at ? new Date(ev.at).toISOString().substring(11, 19) : '?';
+                const m = ev.summary || '';
+                return `<div class="row"><span class="t">${escape(t)}</span><span class="k ${kc}">${escape(k)}</span><span class="m" title="${escape(m)}">${escape(m)}</span></div>`;
             }).join('');
             t.innerHTML = rows;
         }

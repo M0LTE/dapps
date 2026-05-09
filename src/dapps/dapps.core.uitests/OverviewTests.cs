@@ -1,3 +1,4 @@
+using System.Text.Json;
 using AwesomeAssertions;
 using Microsoft.Playwright;
 
@@ -50,6 +51,83 @@ public sealed class OverviewTests(LoggedInWebAppFixture app, PlaywrightFixture p
         var banner = await page.Locator(".ok-banner").InnerTextAsync();
         banner.Should().Contain("Queued message",
             "successful submission shows a Queued message <id> for <app>@<dest> banner");
+    }
+
+    /// <summary>
+    /// Recent decisions ticker renders OperationalEvents from the
+    /// snapshot. The wire shape is { at, kind, summary } - the previous
+    /// JS read { atUtc, kind, detail }, which left the time column
+    /// stuck on "?" and the message column blank for every event.
+    /// Stubbing /Operational with a known event lets us assert against
+    /// the *rendered* time and summary strings.
+    /// </summary>
+    [Fact]
+    public async Task Overview_Recent_Decisions_Renders_Time_And_Summary()
+    {
+        await using var ctx = await pw.Browser.NewLoggedInContextAsync(app);
+        var page = await ctx.NewPageAsync();
+
+        // 12:34:56 UTC - the ticker formats as HH:mm:ss so we can match
+        // the cell text exactly.
+        var eventAt = new DateTime(2026, 5, 9, 12, 34, 56, DateTimeKind.Utc);
+        var snap = new
+        {
+            callsign = "M0LTE-7",
+            version = "0.33.6",
+            generatedAt = DateTime.UtcNow,
+            uptimeSeconds = 0,
+            status = "healthy",
+            callsignConfigured = true,
+            nodeReachable = true,
+            mqttBrokerUp = true,
+            forwardSuccess = 0,
+            pendingOutboundCount = 0,
+            undeliveredLocalCount = 0,
+            totalMessagesCount = 0,
+            neighbourCount = 0,
+            discoveredPeerCount = 0,
+            discoveryChannelCount = 0,
+            airtimeConsumedSecondsLastHour = 0,
+            airtimeBudgetSecondsPerHour = 0,
+            recentEvents = new[]
+            {
+                new { at = eventAt, kind = "agw.reconnect", summary = "AGW socket connected + 'X' registered" },
+            },
+            neighbourLinks = Array.Empty<object>(),
+            tables = new
+            {
+                outbound = Array.Empty<object>(),
+                localInbox = Array.Empty<object>(),
+                dropped = Array.Empty<object>(),
+                neighbours = Array.Empty<object>(),
+                discoveredPeers = Array.Empty<object>(),
+                discoveryChannels = Array.Empty<object>(),
+                probedNodes = Array.Empty<object>(),
+                polledNodes = Array.Empty<object>(),
+                update = (object?)null,
+            },
+        };
+        var json = JsonSerializer.Serialize(snap);
+        await page.RouteAsync("**/Operational*", async route =>
+        {
+            await route.FulfillAsync(new RouteFulfillOptions
+            {
+                ContentType = "application/json",
+                Body = json,
+            });
+        });
+
+        await page.GotoAsync(app.BaseUrl);
+        await page.WaitForFunctionAsync(
+            "() => document.querySelector('#ticker .row .k')?.textContent === 'agw.reconnect'",
+            null,
+            new PageWaitForFunctionOptions { Timeout = 10_000 });
+
+        var time = await page.Locator("#ticker .row .t").First.InnerTextAsync();
+        time.Trim().Should().Be("12:34:56", "the time column shows the event's HH:mm:ss");
+
+        var msg = await page.Locator("#ticker .row .m").First.InnerTextAsync();
+        msg.Should().Contain("AGW socket connected", "the summary text should render alongside the kind");
     }
 
     [Fact]
