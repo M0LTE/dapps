@@ -54,9 +54,9 @@ DAPPS reconnects automatically (with backoff). If it's flapping every few second
 
 A remote node can `c <your-callsign>` and lands at the BPQ node prompt, but not at the `DAPPSv1>` prompt. Check:
 
-- The `APPLICATION 1,DAPPS,,,,, 0` line is in `bpq32.cfg` and BPQ has been restarted since adding it.
-- The CMD field on the `APPLICATION` line is **empty** (the `,,,,,`). Older recipes had `C N HOST K TRANS S` here - for DAPPS, leave it empty so BPQ doesn't run a node command on inbound, just dispatches the L2 'C' frame to the registered AGW client.
-- DAPPS is registering the right callsign. The startup log shows `AGW: registered <callsign> for inbound dispatch`. If the callsign there doesn't match what the remote is connecting to, it won't route.
+- The `APPLICATION` line is in `bpq32.cfg` with the DAPPS callsign in the **APPLCALL** field - `APPLICATION 1,DAPPS,,M0LTE-7,DAPPS,0` - and BPQ has been restarted since adding it. The runtime AGW registration alone is **not** enough on BPQ: without the APPLCALL, BPQ ignores inbound connects to the DAPPS callsign entirely and the remote caller sees RETRYOUT.
+- The CMD field on the `APPLICATION` line (the third field) is **empty**. Older recipes had `C N HOST K TRANS S` here - for DAPPS, leave it empty so BPQ doesn't run a node command on inbound, just dispatches the L2 'C' frame to the registered AGW client.
+- DAPPS is registering the right callsign. The startup log shows `AGW: registered <callsign> for inbound dispatch`. If the callsign there doesn't match what the remote is connecting to (and the APPLCALL), it won't route.
 - AGW exact-match is by call+SSID. `M0LTE-1` is different from `M0LTE-7`.
 
 ### Inbound sessions never arrive (XRouter RHPv2)
@@ -89,7 +89,8 @@ Check, in order:
 
 The probed-nodes table shows the recent failure reason. Common ones:
 
-- **`RETRYOUT`**: the bearer retried the connect to the remote callsign but never got a response. The remote isn't reachable on the link, or the bearer port for that peer is wrong (per-neighbour `BearerPort` or `DAPPS_DEFAULT_BEARER_PORT`).
+- **`RETRYOUT`**: the bearer retried the connect to the remote callsign but never got a response. Three common causes: the remote isn't reachable on the link; the bearer port for that peer is wrong (per-neighbour `BearerPort` or `DAPPS_DEFAULT_BEARER_PORT`); or the remote BPQ doesn't declare the DAPPS callsign in an `APPLICATION` line's APPLCALL field - in that case BPQ silently ignores connects to the callsign even though the remote DAPPS registered it over AGW.
+- **Connect accepted (UA) but then silence, ending in `timeout: ... no data from peer`**: the classic signature of probing the remote's **node call** instead of its DAPPS callsign. The node accepts the L2 connect and then sits at its (silent) command prompt waiting for input, while the probe waits for a `DAPPSv1>` banner that will never come. Check the neighbour row's callsign is the remote *DAPPS* callsign (e.g. `M0XYZ-7`), not the NODECALL.
 - **Connect timeout**: the connect went out but the protocol parser never saw the `DAPPSv1>` prompt. The peer either isn't running DAPPS, or you're connecting to the wrong application (their `APPLICATION` line might use a different command name).
 - **TIMEOUT after `DAPPSv1>`**: probe got the prompt but the session hung. Network is dropping packets mid-session, or one side has a serious clock skew.
 
