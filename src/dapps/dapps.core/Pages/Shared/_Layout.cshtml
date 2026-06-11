@@ -957,7 +957,7 @@
                 <span class="reason">@TxGate.BlockReason</span>
                 @if (!TxGate.LocalAllowed)
                 {
-                    <form method="post" action="/TxControl/resume" class="tx-stop-inline-form">
+                    <form method="post" action="@Url.Content("~/TxControl/resume")" class="tx-stop-inline-form">
                         <button type="submit">Resume TX</button>
                     </form>
                 }
@@ -967,7 +967,7 @@
             <button type="button" class="hamburger" id="nav-toggle" aria-label="Open navigation" aria-controls="sidebar" aria-expanded="false">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" /></svg>
             </button>
-            <a class="brand" href="/" title="DAPPS overview">
+            <a class="brand" href="~/" title="DAPPS overview">
                 <span class="brand-mark" aria-hidden="true"></span>
                 <span class="brand-name">DAPPS</span>
             </a>
@@ -1000,7 +1000,7 @@
             <div class="topbar-actions">
                 @if (TxGate.TxAllowed)
                 {
-                    <form method="post" action="/TxControl/stop" class="tx-stop-inline-form">
+                    <form method="post" action="@Url.Content("~/TxControl/stop")" class="tx-stop-inline-form">
                         <button type="submit" class="tx-killbtn" title="Stop all transmissions immediately">
                             <span class="led"></span> Stop TX
                         </button>
@@ -1011,7 +1011,7 @@
                 </button>
                 @if (User.Identity?.IsAuthenticated == true)
                 {
-                    <a href="/Logout" title="Sign out"><span class="label">Sign out</span></a>
+                    <a href="~/Logout" title="Sign out"><span class="label">Sign out</span></a>
                 }
             </div>
         </header>
@@ -1020,33 +1020,33 @@
             <aside class="sidebar" id="sidebar">
                 <div class="nav-group">
                     <div class="nav-section">Operate</div>
-                    <a href="/" class="nav-link @(active == "overview" ? "active" : "")">
+                    <a href="~/" class="nav-link @(active == "overview" ? "active" : "")">
                         <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12L12 4l9 8" /><path d="M5 10v10h14V10" /></svg>
                         Overview
                     </a>
-                    <a href="/Messages" class="nav-link @(active == "messages" ? "active" : "")">
+                    <a href="~/Messages" class="nav-link @(active == "messages" ? "active" : "")">
                         <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16v10H8l-4 4z" /></svg>
                         Messages
                     </a>
-                    <a href="/Topology" class="nav-link @(active == "topology" ? "active" : "")">
+                    <a href="~/Topology" class="nav-link @(active == "topology" ? "active" : "")">
                         <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="2" /><circle cx="18" cy="6" r="2" /><circle cx="12" cy="18" r="2" /><path d="M7.5 7.5l3 8.7M16.5 7.5l-3 8.7M8 6h8" /></svg>
                         Topology
                     </a>
-                    <a href="/Diagnostics" class="nav-link @(active == "diagnostics" ? "active" : "")">
+                    <a href="~/Diagnostics" class="nav-link @(active == "diagnostics" ? "active" : "")">
                         <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h3l3-7 4 14 3-7h5" /></svg>
                         Diagnostics
                     </a>
                     <div class="nav-section">Tools</div>
-                    <a href="/Compose" class="nav-link @(active == "compose" ? "active" : "")">
+                    <a href="~/Compose" class="nav-link @(active == "compose" ? "active" : "")">
                         <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l4-1L20 7l-3-3L5 16l-1 4z" /></svg>
                         Compose
                     </a>
-                    <a href="/Streams" class="nav-link @(active == "streams" ? "active" : "")">
+                    <a href="~/Streams" class="nav-link @(active == "streams" ? "active" : "")">
                         <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7c4 0 4 3 8 3s4-3 8-3M4 12c4 0 4 3 8 3s4-3 8-3M4 17c4 0 4 3 8 3s4-3 8-3" /></svg>
                         Streams
                     </a>
                     <div class="nav-section">System</div>
-                    <a href="/Settings" class="nav-link @(active == "settings" ? "active" : "")">
+                    <a href="~/Settings" class="nav-link @(active == "settings" ? "active" : "")">
                         <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" /></svg>
                         Settings
                     </a>
@@ -1145,7 +1145,7 @@
                 };
                 async function pull() {
                     try {
-                        const res = await fetch('/Operational?full=true', { credentials: 'same-origin' });
+                        const res = await fetch('@Url.Content("~/Operational?full=true")', { credentials: 'same-origin' });
                         if (!res.ok) return;
                         const s = await res.json();
                         window.__dappsSnap = s;

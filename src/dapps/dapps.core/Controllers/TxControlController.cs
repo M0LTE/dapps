@@ -74,7 +74,7 @@ public sealed class TxControlController(
     private IActionResult RedirectToReferer()
     {
         var referer = Request.Headers.Referer.ToString();
-        return Redirect(string.IsNullOrEmpty(referer) ? "/" : referer);
+        return Redirect(string.IsNullOrEmpty(referer) ? $"{Request.PathBase}/" : referer);
     }
 
     private static SystemOptions Clone(SystemOptions s) => new()

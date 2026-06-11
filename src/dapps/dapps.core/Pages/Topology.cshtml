@@ -9,11 +9,11 @@
 }
 
 @section Tabs {
-    <a href="/Topology?tab=neighbours" class="@(tab == "neighbours" ? "active" : "")">Neighbours <span class="count" id="cnt-neigh">0</span></a>
-    <a href="/Topology?tab=channels" class="@(tab == "channels" ? "active" : "")">Discovery channels <span class="count" id="cnt-chan">0</span></a>
-    <a href="/Topology?tab=peers" class="@(tab == "peers" ? "active" : "")">Discovered peers <span class="count" id="cnt-peers">0</span></a>
-    <a href="/Topology?tab=probes" class="@(tab == "probes" ? "active" : "")">Probed nodes <span class="count" id="cnt-probes">0</span></a>
-    <a href="/Topology?tab=polls" class="@(tab == "polls" ? "active" : "")">Polled nodes <span class="count" id="cnt-polls">0</span></a>
+    <a href="~/Topology?tab=neighbours" class="@(tab == "neighbours" ? "active" : "")">Neighbours <span class="count" id="cnt-neigh">0</span></a>
+    <a href="~/Topology?tab=channels" class="@(tab == "channels" ? "active" : "")">Discovery channels <span class="count" id="cnt-chan">0</span></a>
+    <a href="~/Topology?tab=peers" class="@(tab == "peers" ? "active" : "")">Discovered peers <span class="count" id="cnt-peers">0</span></a>
+    <a href="~/Topology?tab=probes" class="@(tab == "probes" ? "active" : "")">Probed nodes <span class="count" id="cnt-probes">0</span></a>
+    <a href="~/Topology?tab=polls" class="@(tab == "polls" ? "active" : "")">Polled nodes <span class="count" id="cnt-polls">0</span></a>
 }
 
 @if (tab == "neighbours")
@@ -176,7 +176,7 @@ else
         if (force || __dappsAgwPortsPromise == null) {
             __dappsAgwPortsPromise = (async () => {
                 try {
-                    const res = await fetch('/Bearer/agw/ports', { credentials: 'same-origin' });
+                    const res = await fetch('@Url.Content("~/Bearer/agw/ports")', { credentials: 'same-origin' });
                     if (!res.ok) return { error: (await res.text()) || `HTTP ${res.status}` };
                     const ports = await res.json();
                     // Expose an index->description map so the
@@ -218,11 +218,11 @@ else
             UdpEndpoint: f.udpEndpoint.value || null,
             ConnectScript: f.connectScript.value || null,
         };
-        if (await dappsPostJson('/Neighbours', body)) location.reload();
+        if (await dappsPostJson('@Url.Content("~/Neighbours")', body)) location.reload();
     };
     window.dappsDeleteNeighbour = async (callsign) => {
         if (!confirm(`Remove neighbour ${callsign}?`)) return;
-        if (await dappsPostJson('/Neighbours/' + encodeURIComponent(callsign), null, 'DELETE')) location.reload();
+        if (await dappsPostJson('@Url.Content("~/Neighbours/")' + encodeURIComponent(callsign), null, 'DELETE')) location.reload();
     };
     window.dappsAddChannel = async (ev) => {
         ev.preventDefault();
@@ -234,21 +234,21 @@ else
             AirtimeBudgetSecondsPerHour: parseInt(f.airtimeBudgetSecondsPerHour.value, 10) || 0,
             SolicitIntervalSeconds: parseInt(f.solicitIntervalSeconds.value, 10) || 0,
         };
-        if (await dappsPostJson('/DiscoveryChannels', body)) location.reload();
+        if (await dappsPostJson('@Url.Content("~/DiscoveryChannels")', body)) location.reload();
     };
     window.dappsDeleteChannel = async (id) => {
         if (!confirm(`Remove discovery channel ${id}?`)) return;
-        if (await dappsPostJson('/DiscoveryChannels/' + id, null, 'DELETE')) location.reload();
+        if (await dappsPostJson('@Url.Content("~/DiscoveryChannels/")' + id, null, 'DELETE')) location.reload();
     };
     window.dappsSolicitChannel = async (id) => {
-        await dappsPostJson('/DiscoveryChannels/' + id + '/solicit', null);
+        await dappsPostJson('@Url.Content("~/DiscoveryChannels/")' + id + '/solicit', null);
     };
     window.dappsRunSweep = async () => {
         if (!confirm('Probe every known peer now? Uses other operators\' airtime.')) return;
-        if (await dappsPostJson('/Probes/run', null)) await window.dappsRefreshSnap?.();
+        if (await dappsPostJson('@Url.Content("~/Probes/run")', null)) await window.dappsRefreshSnap?.();
     };
     window.dappsProbeOne = async (callsign) => {
-        const res = await fetch('/Probes/run/' + callsign, { method: 'POST' });
+        const res = await fetch('@Url.Content("~/Probes/run/")' + callsign, { method: 'POST' });
         if (!res.ok && res.status !== 200 && res.status !== 204) {
             alert(`Probe failed (${res.status}): ${await res.text()}`);
             return;
@@ -256,18 +256,18 @@ else
         await window.dappsRefreshSnap?.();
     };
     window.dappsSetOptOut = async (callsign, optOut) => {
-        await dappsPostJson('/Probes/' + callsign + '/optout', { OptOut: optOut });
+        await dappsPostJson('@Url.Content("~/Probes/")' + callsign + '/optout', { OptOut: optOut });
     };
     window.dappsForgetProbe = async (callsign) => {
         if (!confirm(`Forget probe row for ${decodeURIComponent(callsign)}?`)) return;
-        if (await dappsPostJson('/Probes/' + callsign, null, 'DELETE')) await window.dappsRefreshSnap?.();
+        if (await dappsPostJson('@Url.Content("~/Probes/")' + callsign, null, 'DELETE')) await window.dappsRefreshSnap?.();
     };
     window.dappsRunPollSweep = async () => {
         if (!confirm('Poll every neighbour for queued mail now?')) return;
-        if (await dappsPostJson('/Polls/run', null)) await window.dappsRefreshSnap?.();
+        if (await dappsPostJson('@Url.Content("~/Polls/run")', null)) await window.dappsRefreshSnap?.();
     };
     window.dappsPollOne = async (callsign) => {
-        const res = await fetch('/Polls/run/' + callsign, { method: 'POST' });
+        const res = await fetch('@Url.Content("~/Polls/run/")' + callsign, { method: 'POST' });
         if (!res.ok && res.status !== 200 && res.status !== 204) {
             alert(`Poll failed (${res.status}): ${await res.text()}`);
             return;
@@ -275,11 +275,11 @@ else
         await window.dappsRefreshSnap?.();
     };
     window.dappsSetPollOptOut = async (callsign, optOut) => {
-        await dappsPostJson('/Polls/' + callsign + '/optout', { OptOut: optOut });
+        await dappsPostJson('@Url.Content("~/Polls/")' + callsign + '/optout', { OptOut: optOut });
     };
     window.dappsForgetPoll = async (callsign) => {
         if (!confirm(`Forget poll row for ${decodeURIComponent(callsign)}?`)) return;
-        if (await dappsPostJson('/Polls/' + callsign, null, 'DELETE')) await window.dappsRefreshSnap?.();
+        if (await dappsPostJson('@Url.Content("~/Polls/")' + callsign, null, 'DELETE')) await window.dappsRefreshSnap?.();
     };
 
     // -- Port-picker bootstraps for the per-tab forms --

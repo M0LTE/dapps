@@ -19,7 +19,7 @@ public sealed class LoginModel(AdminPasswordStore store) : PageModel
         // Fresh install with no password set yet: bounce to /Setup so
         // the operator sees the right form, not a login form for a
         // password that doesn't exist.
-        if (!await store.IsConfiguredAsync()) return LocalRedirect("/Setup");
+        if (!await store.IsConfiguredAsync()) return LocalRedirect("~/Setup");
 
         // Already signed in? Skip the form.
         if (User.Identity?.IsAuthenticated == true)
@@ -64,9 +64,9 @@ public sealed class LoginModel(AdminPasswordStore store) : PageModel
     /// arrived in a query string.</summary>
     private static string SafeReturn(string? candidate)
     {
-        if (string.IsNullOrEmpty(candidate)) return "/";
-        if (!candidate.StartsWith('/')) return "/";
-        if (candidate.StartsWith("//")) return "/";
+        if (string.IsNullOrEmpty(candidate)) return "~/";
+        if (!candidate.StartsWith('/')) return "~/";
+        if (candidate.StartsWith("//")) return "~/";
         return candidate;
     }
 }
