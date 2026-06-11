@@ -30,7 +30,16 @@ if (UpdaterCli.TryHandle(args, out var cliExitCode)) return cliExitCode;
 // which would race a hosted-service seeder and lose, since hosted
 // services are CONSTRUCTED in one pass before any of their StartAsync
 // runs.
-DbStartup.EnsureSchemaAndSeed();
+//
+// A throwaway console logger (the host's logging isn't built yet)
+// makes the seeding decisions visible: which options were seeded from
+// env vars, which stored values an env var re-applied (deployment-
+// managed config), and a callsign derived from a pdn host's
+// PDN_NODE_CALLSIGN.
+using (var seedLoggerFactory = LoggerFactory.Create(b => b.AddSimpleConsole()))
+{
+    DbStartup.EnsureSchemaAndSeed(seedLoggerFactory.CreateLogger(nameof(DbStartup)));
+}
 
 var builder = WebApplication.CreateBuilder(args);
 

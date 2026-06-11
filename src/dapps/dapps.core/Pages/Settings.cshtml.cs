@@ -1,4 +1,5 @@
 using dapps.core.Models;
+using dapps.core.Services;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.Extensions.Options;
 
@@ -10,13 +11,29 @@ namespace dapps.core.Pages;
 /// "Routing &amp; probing", "Polling", "Heartbeat", "Updates", and
 /// "Admin password" panels. Posts JSON to <c>/Config</c>; the daemon
 /// hot-reloads everything except the MQTT and UDP listener ports.
+///
+/// <para>Under <c>DAPPS_ENV_MANAGED=true</c> (the pdn supervised-app
+/// mode), fields whose <c>DAPPS_*</c> env var is set are deployment-
+/// managed: <see cref="DbStartup"/> re-applies the env value at every
+/// start, so dashboard edits would be silently overridden.
+/// <see cref="EnvManaged"/> feeds the page script that badges those
+/// fields and makes them read-only. In the standalone default mode it
+/// is always empty - env vars only seed first-start values there and
+/// the dashboard owns everything.</para>
 /// </summary>
 public sealed class SettingsModel(IOptionsMonitor<SystemOptions> options) : PageModel
 {
+    public sealed record EnvManagedField(string Key, string Env);
+
     public SystemOptions Options { get; private set; } = new();
+
+    public IReadOnlyList<EnvManagedField> EnvManaged { get; private set; } = [];
 
     public void OnGet()
     {
         Options = options.CurrentValue;
+        EnvManaged = DbStartup.EnvManagedKeys()
+            .Select(k => new EnvManagedField(k, DbStartup.EnvVarFor(k)))
+            .ToArray();
     }
 }

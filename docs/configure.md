@@ -8,6 +8,8 @@ Every operator-tunable setting on a DAPPS node has three configuration surfaces:
 
 For runtime-changeable knobs (probing on/off, fragment threshold, airtime budget, etc.), the dashboard is the right surface - changes pick up without a restart. For startup-only knobs (callsign, packet-node host/port, MQTT port, dashboard URL), the env var is the right surface - they're read once at boot.
 
+> **Deployment-managed mode (`DAPPS_ENV_MANAGED=true`)**: when a supervising deployment (a packet.net node host, say) sets `DAPPS_ENV_MANAGED=true`, every *set* `DAPPS_*` env var becomes deployment-managed config instead - re-applied over the persisted row at **every** start, with the matching dashboard fields badged "managed by environment" and rendered read-only. `DAPPS_ENV_MANAGED` itself is a mode switch read each start, never stored. Leave it unset for the standalone installs documented here: with it unset (or `false`) env vars keep the first-start-only semantics above and the dashboard stays in charge.
+
 ## Show the current persisted config
 
 ```bash

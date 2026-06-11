@@ -117,10 +117,15 @@ public sealed class Rhpv2InboundService(
 
         // socket + bind + listen for inbound AX.25 streams to our callsign.
         // Port omitted = listen across all configured XRouter ports.
-        var listenerHandle = await rhp.SocketAsync(ProtocolFamily.Ax25, SocketMode.Stream, stoppingToken);
-        await rhp.BindAsync(listenerHandle, local: opts.Callsign, port: null, stoppingToken);
-        await rhp.ListenAsync(listenerHandle, OpenFlags.Passive, stoppingToken);
-        logger.LogInformation("RHP inbound: listener bound to {call} on handle {h}", opts.Callsign, listenerHandle);
+        // A callsign freshly derived from PDN_NODE_CALLSIGN may probe-
+        // walk to a free SSID here; see BindListenerAsync.
+        var bound = await BindListenerAsync(rhp, opts, stoppingToken);
+        if (bound is null)
+        {
+            return; // logged inside; the ExecuteAsync loop retries after ReconnectBackoff
+        }
+        var (listenerHandle, boundCallsign) = bound.Value;
+        logger.LogInformation("RHP inbound: listener bound to {call} on handle {h}", boundCallsign, listenerHandle);
 
         var sessions = new ConcurrentDictionary<int, MultiplexedAgwSessionStream>();
         var disconnect = new TaskCompletionSource<Exception?>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -222,5 +227,150 @@ public sealed class Rhpv2InboundService(
             foreach (var s in sessions.Values) s.SignalRemoteDisconnect();
             sessions.Clear();
         }
+    }
+
+    /// <summary>
+    /// Bind + listen the daemon's callsign, probing for a free SSID
+    /// when the identity is a not-yet-confirmed derivation.
+    ///
+    /// pdn answers a listen on an already-claimed callsign - including
+    /// the node's own - with errCode 9 "Duplicate socket",
+    /// deterministically (packet.net docs/rhp2-server.md deviation D5).
+    /// That turns the callsign derived from PDN_NODE_CALLSIGN into a
+    /// probe: while <see cref="DbStartup.DerivedCallsignPendingKey"/>
+    /// still matches the callsign in use (placeholder + PDN_NODE_CALLSIGN
+    /// at boot, no explicit DAPPS_CALLSIGN, no successful listen yet), a
+    /// 9 walks the candidate SSIDs - start+1 … 15, then 1 … start−1,
+    /// skipping 0 and the SSID the node itself uses - and the first
+    /// successful listen wins. The winner is persisted as the stored
+    /// callsign, so the identity is stable on every later start: a
+    /// persisted, confirmed callsign never walks again.
+    ///
+    /// An explicitly configured callsign (DAPPS_CALLSIGN, dashboard, or
+    /// an already-confirmed derivation) NEVER walks: a 9 logs the
+    /// refusal and keeps the existing retry/reconnect behaviour.
+    ///
+    /// Against a server that answers duplicate listens Ok (live XRouter
+    /// does - D5 is pdn's deviation from it), the very first listen
+    /// succeeds and the walk simply never triggers. That's fine:
+    /// derivation only ever runs under pdn supervision, because only a
+    /// pdn host injects PDN_NODE_CALLSIGN.
+    /// </summary>
+    /// <returns>The listener handle and the callsign it is bound to, or
+    /// null when no listener could be established (logged; the caller
+    /// returns into the reconnect loop).</returns>
+    private async Task<(int Handle, string Callsign)?> BindListenerAsync(
+        RhpClient rhp, SystemOptions opts, CancellationToken ct)
+    {
+        var pending = DbStartup.ReadPendingDerivedCallsign();
+        var walkEligible =
+            pending is not null
+            && string.Equals(pending, opts.Callsign, StringComparison.OrdinalIgnoreCase)
+            && string.IsNullOrEmpty(Environment.GetEnvironmentVariable(DbStartup.EnvVarFor("Callsign")));
+
+        IReadOnlyList<string> candidates = walkEligible
+            ? SsidProbeCandidates(opts.Callsign, Environment.GetEnvironmentVariable(DbStartup.NodeCallsignEnvVar))
+            : [opts.Callsign];
+        var taken = new List<string>();
+
+        foreach (var candidate in candidates)
+        {
+            var handle = await rhp.SocketAsync(ProtocolFamily.Ax25, SocketMode.Stream, ct);
+            try
+            {
+                await rhp.BindAsync(handle, local: candidate, port: null, ct);
+                await rhp.ListenAsync(handle, OpenFlags.Passive, ct);
+            }
+            catch (RhpServerException ex) when (ex.ErrorCode == RhpErrorCode.DuplicateSocket)
+            {
+                try { await rhp.CloseAsync(handle, ct); }
+                catch (RhpProtocolException) { /* refused handles may already be gone server-side */ }
+
+                if (!walkEligible)
+                {
+                    logger.LogWarning(
+                        "RHP inbound: callsign {call} is already claimed on the node (errCode 9 'Duplicate socket'). " +
+                        "It is explicitly configured, so not probing for a free SSID; retrying in {s}s. " +
+                        "Pick a different callsign via the dashboard or DAPPS_CALLSIGN if this persists.",
+                        candidate, ReconnectBackoff.TotalSeconds);
+                    return null;
+                }
+
+                taken.Add(candidate);
+                continue;
+            }
+
+            if (walkEligible)
+            {
+                // First successful listen confirms the derived identity -
+                // persist it so every later start binds it directly.
+                DbStartup.ConfirmDerivedCallsign(candidate);
+                if (taken.Count > 0)
+                {
+                    logger.LogInformation(
+                        "RHP inbound: derived callsign {winner} — {taken} was taken on the node",
+                        candidate, string.Join(", ", taken.Select(t => $"-{t.Split('-')[^1]}")));
+                    // Reload so every consumer (outbound forwarder,
+                    // beacons, UI) sees the confirmed identity. The
+                    // OnChange this fires cancels the current cycle; the
+                    // reconnect binds the winner via the normal
+                    // non-walking path (the marker is cleared).
+                    ReloadOptionsStore();
+                }
+            }
+
+            return (handle, candidate);
+        }
+
+        // Every candidate SSID is taken on the node. Park in setup-
+        // required mode rather than hammering the node every reconnect;
+        // the operator pins an identity via the dashboard /
+        // DAPPS_CALLSIGN, or the next daemon restart re-derives and
+        // probes again.
+        logger.LogError(
+            "RHP inbound: no free SSID for the derived callsign {call} — every candidate ({candidates}) is taken " +
+            "on the node. Reverting to setup-required mode; configure a callsign via the dashboard or DAPPS_CALLSIGN.",
+            opts.Callsign, string.Join(", ", candidates));
+        DbStartup.AbandonDerivedCallsign();
+        ReloadOptionsStore();
+        return null;
+    }
+
+    /// <summary>
+    /// The SSID probe order for a derived callsign: the derivation
+    /// itself first, then the SSIDs after it in order (start+1 … 15,
+    /// then wrapping to 1 … start−1), skipping 0 (the node's bare
+    /// callsign) and the SSID the node itself uses (parsed off
+    /// PDN_NODE_CALLSIGN).
+    /// </summary>
+    internal static IReadOnlyList<string> SsidProbeCandidates(string derivedCallsign, string? nodeCallsign)
+    {
+        var dash = derivedCallsign.LastIndexOf('-');
+        var baseCall = dash > 0 ? derivedCallsign[..dash] : derivedCallsign;
+        var start = dash > 0 && int.TryParse(derivedCallsign[(dash + 1)..], out var s) ? s : 0;
+
+        var nodeSsid = 0;
+        if (!string.IsNullOrWhiteSpace(nodeCallsign))
+        {
+            var nodeDash = nodeCallsign.LastIndexOf('-');
+            if (nodeDash > 0 && int.TryParse(nodeCallsign[(nodeDash + 1)..], out var ns)) nodeSsid = ns;
+        }
+
+        var candidates = new List<string>(16) { derivedCallsign };
+        for (var offset = 1; offset <= 15; offset++)
+        {
+            var ssid = ((start - 1 + offset) % 15) + 1; // start+1 … 15, then 1 … start−1; never 0
+            if (ssid == start || ssid == nodeSsid) continue;
+            candidates.Add($"{baseCall}-{ssid}");
+        }
+        return candidates;
+    }
+
+    private void ReloadOptionsStore()
+    {
+        // In production IOptionsMonitor<SystemOptions> is the
+        // SystemOptionsStore singleton; re-read it so CurrentValue
+        // reflects what the probe just persisted.
+        (options as SystemOptionsStore)?.Reload();
     }
 }
