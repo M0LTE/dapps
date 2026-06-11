@@ -12,7 +12,7 @@
 manifest: 1
 id: dapps                     # must equal the package directory name
 name: DAPPS
-version: "0.33.12"            # informational, shown in pdn's UI — should track the release tag
+version: "0.34.0"            # informational, shown in pdn's UI — should track the release tag
 description: Distributed Asynchronous Packet Pub/Sub — store-and-forward messaging over packet radio.
 icon: inbox
 capabilities: [network, web]  # binds its own callsigns over RHPv2; serves its own web UI
