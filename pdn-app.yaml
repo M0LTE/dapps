@@ -21,18 +21,28 @@ capabilities: [network, web]  # binds its own callsigns over RHPv2; serves its o
 # DAPPS is not a console verb; it speaks RHPv2 to the node and binds its own
 # callsigns.
 #
-# CONFIG SEEDING — how DAPPS_* env vars behave: every set DAPPS_* env var is
-# deployment-managed config — it is applied at EVERY start (re-applied over
-# whatever the dashboard stored), not just the first. Unset variables never
-# touch stored config: anything not pinned below stays editable live through
-# the DAPPS dashboard's /Setup // /Config pages, exactly as standalone.
+# CONFIG SEEDING — how DAPPS_* env vars behave: DAPPS has two modes, switched
+# by DAPPS_ENV_MANAGED (read each start, never stored):
+#
+#   - unset/false (the standalone default): env vars seed missing options on
+#     first start only; thereafter the dashboard owns every value.
+#   - "true" (set below — pdn-supervised deployments opt in): every set
+#     DAPPS_* env var is deployment-managed config — re-applied over whatever
+#     the dashboard stored at EVERY start, and badged read-only in the
+#     dashboard. Unset variables never touch stored config: anything not
+#     pinned below stays editable live through the DAPPS dashboard's
+#     /Setup // /Config pages, exactly as standalone.
 #
 # CALLSIGN — no pre-set needed: pdn injects PDN_NODE_CALLSIGN, and while no
 # real callsign is configured DAPPS derives its own identity as
 # <node-base-callsign>-<DAPPS_SSID> (DAPPS_SSID defaults to 7, so node M0XYZ
-# gets DAPPS at M0XYZ-7). The owner can still pin a different identity via
-# pdn's `apps:` override environment — an explicit DAPPS_CALLSIGN (or a real
-# callsign saved via the dashboard) always wins over derivation:
+# gets DAPPS at M0XYZ-7). If that SSID is already claimed on the node (pdn
+# refuses the listen with errCode 9 "Duplicate socket"), DAPPS probes the
+# next free SSID over RHPv2 (skipping 0 and the node's own SSID) and keeps
+# the first one that binds — the confirmed identity is then stable across
+# restarts. The owner can still pin a different identity via pdn's `apps:`
+# override environment — an explicit DAPPS_CALLSIGN (or a real callsign saved
+# via the dashboard) always wins over derivation and never probes:
 #
 #   apps:
 #     - id: dapps
@@ -45,6 +55,7 @@ capabilities: [network, web]  # binds its own callsigns over RHPv2; serves its o
 service:
   command: ./dapps            # relative — resolves to the release binary in this package dir
   environment:
+    DAPPS_ENV_MANAGED: "true"             # opt in: env vars below are re-applied at every start
     DAPPS_NODE_BEARER: rhpv2              # speak RHPv2 to pdn (not AGW)
     DAPPS_NODE_HOST: "127.0.0.1"
     DAPPS_RHP_PORT: "9000"                # pdn's RHP server loopback port

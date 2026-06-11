@@ -64,9 +64,11 @@ public sealed class SetupModel(
 
     public string? Error { get; private set; }
 
-    /// <summary>True when the option's <c>DAPPS_*</c> env var is set:
-    /// the value is deployment-managed (re-applied at every start), so
-    /// the form badges it. See <see cref="DbStartup.IsEnvManaged"/>.</summary>
+    /// <summary>True when the daemon runs under
+    /// <c>DAPPS_ENV_MANAGED=true</c> and the option's <c>DAPPS_*</c>
+    /// env var is set: the value is deployment-managed (re-applied at
+    /// every start), so the form badges it. Always false in the
+    /// standalone default mode. See <see cref="DbStartup.IsEnvManaged"/>.</summary>
     public static bool IsEnvManaged(string key) => DbStartup.IsEnvManaged(key);
 
     public async Task<IActionResult> OnGetAsync()

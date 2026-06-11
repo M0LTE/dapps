@@ -240,11 +240,13 @@ async function dappsRotatePassword(ev) {
 }
 
 // --- Deployment-managed (env-set) fields ---
-// Any option whose DAPPS_* env var is set on the daemon's environment
-// is re-applied from the environment at EVERY start (the pdn
-// supervised-app case), so a dashboard edit would be silently
-// overridden on the next restart. Badge those fields and make them
-// read-only so the operator isn't invited to fight the deployment.
+// Under DAPPS_ENV_MANAGED=true (the pdn supervised-app mode), any
+// option whose DAPPS_* env var is set on the daemon's environment is
+// re-applied from the environment at EVERY start, so a dashboard edit
+// would be silently overridden on the next restart. Badge those
+// fields and make them read-only so the operator isn't invited to
+// fight the deployment. In the standalone default mode the list is
+// always empty - env vars only seed first-start values there.
 // The form still serialises their values on save (the JS reads .value
 // // .checked directly, which works on readonly/disabled controls),
 // so saving unrelated fields keeps env-managed ones intact.

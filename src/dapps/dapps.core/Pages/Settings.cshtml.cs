@@ -12,11 +12,14 @@ namespace dapps.core.Pages;
 /// "Admin password" panels. Posts JSON to <c>/Config</c>; the daemon
 /// hot-reloads everything except the MQTT and UDP listener ports.
 ///
-/// <para>Fields whose <c>DAPPS_*</c> env var is set on the daemon's
-/// environment are deployment-managed: <see cref="DbStartup"/>
-/// re-applies the env value at every start, so dashboard edits would
-/// be silently overridden. <see cref="EnvManaged"/> feeds the page
-/// script that badges those fields and makes them read-only.</para>
+/// <para>Under <c>DAPPS_ENV_MANAGED=true</c> (the pdn supervised-app
+/// mode), fields whose <c>DAPPS_*</c> env var is set are deployment-
+/// managed: <see cref="DbStartup"/> re-applies the env value at every
+/// start, so dashboard edits would be silently overridden.
+/// <see cref="EnvManaged"/> feeds the page script that badges those
+/// fields and makes them read-only. In the standalone default mode it
+/// is always empty - env vars only seed first-start values there and
+/// the dashboard owns everything.</para>
 /// </summary>
 public sealed class SettingsModel(IOptionsMonitor<SystemOptions> options) : PageModel
 {

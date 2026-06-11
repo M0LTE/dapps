@@ -32,6 +32,22 @@ public static class DbStartup
     /// placeholder never go on the air.</summary>
     public const string PlaceholderCallsign = "N0CALL";
 
+    /// <summary>Mode switch (read from the environment at every start,
+    /// never stored): when set to <c>true</c> the deployment - not the
+    /// dashboard - owns every option whose <c>DAPPS_*</c> env var is
+    /// set. See <see cref="IsEnvManagedMode"/>.</summary>
+    public const string EnvManagedModeVar = "DAPPS_ENV_MANAGED";
+
+    /// <summary>Option key holding a callsign that was derived from the
+    /// host node (<see cref="NodeCallsignEnvVar"/>) but has not yet been
+    /// confirmed free by a successful RHPv2 listen. While this row
+    /// matches the stored callsign, <c>Rhpv2InboundService</c> may
+    /// probe-walk to a free SSID if the node refuses the derived one
+    /// (errCode 9 "Duplicate socket"); once a listen succeeds the row
+    /// is cleared and the confirmed identity is stable on every later
+    /// start. Not a seeded option - no env var, no dashboard field.</summary>
+    public const string DerivedCallsignPendingKey = "DerivedCallsignPending";
+
     /// <summary>Option key holding the SSID used when deriving this
     /// instance's callsign from the host node's callsign (see
     /// <see cref="NodeCallsignEnvVar"/>). Seeded to <see cref="DefaultSsid"/>;
@@ -93,12 +109,31 @@ public static class DbStartup
         (SsidOptionKey, DefaultSsid),
     ];
 
+    /// <summary>True when <see cref="EnvManagedModeVar"/> is set to
+    /// <c>true</c> (or <c>1</c>): the deployment-managed mode, opted
+    /// into by pdn-supervised installs via pdn-app.yaml. In this mode
+    /// every set <c>DAPPS_*</c> env var is re-applied over the stored
+    /// row at every start and the dashboard badges those fields
+    /// read-only. Unset / any other value = the standalone default:
+    /// env vars seed missing rows on first start only and the
+    /// dashboard owns everything thereafter (the shipped
+    /// scripts/dapps.service flow keeps /etc/dapps.env applied
+    /// forever, so re-applying would revert dashboard edits there).</summary>
+    public static bool IsEnvManagedMode
+    {
+        get
+        {
+            var v = Environment.GetEnvironmentVariable(EnvManagedModeVar);
+            return string.Equals(v, "true", StringComparison.OrdinalIgnoreCase) || v == "1";
+        }
+    }
+
     /// <summary>
     /// Create every table the daemon needs, seed the first-run
     /// systemoptions defaults (env-var overrides → hardcoded fallback),
-    /// and re-apply any env-set values to existing rows (deployment-
-    /// managed config). Safe to call multiple times - every step is
-    /// idempotent.
+    /// and - only when <see cref="IsEnvManagedMode"/> - re-apply any
+    /// env-set values to existing rows (deployment-managed config).
+    /// Safe to call multiple times - every step is idempotent.
     ///
     /// Called once from Program.cs *before* <c>builder.Build()</c> so
     /// the eager DI materialisation of hosted services (which transit
@@ -134,14 +169,21 @@ public static class DbStartup
         var optionsTable = db.Table<DbSystemOption>().Table.TableName;
         var options = db.Query<DbSystemOption>($"select * from {optionsTable};");
 
-        // Seeded defaults. When an env var DAPPS_<KEY> is set, it wins -
-        // on EVERY start, not just the first: a set env var is
-        // deployment-managed config (the pdn supervised-app case) and is
-        // re-applied over whatever the row holds. An UNSET env var never
-        // touches an existing row, so the standalone flow (no DAPPS_*
-        // env; configure via /Setup // /Config) is unchanged, and a
-        // standalone operator who seeds once via env then unsets it
-        // keeps dashboard control exactly as before.
+        // Seeded defaults. A set env var DAPPS_<KEY> always wins for a
+        // row that doesn't exist yet (first start). What happens to an
+        // EXISTING row depends on the DAPPS_ENV_MANAGED mode switch:
+        //
+        //   unset/false (the standalone default): env vars seed only;
+        //     stored (dashboard-edited) values are never touched on
+        //     later starts. The shipped standalone flow
+        //     (scripts/dapps.service + EnvironmentFile=/etc/dapps.env)
+        //     keeps DAPPS_* set permanently, so re-applying would
+        //     silently revert every dashboard edit - hence opt-in.
+        //
+        //   true (the pdn supervised-app case; set in pdn-app.yaml):
+        //     every set DAPPS_<KEY> is deployment-managed config and is
+        //     re-applied over whatever the row holds at EVERY start,
+        //     and the dashboard badges those fields read-only.
         foreach (var (key, defaultValue) in SeededOptions)
         {
             SeedOrApplyEnv(db, options, key, defaultValue, logger);
@@ -172,7 +214,7 @@ public static class DbStartup
             return;
         }
 
-        if (!string.IsNullOrEmpty(envValue) && !string.Equals(existing.Value, envValue, StringComparison.Ordinal))
+        if (IsEnvManagedMode && !string.IsNullOrEmpty(envValue) && !string.Equals(existing.Value, envValue, StringComparison.Ordinal))
         {
             existing.Value = envValue;
             db.Update(existing);
@@ -196,23 +238,37 @@ public static class DbStartup
     /// </summary>
     private static void DeriveCallsignFromHostNodeIfUnset(SQLiteConnection db, ILogger? logger)
     {
+        var options = db.Query<DbSystemOption>("select * from systemoptions;");
+        var callsignRow = options.FirstOrDefault(
+            o => string.Equals(o.Option, "Callsign", StringComparison.OrdinalIgnoreCase));
+        var markerRow = options.FirstOrDefault(
+            o => string.Equals(o.Option, DerivedCallsignPendingKey, StringComparison.OrdinalIgnoreCase));
+        var stored = callsignRow?.Value ?? "";
+
         // An explicit DAPPS_CALLSIGN wins over derivation. (It was
         // already applied above; this guard also keeps a pathological
         // DAPPS_CALLSIGN=N0CALL from being re-derived underneath.)
         if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable(EnvVarFor("Callsign"))))
         {
+            ClearPendingMarker(db, markerRow); // identity explicitly pinned - nothing pending
             return;
         }
 
-        var options = db.Query<DbSystemOption>("select * from systemoptions;");
-        var callsignRow = options.FirstOrDefault(
-            o => string.Equals(o.Option, "Callsign", StringComparison.OrdinalIgnoreCase));
-        var stored = callsignRow?.Value ?? "";
         var unset = string.IsNullOrWhiteSpace(stored)
             || string.Equals(stored, PlaceholderCallsign, StringComparison.OrdinalIgnoreCase);
         if (!unset)
         {
-            return; // a real stored callsign always wins
+            // A real stored callsign always wins. Keep the pending
+            // marker only while it still matches the stored value (=
+            // a derivation from a previous start that the RHPv2
+            // listener hasn't confirmed yet); a dashboard-configured
+            // callsign clears it so an explicit identity never walks.
+            if (markerRow is not null
+                && !string.Equals(markerRow.Value, stored, StringComparison.OrdinalIgnoreCase))
+            {
+                ClearPendingMarker(db, markerRow);
+            }
+            return;
         }
 
         var ssidRow = options.FirstOrDefault(
@@ -221,7 +277,11 @@ public static class DbStartup
         var derived = DeriveCallsignFromHostNode(ssid);
         if (derived is null)
         {
-            return; // not pdn-hosted - standalone setup-required flow as before
+            // Not pdn-hosted - standalone setup-required flow as before.
+            // A leftover marker (e.g. the host stopped injecting
+            // PDN_NODE_CALLSIGN) can't match the placeholder; drop it.
+            ClearPendingMarker(db, markerRow);
+            return;
         }
 
         if (callsignRow is null)
@@ -234,10 +294,82 @@ public static class DbStartup
             db.Update(callsignRow);
         }
 
+        // Mark the derivation as not-yet-confirmed: if the node refuses
+        // the listen with errCode 9 (callsign already claimed there),
+        // Rhpv2InboundService probe-walks the SSIDs for a free one and
+        // persists the winner; the first successful listen clears this.
+        if (markerRow is null)
+        {
+            db.Insert(new DbSystemOption { Option = DerivedCallsignPendingKey, Value = derived });
+        }
+        else if (!string.Equals(markerRow.Value, derived, StringComparison.Ordinal))
+        {
+            markerRow.Value = derived;
+            db.Update(markerRow);
+        }
+
         logger?.LogInformation(
             "Callsign {Derived} derived from the host node ({EnvVar}={NodeCall}, SSID {Ssid}). " +
+            "If the node already has a {Derived} the RHPv2 listener will probe for a free SSID and keep it. " +
             "Set DAPPS_CALLSIGN or configure a callsign via the dashboard to pin a different identity.",
             derived, NodeCallsignEnvVar, Environment.GetEnvironmentVariable(NodeCallsignEnvVar), ssid);
+    }
+
+    private static void ClearPendingMarker(SQLiteConnection db, DbSystemOption? markerRow)
+    {
+        if (markerRow is not null)
+        {
+            db.Execute("delete from systemoptions where option = ?;", markerRow.Option);
+        }
+    }
+
+    /// <summary>The derived callsign awaiting its first successful
+    /// listen, or null when none is pending. See
+    /// <see cref="DerivedCallsignPendingKey"/>.</summary>
+    public static string? ReadPendingDerivedCallsign()
+    {
+        using var db = DbInfo.GetConnection();
+        db.CreateTable<DbSystemOption>();
+        var row = db.Query<DbSystemOption>(
+                "select * from systemoptions where option = ? collate nocase;", DerivedCallsignPendingKey)
+            .FirstOrDefault();
+        return string.IsNullOrWhiteSpace(row?.Value) ? null : row!.Value;
+    }
+
+    /// <summary>A listen succeeded on <paramref name="confirmed"/>:
+    /// persist it as the stored callsign (it may differ from the
+    /// original derivation after a probe-walk) and clear the pending
+    /// marker so the identity is stable on every later start - a
+    /// persisted, confirmed callsign never walks again.</summary>
+    public static void ConfirmDerivedCallsign(string confirmed)
+    {
+        using var db = DbInfo.GetConnection();
+        var callsignRow = db.Query<DbSystemOption>(
+                "select * from systemoptions where option = ? collate nocase;", "Callsign")
+            .FirstOrDefault();
+        if (callsignRow is null)
+        {
+            db.Insert(new DbSystemOption { Option = "Callsign", Value = confirmed });
+        }
+        else if (!string.Equals(callsignRow.Value, confirmed, StringComparison.Ordinal))
+        {
+            callsignRow.Value = confirmed;
+            db.Update(callsignRow);
+        }
+        db.Execute("delete from systemoptions where option = ? collate nocase;", DerivedCallsignPendingKey);
+    }
+
+    /// <summary>Every candidate SSID was taken on the node: drop back
+    /// to the placeholder (setup-required mode - the bearer gates idle
+    /// instead of hammering the node) and clear the pending marker.
+    /// The operator pins an identity via the dashboard / DAPPS_CALLSIGN,
+    /// or the next daemon restart re-derives and probes again.</summary>
+    public static void AbandonDerivedCallsign()
+    {
+        using var db = DbInfo.GetConnection();
+        db.Execute("update systemoptions set value = ? where option = ? collate nocase;",
+            PlaceholderCallsign, "Callsign");
+        db.Execute("delete from systemoptions where option = ? collate nocase;", DerivedCallsignPendingKey);
     }
 
     /// <summary>Compose the conventional pdn-hosted DAPPS callsign:
@@ -279,14 +411,19 @@ public static class DbStartup
     /// e.g. <c>NodeHost</c> → <c>DAPPS_NODE_HOST</c>.</summary>
     public static string EnvVarFor(string key) => "DAPPS_" + ToScreamingSnake(key);
 
-    /// <summary>True when the given option key's <c>DAPPS_*</c> env var
-    /// is currently set (non-empty) - i.e. the value is deployment-
-    /// managed and re-applied at every start.</summary>
+    /// <summary>True when the daemon runs in deployment-managed mode
+    /// (<see cref="IsEnvManagedMode"/>) AND the given option key's
+    /// <c>DAPPS_*</c> env var is currently set (non-empty) - i.e. the
+    /// value is re-applied from the environment at every start. Always
+    /// false in the standalone default mode, where a set env var only
+    /// seeds first-start values and the dashboard stays in charge.</summary>
     public static bool IsEnvManaged(string key) =>
-        !string.IsNullOrEmpty(Environment.GetEnvironmentVariable(EnvVarFor(key)));
+        IsEnvManagedMode && !string.IsNullOrEmpty(Environment.GetEnvironmentVariable(EnvVarFor(key)));
 
-    /// <summary>Seeded option keys whose env var is currently set, for
-    /// the dashboard's "managed by environment" field markers.</summary>
+    /// <summary>Seeded option keys that are deployment-managed right
+    /// now (<see cref="IsEnvManaged"/>), for the dashboard's "managed
+    /// by environment" field markers. Empty outside
+    /// <see cref="IsEnvManagedMode"/>.</summary>
     public static IReadOnlyList<string> EnvManagedKeys() =>
         SeededOptions.Select(s => s.Key).Where(IsEnvManaged).ToArray();
 
