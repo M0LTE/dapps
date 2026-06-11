@@ -311,6 +311,32 @@ builder.Services.AddLogging(logging =>
 });
 var app = builder.Build();
 
+// pdn app-gateway support (packet.net docs/app-gateway.md). When the
+// dashboard is reverse-proxied under /apps/dapps/, the gateway strips
+// the prefix from the forwarded path and injects
+// `X-Forwarded-Prefix: /apps/dapps`. Setting Request.PathBase from the
+// header makes every framework-generated URL (Razor tag helpers, `~/`
+// hrefs, Url.Content, RedirectToPage, LocalRedirect("~/..."), the
+// cookie scheme's /Login challenge) come out prefixed, so links and
+// redirects rendered through the proxy stay inside the mount. The
+// path itself is NOT touched - the gateway already stripped the
+// prefix, so PathBase is purely additive for URL generation. Without
+// the header (standalone direct access) PathBase stays empty and
+// every URL renders exactly as before.
+//
+// MUST run first in the pipeline - before auth (the cookie challenge
+// builds its redirect from PathBase) and before any endpoint that
+// generates URLs.
+app.Use((ctx, next) =>
+{
+    var prefix = ctx.Request.Headers["X-Forwarded-Prefix"].ToString().TrimEnd('/');
+    if (!string.IsNullOrEmpty(prefix) && prefix.StartsWith('/'))
+    {
+        ctx.Request.PathBase = new PathString(prefix);
+    }
+    return next(ctx);
+});
+
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseMiddleware<BearerAuthMiddleware>();

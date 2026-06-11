@@ -9,14 +9,14 @@
 }
 
 @section Actions {
-    <a class="btn sm" href="/Compose">Compose</a>
+    <a class="btn sm" href="~/Compose">Compose</a>
 }
 
 @section Tabs {
-    <a href="/Messages?tab=outbound" class="@(tab == "outbound" ? "active" : "")">Outbound queue <span class="count" id="cnt-outbound">0</span></a>
-    <a href="/Messages?tab=inbox" class="@(tab == "inbox" ? "active" : "")">Local inbox <span class="count" id="cnt-inbox">0</span></a>
-    <a href="/Messages?tab=dropped" class="@(tab == "dropped" ? "active" : "")">Dropped <span class="count" id="cnt-dropped">0</span></a>
-    <a href="/Messages?tab=live" class="@(tab == "live" ? "active" : "")">Live arrivals <span id="sse-state" class="pill">connecting</span></a>
+    <a href="~/Messages?tab=outbound" class="@(tab == "outbound" ? "active" : "")">Outbound queue <span class="count" id="cnt-outbound">0</span></a>
+    <a href="~/Messages?tab=inbox" class="@(tab == "inbox" ? "active" : "")">Local inbox <span class="count" id="cnt-inbox">0</span></a>
+    <a href="~/Messages?tab=dropped" class="@(tab == "dropped" ? "active" : "")">Dropped <span class="count" id="cnt-dropped">0</span></a>
+    <a href="~/Messages?tab=live" class="@(tab == "live" ? "active" : "")">Live arrivals <span id="sse-state" class="pill">connecting</span></a>
 }
 
 @if (tab == "outbound")
@@ -291,7 +291,7 @@ else
             tr.innerHTML = `<td colspan="6"><div class="payload-meta">loading payload for <code>${escape(id)}</code>...</div></td>`;
             row.parentNode.insertBefore(tr, row.nextSibling);
             try {
-                const res = await fetch('/Events/payload/' + encodeURIComponent(id), { credentials: 'same-origin' });
+                const res = await fetch('@Url.Content("~/Events/payload/")' + encodeURIComponent(id), { credentials: 'same-origin' });
                 if (res.status === 404) { tr.innerHTML = `<td colspan="6"><div class="payload-meta">payload for <code>${escape(id)}</code> not found - row may have been swept</div></td>`; return; }
                 if (!res.ok) { tr.innerHTML = `<td colspan="6"><div class="payload-meta">payload fetch failed: HTTP ${res.status}</div></td>`; return; }
                 const p = await res.json();
@@ -322,7 +322,7 @@ else
             }
         };
 
-        const es = new EventSource('/Events/inbound');
+        const es = new EventSource('@Url.Content("~/Events/inbound")');
         es.onopen = () => { status.textContent = 'live'; status.className = 'pill ok'; };
         es.onerror = () => { status.textContent = 'reconnecting'; status.className = 'pill warn'; };
         es.addEventListener('inbound', (ev) => {

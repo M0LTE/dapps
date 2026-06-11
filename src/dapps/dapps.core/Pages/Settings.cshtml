@@ -219,7 +219,7 @@ async function dappsSaveConfig(ev) {
         AutoDiscoverViaNodeCall: f.AutoDiscoverViaNodeCall.checked,
         NodePromptApplicationCommand: f.NodePromptApplicationCommand.value,
     };
-    if (await dappsPostJson('/Config', body)) {
+    if (await dappsPostJson('@Url.Content("~/Config")', body)) {
         const head = document.querySelector('.page-head');
         if (head) {
             const banner = document.createElement('div');
@@ -233,7 +233,7 @@ async function dappsSaveConfig(ev) {
 async function dappsRotatePassword(ev) {
     ev.preventDefault();
     const pwd = ev.target.password.value;
-    if (await dappsPostJson('/Config/admin-password', { password: pwd })) {
+    if (await dappsPostJson('@Url.Content("~/Config/admin-password")', { password: pwd })) {
         ev.target.reset();
         alert('Password updated.');
     }
@@ -303,7 +303,7 @@ async function dappsRotatePassword(ev) {
         btn.disabled = true;
         status.textContent = 'checking GitHub...';
         try {
-            const res = await fetch('/Update/check', { method: 'POST' });
+            const res = await fetch('@Url.Content("~/Update/check")', { method: 'POST' });
             if (!res.ok) {
                 status.textContent = `check failed: HTTP ${res.status}`;
                 return;

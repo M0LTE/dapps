@@ -55,7 +55,7 @@ public sealed class AdminAuthMiddleware(RequestDelegate next)
         // here.
         if (!await store.IsConfiguredAsync())
         {
-            ctx.Response.Redirect("/Setup");
+            ctx.Response.Redirect($"{ctx.Request.PathBase}/Setup");
             return;
         }
 
@@ -75,7 +75,7 @@ public sealed class AdminAuthMiddleware(RequestDelegate next)
                 || string.Equals(callsign, DbStartup.PlaceholderCallsign, StringComparison.OrdinalIgnoreCase);
             if (isSetupRequired && LooksLikeNavigation(ctx.Request))
             {
-                ctx.Response.Redirect("/Setup");
+                ctx.Response.Redirect($"{ctx.Request.PathBase}/Setup");
                 return;
             }
 

@@ -82,11 +82,11 @@ async function dappsPostJson(url, body, method) {
 }
 window.dappsRunSweep = async () => {
     if (!confirm('Probe every known peer now? Uses other operators\' airtime.')) return;
-    if (await dappsPostJson('/Probes/run', null)) await window.dappsRefreshSnap?.();
+    if (await dappsPostJson('@Url.Content("~/Probes/run")', null)) await window.dappsRefreshSnap?.();
 };
 window.dappsRunPollSweep = async () => {
     if (!confirm('Poll every neighbour for queued mail now?')) return;
-    if (await dappsPostJson('/Polls/run', null)) await window.dappsRefreshSnap?.();
+    if (await dappsPostJson('@Url.Content("~/Polls/run")', null)) await window.dappsRefreshSnap?.();
 };
 
 (function () {
@@ -116,7 +116,7 @@ window.dappsRunPollSweep = async () => {
         if (failuresChk.checked) params.set('onlyFailures', 'true');
 
         try {
-            const res = await fetch('/Transmissions?' + params.toString(), { credentials: 'same-origin' });
+            const res = await fetch('@Url.Content("~/Transmissions")?' + params.toString(), { credentials: 'same-origin' });
             if (!res.ok) {
                 status.textContent = 'error'; status.className = 'pill warn';
                 tbody.innerHTML = `<tr><td colspan="8" class="muted" style="text-align:center;">HTTP ${res.status}</td></tr>`;

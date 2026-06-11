@@ -104,7 +104,7 @@ public sealed class SetupModel(
         }
 
         // Both done - the wizard has nothing left to ask.
-        return LocalRedirect("/");
+        return LocalRedirect("~/");
     }
 
     public async Task<IActionResult> OnPostPasswordAsync()
@@ -114,7 +114,7 @@ public sealed class SetupModel(
             // Race: another request set the password between our load
             // and submit. Fall through to /Setup so the wizard re-
             // evaluates state (probably onto the bearer step).
-            return LocalRedirect("/Setup");
+            return LocalRedirect("~/Setup");
         }
 
         if (string.IsNullOrEmpty(Password) || Password.Length < 8)
@@ -147,7 +147,7 @@ public sealed class SetupModel(
             });
 
         // Re-enter /Setup; OnGetAsync will route to the bearer step.
-        return LocalRedirect("/Setup");
+        return LocalRedirect("~/Setup");
     }
 
     public async Task<IActionResult> OnPostBearerAsync()
@@ -157,7 +157,7 @@ public sealed class SetupModel(
         // without a cookie shouldn't be able to set the callsign).
         if (User.Identity is not { IsAuthenticated: true })
         {
-            return LocalRedirect("/Login");
+            return LocalRedirect("~/Login");
         }
 
         Step = SetupStep.Bearer;
@@ -192,7 +192,7 @@ public sealed class SetupModel(
 
         await optionsStore.SaveAsync(opts);
 
-        return LocalRedirect("/");
+        return LocalRedirect("~/");
     }
 
     private static bool IsCallsignPlaceholder(string callsign) =>

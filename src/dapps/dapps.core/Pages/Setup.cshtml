@@ -278,7 +278,7 @@
                         detectResult.className = "detect-result";
                         detectResult.textContent = "probing...";
                         try {
-                            const url = "/Config/detect-bearer?host=" + encodeURIComponent(nodeHost.value || "localhost");
+                            const url = "@Url.Content("~/Config/detect-bearer?host=")" + encodeURIComponent(nodeHost.value || "localhost");
                             const r = await fetch(url, {
                                 credentials: "same-origin",
                                 headers: { "Accept": "application/json" },

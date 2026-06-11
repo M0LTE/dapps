@@ -8,8 +8,8 @@
 }
 
 @section Actions {
-    <a class="btn secondary sm" href="/Diagnostics">Audit log</a>
-    <a class="btn sm" href="/Compose">Compose message</a>
+    <a class="btn secondary sm" href="~/Diagnostics">Audit log</a>
+    <a class="btn sm" href="~/Compose">Compose message</a>
 }
 
 @if (Model.FlashOk is not null)
@@ -24,7 +24,7 @@
 @if (string.IsNullOrWhiteSpace(Model.Options.Callsign) || string.Equals(Model.Options.Callsign, "N0CALL", StringComparison.OrdinalIgnoreCase))
 {
     <div class="info-banner">
-        Looks like a fresh install. Set your callsign and packet-node bearer in <a href="/Settings">Settings</a> to start beaconing.
+        Looks like a fresh install. Set your callsign and packet-node bearer in <a href="~/Settings">Settings</a> to start beaconing.
     </div>
 }
 
@@ -134,7 +134,7 @@
             <div class="card" style="padding: 0.7rem 0.85rem;"><div class="label">Pending</div><div class="value" id="ov-pending-out">-</div></div>
             <div class="card" style="padding: 0.7rem 0.85rem;"><div class="label">Forwards (boot)</div><div class="value" id="ov-fwd-success">-</div></div>
         </div>
-        <div class="card-actions"><a class="btn secondary sm" href="/Messages?tab=outbound">Inspect outbound</a></div>
+        <div class="card-actions"><a class="btn secondary sm" href="~/Messages?tab=outbound">Inspect outbound</a></div>
     </div>
     <div class="panel">
         <h3>Local inbox</h3>
@@ -143,7 +143,7 @@
             <div class="card" style="padding: 0.7rem 0.85rem;"><div class="label">Undelivered</div><div class="value" id="ov-pending-local">-</div></div>
             <div class="card" style="padding: 0.7rem 0.85rem;"><div class="label">Total tracked</div><div class="value" id="ov-total">-</div></div>
         </div>
-        <div class="card-actions"><a class="btn secondary sm" href="/Messages?tab=inbox">Inspect inbox</a><a class="btn ghost sm" href="/Messages?tab=live">Live arrivals</a></div>
+        <div class="card-actions"><a class="btn secondary sm" href="~/Messages?tab=inbox">Inspect inbox</a><a class="btn ghost sm" href="~/Messages?tab=live">Live arrivals</a></div>
     </div>
     <div class="panel">
         <h3>Discovery airtime</h3>
@@ -183,12 +183,12 @@
         <div class="field" style="grid-column: 1 / -1;">
             <label for="Payload">Payload (UTF-8 text)</label>
             <input id="Payload" type="text" name="@nameof(IndexModel.Send).@nameof(IndexModel.SendForm.Payload)" value="@Model.Send.Payload" placeholder="hello world" />
-            <span class="hint">For binary payloads or fine-grained control use <a href="/Compose">Compose</a>.</span>
+            <span class="hint">For binary payloads or fine-grained control use <a href="~/Compose">Compose</a>.</span>
         </div>
     </div>
     <div style="margin-top: 0.85rem; display: flex; gap: 0.5rem;">
         <button class="btn" type="submit">Submit to queue</button>
-        <a class="btn ghost" href="/Compose">Open full compose</a>
+        <a class="btn ghost" href="~/Compose">Open full compose</a>
     </div>
 </form>
 
@@ -474,7 +474,7 @@
                         set('hero-update-meta', 'request sent - updater fires within 60s, then phase progresses here');
                         updAction.style.display = 'none';
                         try {
-                            const res = await fetch('/Update/apply', { method: 'POST' });
+                            const res = await fetch('@Url.Content("~/Update/apply")', { method: 'POST' });
                             if (!res.ok) {
                                 setPill('err', 'failed');
                                 set('hero-update-meta', `apply request failed: HTTP ${res.status}`);
@@ -514,7 +514,7 @@
                         set('hero-update-meta', 'checking GitHub...');
                         updCheck.style.display = 'none';
                         try {
-                            const res = await fetch('/Update/check', { method: 'POST' });
+                            const res = await fetch('@Url.Content("~/Update/check")', { method: 'POST' });
                             if (!res.ok) {
                                 set('hero-update-meta', `check failed: HTTP ${res.status}`);
                                 updCheck.style.display = '';
