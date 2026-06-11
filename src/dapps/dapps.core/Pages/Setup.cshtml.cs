@@ -64,6 +64,11 @@ public sealed class SetupModel(
 
     public string? Error { get; private set; }
 
+    /// <summary>True when the option's <c>DAPPS_*</c> env var is set:
+    /// the value is deployment-managed (re-applied at every start), so
+    /// the form badges it. See <see cref="DbStartup.IsEnvManaged"/>.</summary>
+    public static bool IsEnvManaged(string key) => DbStartup.IsEnvManaged(key);
+
     public async Task<IActionResult> OnGetAsync()
     {
         if (!await store.IsConfiguredAsync())
@@ -77,9 +82,15 @@ public sealed class SetupModel(
         {
             // Operator set the password but hasn't done bearer yet.
             // Pre-fill the form from the persisted defaults so they
-            // only type what they want to change.
+            // only type what they want to change. Under a pdn host
+            // (PDN_NODE_CALLSIGN injected) suggest the conventional
+            // <node-base-call>-<Ssid> identity; normally DbStartup has
+            // already persisted that derivation at boot and this step
+            // is skipped entirely, but if the callsign was reset to the
+            // placeholder mid-run the wizard still offers the right
+            // default.
             Step = SetupStep.Bearer;
-            Callsign = "";
+            Callsign = DbStartup.DeriveCallsignFromHostNode() ?? "";
             NodeHost = string.IsNullOrWhiteSpace(opts.NodeHost) ? "localhost" : opts.NodeHost;
             NodeBearer = string.Equals(opts.NodeBearer, "rhpv2", StringComparison.OrdinalIgnoreCase) ? "rhpv2" : "agw";
             AgwPortDefault = opts.AgwPort > 0 ? opts.AgwPort : 8000;

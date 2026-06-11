@@ -6,9 +6,9 @@
 # deb from this repo's published release binary) or /var/lib/packetnet/apps/dapps
 # (owner-installed), and the app stays OFF until the node owner enables it.
 #
-# A future dapps release workflow should attach this file as a release asset
-# (next to the dapps-linux-* binaries) so pdn's build can fetch manifest +
-# binary together from one release instead of carrying an interim copy.
+# The release workflow attaches this file as a release asset (next to the
+# dapps-linux-* binaries, with `version:` stamped to the release tag) so pdn's
+# build can fetch manifest + binary together from one release.
 manifest: 1
 id: dapps                     # must equal the package directory name
 name: DAPPS
@@ -21,20 +21,24 @@ capabilities: [network, web]  # binds its own callsigns over RHPv2; serves its o
 # DAPPS is not a console verb; it speaks RHPv2 to the node and binds its own
 # callsigns.
 #
-# FIRST-START SEEDING — read before enabling: DAPPS seeds its config from
-# DAPPS_* env vars ONLY on first start (a fresh data/dapps.db in the working
-# directory). Once the db exists, env vars stop mattering — later changes go
-# through the DAPPS dashboard's /Setup // /Config pages, or by deleting the db
-# to re-seed. In particular the owner MUST supply their callsign via pdn's
-# `apps:` override environment BEFORE the first start (there is no sensible
-# default — DAPPS boots in setup-required mode with the N0CALL placeholder and
-# refuses to bind bearers until a real callsign is configured):
+# CONFIG SEEDING — how DAPPS_* env vars behave: every set DAPPS_* env var is
+# deployment-managed config — it is applied at EVERY start (re-applied over
+# whatever the dashboard stored), not just the first. Unset variables never
+# touch stored config: anything not pinned below stays editable live through
+# the DAPPS dashboard's /Setup // /Config pages, exactly as standalone.
+#
+# CALLSIGN — no pre-set needed: pdn injects PDN_NODE_CALLSIGN, and while no
+# real callsign is configured DAPPS derives its own identity as
+# <node-base-callsign>-<DAPPS_SSID> (DAPPS_SSID defaults to 7, so node M0XYZ
+# gets DAPPS at M0XYZ-7). The owner can still pin a different identity via
+# pdn's `apps:` override environment — an explicit DAPPS_CALLSIGN (or a real
+# callsign saved via the dashboard) always wins over derivation:
 #
 #   apps:
 #     - id: dapps
 #       enabled: true
 #       environment:
-#         DAPPS_CALLSIGN: M0XYZ-7
+#         DAPPS_CALLSIGN: M0XYZ-9   # optional — omit to accept <nodecall>-7
 #
 # The working directory defaults to the app's state dir, so the database lands
 # in /var/lib/packetnet/apps/dapps (DAPPS resolves it cwd-relative).

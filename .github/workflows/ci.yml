@@ -247,7 +247,18 @@ jobs:
           path: dist
           merge-multiple: true
 
+      - name: Stamp manifest version
+        # pdn-app.yaml's `version:` field is informational (pdn shows it
+        # in its UI) and should track the release tag. Stamp it into the
+        # copy we attach so the asset always matches the release it
+        # ships with; the repo copy stays as-is.
+        run: |
+          sed -i 's/^version: .*/version: "${{ needs.test.outputs.version }}"/' pdn-app.yaml
+          grep '^version:' pdn-app.yaml
+
       - name: Create GitHub Release
+        # pdn-app.yaml rides along as a release asset so the pdn build
+        # can fetch manifest + binary from the same release.
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -256,4 +267,5 @@ jobs:
             --title "$tag" \
             --target "${{ github.sha }}" \
             --generate-notes \
-            dist/*
+            dist/* \
+            pdn-app.yaml

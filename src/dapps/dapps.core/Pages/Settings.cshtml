@@ -19,6 +19,18 @@
         font-family: var(--font-mono);
         letter-spacing: 0.18em;
     }
+
+    /* Deployment-managed (env-set) fields: badge next to the label,
+       control rendered read-only. See the env-managed script below. */
+    .env-badge {
+        display: inline-block; margin-left: 0.4rem;
+        padding: 0.05rem 0.4rem; border-radius: 999px;
+        font-size: 0.68rem; font-weight: 600;
+        text-transform: uppercase; letter-spacing: 0.05em;
+        background: color-mix(in srgb, var(--accent, #2563eb) 15%, transparent);
+        color: var(--accent, #2563eb);
+        cursor: help; vertical-align: middle;
+    }
 </style>
 
 <form id="settings-form" onsubmit="dappsSaveConfig(event)" autocomplete="off" data-default-bearer-port="@Model.Options.DefaultBearerPort">
@@ -226,6 +238,34 @@ async function dappsRotatePassword(ev) {
         alert('Password updated.');
     }
 }
+
+// --- Deployment-managed (env-set) fields ---
+// Any option whose DAPPS_* env var is set on the daemon's environment
+// is re-applied from the environment at EVERY start (the pdn
+// supervised-app case), so a dashboard edit would be silently
+// overridden on the next restart. Badge those fields and make them
+// read-only so the operator isn't invited to fight the deployment.
+// The form still serialises their values on save (the JS reads .value
+// // .checked directly, which works on readonly/disabled controls),
+// so saving unrelated fields keeps env-managed ones intact.
+(function () {
+    const managed = @Json.Serialize(Model.EnvManaged.Select(f => new { key = f.Key, env = f.Env }));
+    const form = document.getElementById('settings-form');
+    if (!form) return;
+    for (const m of managed) {
+        const el = form.querySelector(`[name='${m.key}']`);
+        if (!el) continue; // option without a form field (e.g. Ssid, DefaultBearerPort)
+        if (el.tagName === 'SELECT' || el.type === 'checkbox') el.disabled = true;
+        else el.readOnly = true;
+        const badge = document.createElement('span');
+        badge.className = 'env-badge';
+        badge.textContent = 'managed by environment';
+        badge.title = `Set from ${m.env} at every start — dashboard edits will be overridden while the variable remains set.`;
+        const holder = el.closest('.field')?.querySelector('label')
+            ?? el.closest('.field-checkbox')?.querySelector('span');
+        holder?.appendChild(badge);
+    }
+})();
 
 // --- Bearer-conditional fields ---
 // AGW vs RHPv2 are mutually exclusive at runtime; showing all four
