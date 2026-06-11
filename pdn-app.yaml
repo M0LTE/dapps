@@ -1,0 +1,56 @@
+# pdn-app.yaml — the DAPPS app package manifest for packet.net node (pdn) hosts.
+#
+# UPSTREAM COPY: this is the app-authored manifest from the pdn app-package
+# contract (m0lte/packet.net docs/app-packages.md). pdn discovers a directory
+# containing this file under /usr/share/packetnet/apps/dapps (staged by pdn's
+# deb from this repo's published release binary) or /var/lib/packetnet/apps/dapps
+# (owner-installed), and the app stays OFF until the node owner enables it.
+#
+# A future dapps release workflow should attach this file as a release asset
+# (next to the dapps-linux-* binaries) so pdn's build can fetch manifest +
+# binary together from one release instead of carrying an interim copy.
+manifest: 1
+id: dapps                     # must equal the package directory name
+name: DAPPS
+version: "0.33.12"            # informational, shown in pdn's UI — should track the release tag
+description: Distributed Asynchronous Packet Pub/Sub — store-and-forward messaging over packet radio.
+icon: inbox
+capabilities: [network, web]  # binds its own callsigns over RHPv2; serves its own web UI
+
+# The .NET daemon pdn supervises while the app is enabled. No `session:` block —
+# DAPPS is not a console verb; it speaks RHPv2 to the node and binds its own
+# callsigns.
+#
+# FIRST-START SEEDING — read before enabling: DAPPS seeds its config from
+# DAPPS_* env vars ONLY on first start (a fresh data/dapps.db in the working
+# directory). Once the db exists, env vars stop mattering — later changes go
+# through the DAPPS dashboard's /Setup // /Config pages, or by deleting the db
+# to re-seed. In particular the owner MUST supply their callsign via pdn's
+# `apps:` override environment BEFORE the first start (there is no sensible
+# default — DAPPS boots in setup-required mode with the N0CALL placeholder and
+# refuses to bind bearers until a real callsign is configured):
+#
+#   apps:
+#     - id: dapps
+#       enabled: true
+#       environment:
+#         DAPPS_CALLSIGN: M0XYZ-7
+#
+# The working directory defaults to the app's state dir, so the database lands
+# in /var/lib/packetnet/apps/dapps (DAPPS resolves it cwd-relative).
+service:
+  command: ./dapps            # relative — resolves to the release binary in this package dir
+  environment:
+    DAPPS_NODE_BEARER: rhpv2              # speak RHPv2 to pdn (not AGW)
+    DAPPS_NODE_HOST: "127.0.0.1"
+    DAPPS_RHP_PORT: "9000"                # pdn's RHP server loopback port
+    DAPPS_DEFAULT_BEARER_PORT: "0"
+    DAPPS_UPDATE_CHECK_ENABLED: "false"   # the host package owns updates — no self-update nag
+    ASPNETCORE_URLS: http://127.0.0.1:18080  # loopback only; must match ui.upstream
+    DAPPS_MQTT_PORT: "18831"              # off the well-known 1883 — don't fight a real broker
+
+# pdn reverse-proxies /apps/dapps/ to the loopback upstream and shows a launcher tile.
+ui:
+  upstream: http://127.0.0.1:18080
+  name: DAPPS
+  icon: inbox
