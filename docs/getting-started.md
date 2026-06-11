@@ -59,13 +59,13 @@ Submit; the daemon picks up the new callsign and bearer within a few seconds (no
 
 The DAPPS side is now configured; your packet node needs to know to dispatch sessions to DAPPS. This is the part that depends on your node software.
 
-**For BPQ**, add an `APPLICATION` line to `bpq32.cfg`:
+**For BPQ**, add an `APPLICATION` line to `bpq32.cfg`, with your DAPPS callsign (the one from step 2, not your node call) in the APPLCALL field:
 
 ```
-APPLICATION 1,DAPPS,,,,, 0
+APPLICATION 1,DAPPS,,M0LTE-7,DAPPS,0
 ```
 
-This advertises a `DAPPS` command at the BPQ node prompt and routes inbound L2 connects over AGW. Restart BPQ to pick it up. The [BPQ connect page](connect/bpq.md) has the full recipe.
+This advertises a `DAPPS` command at the BPQ node prompt, and - via the APPLCALL field - tells BPQ to accept inbound L2 connects to the DAPPS callsign and dispatch them over AGW. The APPLCALL is not optional: DAPPS registering the callsign over AGW at runtime is not enough on its own, and without the APPLCALL BPQ ignores inbound connects to the DAPPS callsign entirely (remote callers see RETRYOUT). Restart BPQ to pick it up. The [BPQ connect page](connect/bpq.md) has the full recipe.
 
 **For XRouter**, add `RHPPORT=9000` to `XROUTER.CFG` and restart XRouter. No `APPL` block is needed - DAPPS binds the callsign over RHPv2 dynamically. The [XRouter connect page](connect/xrouter.md) has the details.
 

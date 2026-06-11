@@ -10,20 +10,24 @@ This is one TCP connection from DAPPS to BPQ (not co-located requirements; DAPPS
 
 ## Step 1: configure BPQ
 
-Add an `APPLICATION` line to your `bpq32.cfg`:
+Add an `APPLICATION` line to your `bpq32.cfg`, carrying the DAPPS callsign (the call+SSID you'll give DAPPS in step 3) in the APPLCALL field:
 
 ```
-APPLICATION 1,DAPPS,,,,, 0
+APPLICATION 1,DAPPS,,M0LTE-7,DAPPS,0
 ```
 
 Field-by-field:
 
 - `1` - application slot number. Bump this if slot 1 is already in use; the value doesn't matter beyond uniqueness.
 - `DAPPS` - the command operators type at the BPQ node prompt to enter the DAPPS slot. If you'd rather use a different name (`MSG`, `APPS`, whatever), put it here and update **Node-prompt application command** under the dashboard's **Edit configuration** to match.
-- `,,,,,` - empty CMD field on purpose. Older recipes used `C N HOST K TRANS S` here; for DAPPS, leave it empty so BPQ doesn't run any node command on inbound - it just dispatches the L2 'C' frame to the registered AGW client.
-- `0` - application alias / number flag.
+- (empty third field) - the CMD field, empty on purpose. Older recipes used `C N HOST K TRANS S` here; for DAPPS, leave it empty so BPQ doesn't run any node command on inbound - it just dispatches the L2 'C' frame to the registered AGW client.
+- `M0LTE-7` - the **APPLCALL**: the DAPPS callsign. This is the field that makes BPQ accept inbound L2 connects addressed to the DAPPS callsign. DAPPS registering the same callsign over AGW at runtime tells BPQ *which AGW client* gets those sessions; the APPLCALL declaration is what makes BPQ accept them at all. Without it, BPQ ignores connects to the DAPPS callsign and the remote caller times out with RETRYOUT.
+- `DAPPS` - the APPLALIAS. Lets stations connect to the alias as well as the callsign.
+- `0` - quality. Zero keeps the application callsign out of NODES broadcasts; raise it only if you want the DAPPS call advertised as a node.
 
 Restart BPQ for the change to land.
+
+The division of labour is worth spelling out, because it trips people up: an inbound connect to the **DAPPS callsign** (`M0LTE-7` above) goes straight to DAPPS and never sees the node menu; an inbound connect to your **node call** lands at the node menu, where typing `DAPPS` enters the application. Both paths end at the same place; the APPLCALL route is the one DAPPS itself uses for node-to-node sessions.
 
 You can also enable AXIP / AXUDP / serial ports as you would for any application - DAPPS doesn't care which physical link AGW is fronting, as long as BPQ delivers sessions over the AGW socket.
 
@@ -91,6 +95,17 @@ Send a test message via the dashboard's **Send a test message** form. The forwar
 If your BPQ has multiple radio ports (e.g. port 1 = VHF FM, port 2 = HF), every neighbour record can specify which bearer port to use for that peer. The dashboard's add-neighbour form has the bearer-port field; the discovery system records the port a peer was heard on automatically.
 
 You don't need an `APPLICATION` line per port - the single `APPLICATION DAPPS` line covers all ports. The port choice is per-neighbour for outbound; for inbound, BPQ dispatches the same way no matter which port the connect arrived on.
+
+## AXIP / AXUDP links
+
+If the port a neighbour is reached over is an AXIP/AXUDP port with per-callsign `MAP` entries (common for LAN or internet links between two BPQ nodes), remember that the L2 connect DAPPS originates is addressed to the remote **DAPPS callsign**, not the remote node call. Add a `MAP` for the DAPPS callsign alongside the node call:
+
+```
+MAP MB7XXX 192.168.1.20 UDP 10093 B
+MAP M0XYZ-7 192.168.1.20 UDP 10093 B
+```
+
+Without the second entry, the SABM to the DAPPS callsign has nowhere to go and the connect retries out on the *originating* side.
 
 ## Sharing a callsign between BPQ and DAPPS
 
