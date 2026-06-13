@@ -14,7 +14,7 @@ It does **not** demonstrate progressive / partial render, app-layer chunking, au
 
 You need a DAPPS instance reachable from your browser. The simplest setup is a single instance on `localhost`:
 
-1. Start DAPPS the usual way ([Getting started](https://m0lte.github.io/dapps/getting-started/)). The dashboard's HTTP listener (default `:5000`) hosts both the dashboard and the `/mqtt` WebSocket endpoint this app talks to.
+1. Start DAPPS the usual way ([Getting started](https://packet-net.github.io/dapps/getting-started/)). The dashboard's HTTP listener (default `:5000`) hosts both the dashboard and the `/mqtt` WebSocket endpoint this app talks to.
 2. Open `index.html` directly from disk in a browser - double-click works on most desktop OSes, or `xdg-open` / `open` from the terminal.
 3. Set the **dashboard URL** field at the top to your DAPPS base URL (e.g. `http://localhost:5000`). The app derives `ws://localhost:5000/mqtt` from it.
 4. **Send panel**: pick a file, type the destination callsign, click **Send**.

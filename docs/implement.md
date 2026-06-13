@@ -21,9 +21,9 @@ Once a transport-level connection (an AGW C-frame, an RHPv2 connect, a TCP socke
 DAPPSv1>\n
 ```
 
-That's the literal ASCII string `DAPPSv1>` followed by a single line feed (0x0A). The connecting peer scans the inbound byte stream until it sees `DAPPSv1>` followed by *any* line terminator (`\n`, `\r`, or `\r\n`). All three are accepted because BPQ's Telnet bridge rewrites LF→CR in the apps-to-user direction; strict `\n`-only matching would hang on every BPQ-bridged connect ([DappsProtocolClient.cs](https://github.com/M0LTE/dapps/blob/master/src/dapps/dapps.client/DappsProtocolClient.cs#L39-L72)).
+That's the literal ASCII string `DAPPSv1>` followed by a single line feed (0x0A). The connecting peer scans the inbound byte stream until it sees `DAPPSv1>` followed by *any* line terminator (`\n`, `\r`, or `\r\n`). All three are accepted because BPQ's Telnet bridge rewrites LF→CR in the apps-to-user direction; strict `\n`-only matching would hang on every BPQ-bridged connect ([DappsProtocolClient.cs](https://github.com/packet-net/dapps/blob/master/src/dapps/dapps.client/DappsProtocolClient.cs#L39-L72)).
 
-After the prompt, the connecting peer sends one of the verbs below. After every command finishes, the server may re-emit the prompt and loop, or close the connection. Inactivity timeout is **3 minutes** per read on both sides, matching the AX.25 T3 default ([InboundConnectionHandler.cs:36](https://github.com/M0LTE/dapps/blob/master/src/dapps/dapps.core/Services/InboundConnectionHandler.cs#L36)). A peer that goes silent past that gets disconnected; a peer that you can't read from past that should be abandoned with a `TimeoutException`.
+After the prompt, the connecting peer sends one of the verbs below. After every command finishes, the server may re-emit the prompt and loop, or close the connection. Inactivity timeout is **3 minutes** per read on both sides, matching the AX.25 T3 default ([InboundConnectionHandler.cs:36](https://github.com/packet-net/dapps/blob/master/src/dapps/dapps.core/Services/InboundConnectionHandler.cs#L36)). A peer that goes silent past that gets disconnected; a peer that you can't read from past that should be abandoned with a `TimeoutException`.
 
 ### Push a message: `ihave` / `send` / `data` / `ack`
 
@@ -53,7 +53,7 @@ Anatomy of the `ihave` line:
 
 Plus the optional features documented under [Full interoperability](#full-interoperability) (`ttl`, `src`, `mid`, `frag`, `sid`, `sn`, `gt`).
 
-Reserved key names are validated by [IHaveValidator.cs:57](https://github.com/M0LTE/dapps/blob/master/src/dapps/dapps.core/Services/IHaveValidator.cs#L57). Any other `key=value` token is treated as an opaque application header and preserved through to the receiving app.
+Reserved key names are validated by [IHaveValidator.cs:57](https://github.com/packet-net/dapps/blob/master/src/dapps/dapps.core/Services/IHaveValidator.cs#L57). Any other `key=value` token is treated as an opaque application header and preserved through to the receiving app.
 
 Receiver replies are one of:
 
@@ -87,7 +87,7 @@ Where:
 - `salt_le_8_bytes` is the 64-bit salt rendered little-endian into 8 bytes. If the `ihave` carries `s=N`, it's `N`. If there's no `s=`, the salt prefix is omitted entirely (hash is just `SHA1(payload)`).
 - The output is taken as the first **7 characters** of the SHA1 lowercase hex digest. SHA1 is 40 hex chars; the first 7 give ~28 bits of identifier space (2^28 ≈ 268M ids).
 
-Reference: [DappsMessage.cs:28](https://github.com/M0LTE/dapps/blob/master/src/dapps/dapps.client/DappsMessage.cs#L28).
+Reference: [DappsMessage.cs:28](https://github.com/packet-net/dapps/blob/master/src/dapps/dapps.client/DappsMessage.cs#L28).
 
 The salt convention in the reference daemon is "milliseconds since the Unix epoch" so two submissions of the same payload milliseconds apart get distinct ids - but the wire format is just an int64; any value is legal. An implementation that always emits salt 0 will collide on identical payloads, which is its problem to solve via deduplication.
 
@@ -99,9 +99,9 @@ Implementations SHOULD include `chk=NNNN` as the final KV on every `ihave` line 
 chk_value = crc16_ccitt_false( bytes_of_line_up_to_and_excluding_" chk=" )
 ```
 
-CRC-16/CCITT-FALSE: polynomial 0x1021, initial value 0xFFFF, no reflection, no final XOR. Rendered as 4 lowercase hex digits ([Crc16CcittFalse.cs:21](https://github.com/M0LTE/dapps/blob/master/src/dapps/dapps.client/Crc16CcittFalse.cs#L21)). The covered region is "everything before the literal ` chk=`": including `ihave`, the id, every other KV, and the spaces between them, but not the trailing ` chk=NNNN` itself.
+CRC-16/CCITT-FALSE: polynomial 0x1021, initial value 0xFFFF, no reflection, no final XOR. Rendered as 4 lowercase hex digits ([Crc16CcittFalse.cs:21](https://github.com/packet-net/dapps/blob/master/src/dapps/dapps.client/Crc16CcittFalse.cs#L21)). The covered region is "everything before the literal ` chk=`": including `ihave`, the id, every other KV, and the spaces between them, but not the trailing ` chk=NNNN` itself.
 
-Validation is positional too: `chk` MUST be the last KV. The validator rejects any line where `chk=` appears earlier or where `chk=NNNN` isn't followed by end-of-line ([IHaveValidator.cs:208-228](https://github.com/M0LTE/dapps/blob/master/src/dapps/dapps.core/Services/IHaveValidator.cs#L208-L228)). This makes the covered range computable from a single string scan, not from a re-serialisation of the parsed KVs.
+Validation is positional too: `chk` MUST be the last KV. The validator rejects any line where `chk=` appears earlier or where `chk=NNNN` isn't followed by end-of-line ([IHaveValidator.cs:208-228](https://github.com/packet-net/dapps/blob/master/src/dapps/dapps.core/Services/IHaveValidator.cs#L208-L228)). This makes the covered range computable from a single string scan, not from a re-serialisation of the parsed KVs.
 
 ### That's the bare essentials
 
@@ -130,7 +130,7 @@ ihave 7e1f3a2 len=5 fmt=p s=1714982400000 src=G0ORIG dst=mail@G0RCV chk=a31f
 
 Why have it: without `src=`, a receiver three hops down can't tell whether a message originated at G0FIRST or just transited through G0FIRST. With `src=`, the receiver's app sees the originator (exposed as the `dapps-origin` MQTT user property) and can route replies back to the right source. Forwarders that don't propagate it omit `src=`; receivers treat absent `src=` as "originator unknown".
 
-Reference: [DappsProtocolClient.cs:122-128](https://github.com/M0LTE/dapps/blob/master/src/dapps/dapps.client/DappsProtocolClient.cs#L122-L128), [IHaveValidator.cs:144-152](https://github.com/M0LTE/dapps/blob/master/src/dapps/dapps.core/Services/IHaveValidator.cs#L144-L152).
+Reference: [DappsProtocolClient.cs:122-128](https://github.com/packet-net/dapps/blob/master/src/dapps/dapps.client/DappsProtocolClient.cs#L122-L128), [IHaveValidator.cs:144-152](https://github.com/packet-net/dapps/blob/master/src/dapps/dapps.core/Services/IHaveValidator.cs#L144-L152).
 
 ### Multi-part fragmentation (`mid=` + `frag=`)
 
@@ -144,7 +144,7 @@ ihave 33eeefe len=512  fmt=p s=1714982400003 mid=4cf02b1 frag=3/3 dst=mail@G0RCV
 
 - `mid=<7hex>` is a master id - opaque grouping key, same hex format as a regular id.
 - `frag=N/M` where N is the 1-based index, M is the total. M ≥ 2 (single-fragment messages omit `mid`/`frag` entirely). N ∈ [1, M].
-- `mid` and `frag` MUST both be present or both absent. A partial set is rejected as malformed ([IHaveValidator.cs:160-165](https://github.com/M0LTE/dapps/blob/master/src/dapps/dapps.core/Services/IHaveValidator.cs#L160-L165)).
+- `mid` and `frag` MUST both be present or both absent. A partial set is rejected as malformed ([IHaveValidator.cs:160-165](https://github.com/packet-net/dapps/blob/master/src/dapps/dapps.core/Services/IHaveValidator.cs#L160-L165)).
 - Each fragment has its own id (hash of its own chunk + its own salt). Intermediate hops forward fragments as opaque messages.
 - Only the final destination groups by `mid`, holds fragments in a reassembly buffer, and delivers the assembled payload to the app once all M arrive.
 
@@ -152,7 +152,7 @@ Why two-id'd: each fragment is independently content-addressed so it can be dedu
 
 Reassembly buffer entries time out after `FragmentReassemblyTimeoutSeconds` (default 7 days) - long because HF / mesh propagation gaps legitimately last days, and we'd rather hold the partial bytes than throw away most of a near-complete message.
 
-Reference: [DappsProtocolClient.cs:131-134](https://github.com/M0LTE/dapps/blob/master/src/dapps/dapps.client/DappsProtocolClient.cs#L131-L134), [IHaveValidator.cs:154-196](https://github.com/M0LTE/dapps/blob/master/src/dapps/dapps.core/Services/IHaveValidator.cs#L154-L196), [DatabaseAndMqttInbox.cs](https://github.com/M0LTE/dapps/blob/master/src/dapps/dapps.core/Services/DatabaseAndMqttInbox.cs) (reassembly).
+Reference: [DappsProtocolClient.cs:131-134](https://github.com/packet-net/dapps/blob/master/src/dapps/dapps.client/DappsProtocolClient.cs#L131-L134), [IHaveValidator.cs:154-196](https://github.com/packet-net/dapps/blob/master/src/dapps/dapps.core/Services/IHaveValidator.cs#L154-L196), [DatabaseAndMqttInbox.cs](https://github.com/packet-net/dapps/blob/master/src/dapps/dapps.core/Services/DatabaseAndMqttInbox.cs) (reassembly).
 
 ### Opt-in ordering (`sid=`, `sn=`, `gt=`)
 
@@ -173,7 +173,7 @@ Why opt-in: ordering trades latency for predictability. One missing message stal
 
 Receivers that don't understand `sid`/`sn`/`gt` ignore the keys and deliver each message immediately - the stream survives the per-pair conversation between aware nodes.
 
-Reference: [DappsProtocolClient.cs:138-152](https://github.com/M0LTE/dapps/blob/master/src/dapps/dapps.client/DappsProtocolClient.cs#L138-L152), [IHaveValidator.cs:198-227](https://github.com/M0LTE/dapps/blob/master/src/dapps/dapps.core/Services/IHaveValidator.cs#L198-L227), full design in [reference.md "Message ordering"](app-developers/reference.md#message-ordering-opt-in).
+Reference: [DappsProtocolClient.cs:138-152](https://github.com/packet-net/dapps/blob/master/src/dapps/dapps.client/DappsProtocolClient.cs#L138-L152), [IHaveValidator.cs:198-227](https://github.com/packet-net/dapps/blob/master/src/dapps/dapps.core/Services/IHaveValidator.cs#L198-L227), full design in [reference.md "Message ordering"](app-developers/reference.md#message-ordering-opt-in).
 
 ### TTL (`ttl=`)
 
@@ -181,7 +181,7 @@ Reference: [DappsProtocolClient.cs:138-152](https://github.com/M0LTE/dapps/blob/
 ihave 7e1f3a2 len=5 fmt=p s=1714982400000 ttl=600 dst=mail@G0RCV chk=...
 ```
 
-`ttl=<seconds>` is *residual lifetime*, not a hop count. The originator sets it; each forwarder recomputes the remaining time as `original_ttl - queue_dwell_seconds` and re-emits with the lower number. A message whose residual goes ≤ 0 gets dropped before being offered ([TtlMath.cs](https://github.com/M0LTE/dapps/blob/master/src/dapps/dapps.core/Services/TtlMath.cs)).
+`ttl=<seconds>` is *residual lifetime*, not a hop count. The originator sets it; each forwarder recomputes the remaining time as `original_ttl - queue_dwell_seconds` and re-emits with the lower number. A message whose residual goes ≤ 0 gets dropped before being offered ([TtlMath.cs](https://github.com/packet-net/dapps/blob/master/src/dapps/dapps.core/Services/TtlMath.cs)).
 
 Why wall-clock not hop-count: hop-count gives no useful guarantee on packet radio because retries and queue dwell dwarf the hop-count cost. A message with "TTL 5 hops" can sit in a queue for a week. A message with "TTL 600 seconds" tells every forwarder "stop trying after 10 minutes, regardless of how many hops we managed".
 
@@ -227,7 +227,7 @@ Unknown lines between `peer` and `end` are silently skipped on both sides - lets
 
 Implementations that don't care about transitive discovery can skip both sides: ignore the `peers` command (return `eh?` if it surfaces) and never call it. Discovery still works via beacons, just slower-to-converge.
 
-Reference: [InboundConnectionHandler.cs:229-260](https://github.com/M0LTE/dapps/blob/master/src/dapps/dapps.core/Services/InboundConnectionHandler.cs#L229-L260), [DappsProtocolClient.cs:201-244](https://github.com/M0LTE/dapps/blob/master/src/dapps/dapps.client/DappsProtocolClient.cs#L201-L244).
+Reference: [InboundConnectionHandler.cs:229-260](https://github.com/packet-net/dapps/blob/master/src/dapps/dapps.core/Services/InboundConnectionHandler.cs#L229-L260), [DappsProtocolClient.cs:201-244](https://github.com/packet-net/dapps/blob/master/src/dapps/dapps.client/DappsProtocolClient.cs#L201-L244).
 
 ### `rev` reverse forwarding
 
@@ -256,7 +256,7 @@ Why `rev` exists: a node behind asymmetric connectivity (RF-only inbound, can't 
 
 A receiver that doesn't implement `rev` should respond `eh?\n` to the command. Senders should treat `eh?` as "this peer doesn't poll" and stop trying.
 
-Reference: [InboundConnectionHandler.cs:275-343](https://github.com/M0LTE/dapps/blob/master/src/dapps/dapps.core/Services/InboundConnectionHandler.cs#L275-L343), [DappsProtocolClient.cs:283-369](https://github.com/M0LTE/dapps/blob/master/src/dapps/dapps.client/DappsProtocolClient.cs#L283-L369).
+Reference: [InboundConnectionHandler.cs:275-343](https://github.com/packet-net/dapps/blob/master/src/dapps/dapps.core/Services/InboundConnectionHandler.cs#L275-L343), [DappsProtocolClient.cs:283-369](https://github.com/packet-net/dapps/blob/master/src/dapps/dapps.client/DappsProtocolClient.cs#L283-L369).
 
 ### `routes` exchange
 
@@ -286,7 +286,7 @@ The reference daemon's emitter filters: only routes whose failure counter is zer
 
 Implementations that don't care about route gossip should respond `eh?\n` to the command. Senders treat `eh?` as "this peer doesn't gossip" and stop trying.
 
-Reference: [InboundConnectionHandler.HandleRoutes](https://github.com/M0LTE/dapps/blob/master/src/dapps/dapps.core/Services/InboundConnectionHandler.cs), [DappsProtocolClient.RequestRoutesAsync](https://github.com/M0LTE/dapps/blob/master/src/dapps/dapps.client/DappsProtocolClient.cs).
+Reference: [InboundConnectionHandler.HandleRoutes](https://github.com/packet-net/dapps/blob/master/src/dapps/dapps.core/Services/InboundConnectionHandler.cs), [DappsProtocolClient.RequestRoutesAsync](https://github.com/packet-net/dapps/blob/master/src/dapps/dapps.client/DappsProtocolClient.cs).
 
 ### Quit / help
 
@@ -295,7 +295,7 @@ C: quit\n      (or q, bye, exit; case-insensitive)
 S: bye\n       (then closes)
 
 C: help\n      (or info; case-insensitive)
-S: This is DAPPS. See https://github.com/M0LTE/dapps/blob/master/README.md for details.\n
+S: This is DAPPS. See https://github.com/packet-net/dapps/blob/master/README.md for details.\n
 ```
 
 Help text is human-only; programs shouldn't parse it. Both commands loop the prompt afterwards (except `quit`, which closes).
@@ -378,7 +378,7 @@ if HasHeaders:
 
 Version is the first byte on the wire; receivers reject anything other than the current version with a hard error rather than guessing. There are no historical fallback decoders - the project pre-shipping means a peer running an old version is out of date, not in the field forever.
 
-Reference: [BackhaulMessageCodec.cs](https://github.com/M0LTE/dapps/blob/master/src/dapps/dapps.client/Backhaul/Datagram/BackhaulMessageCodec.cs).
+Reference: [BackhaulMessageCodec.cs](https://github.com/packet-net/dapps/blob/master/src/dapps/dapps.client/Backhaul/Datagram/BackhaulMessageCodec.cs).
 
 The `LinkSource`, `FloodHopsRemaining`, `SourceRoute`, and `TraversedHops` fields aren't carried on the text protocol - they only matter for bearers that don't natively identify the immediate sender (UDP) or for routing algorithms that ride additional metadata on the envelope (flood / MeshCore-style discovery). A datagram-bearer implementation that stamps `LinkSource` from its socket-level peer info, and decodes / re-encodes the routing metadata transparently, is the minimum.
 
@@ -397,7 +397,7 @@ DAPPS v1 callsign=M0LTE-9 hops=0 ttl=300
 - `hops=<int>` is the number of intermediate hops the beacon has been forwarded over. 0 = direct. Required, ≥ 0.
 - `ttl=<int>` is how long (seconds) a receiver should treat this peer as fresh. Required, > 0.
 
-No trailing newline. ASCII-only. Unknown KVs are ignored - forward-compat. Reference: [BeaconCodec.cs](https://github.com/M0LTE/dapps/blob/master/src/dapps/dapps.client/Discovery/BeaconCodec.cs).
+No trailing newline. ASCII-only. Unknown KVs are ignored - forward-compat. Reference: [BeaconCodec.cs](https://github.com/packet-net/dapps/blob/master/src/dapps/dapps.client/Discovery/BeaconCodec.cs).
 
 The receiver records the beacon as a discovered peer, stamped with the bearer it arrived on (so the routing layer knows how to reach back). The bearer hint is **not** carried in the wire form - it's whatever the receive bearer says it is. Including it on the wire would let a misbehaving peer claim to be reachable on routes it isn't.
 
@@ -407,7 +407,7 @@ Solicits run alongside, on the same channels:
 DAPPS v1 solicit callsign=M0LTE-9
 ```
 
-A solicit asks "everyone within earshot, please beacon now (with a small random jitter so we don't all collide)". The reference daemon answers with a normal beacon emission delayed by [0, 5] seconds. Unknown senders that haven't beacon'd yet show up promptly without waiting for the next scheduled beacon. Reference: [SolicitCodec.cs](https://github.com/M0LTE/dapps/blob/master/src/dapps/dapps.client/Discovery/SolicitCodec.cs).
+A solicit asks "everyone within earshot, please beacon now (with a small random jitter so we don't all collide)". The reference daemon answers with a normal beacon emission delayed by [0, 5] seconds. Unknown senders that haven't beacon'd yet show up promptly without waiting for the next scheduled beacon. Reference: [SolicitCodec.cs](https://github.com/packet-net/dapps/blob/master/src/dapps/dapps.client/Discovery/SolicitCodec.cs).
 
 An implementation can skip beacons entirely and rely on configured neighbours. It can also implement beacons but skip solicits (you'll just converge on the beacon cadence rather than on demand).
 
@@ -427,4 +427,4 @@ Beyond that, each optional feature has its own equivalence test: send/receive wi
 
 - [App developers - reference](app-developers/reference.md) - higher-level wire summary, app-interface mappings (MQTT topics, REST endpoints), and worked examples for app authors using DAPPS as a service.
 - [Discovery & routing](discovery-and-routing.md) - how the reference daemon turns discovered peers into route decisions; orthogonal to the wire protocol but informs why `peers`/beacons exist.
-- The reference implementation source: [`src/dapps/dapps.client/`](https://github.com/M0LTE/dapps/tree/master/src/dapps/dapps.client) (wire-level codecs, bearer-neutral) and [`src/dapps/dapps.core/Services/`](https://github.com/M0LTE/dapps/tree/master/src/dapps/dapps.core/Services) (session handling, inbox/outbox, discovery).
+- The reference implementation source: [`src/dapps/dapps.client/`](https://github.com/packet-net/dapps/tree/master/src/dapps/dapps.client) (wire-level codecs, bearer-neutral) and [`src/dapps/dapps.core/Services/`](https://github.com/packet-net/dapps/tree/master/src/dapps/dapps.core/Services) (session handling, inbox/outbox, discovery).

@@ -156,6 +156,6 @@ If nothing turns up, the message was never submitted (typo on the topic / endpoi
 
 ## Getting help
 
-- **Dashboard not showing what you expect** → screenshot it and [open an issue](https://github.com/M0LTE/dapps/issues). The UI is dense, behaviour-vs-expectation reports are useful.
+- **Dashboard not showing what you expect** → screenshot it and [open an issue](https://github.com/packet-net/dapps/issues). The UI is dense, behaviour-vs-expectation reports are useful.
 - **On-air protocol question** → see the [protocol reference](app-developers/reference.md), then open an issue if it's not answered.
 - **Bearer-specific weirdness** (BPQ doing something odd, AGW edge case) → likely either a config issue documented above or a real bug; an issue with the BPQ logs + DAPPS journal is the right next step.

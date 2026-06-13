@@ -12,7 +12,7 @@ public sealed class RealUpdaterDownloader(
     IHttpClientFactory httpClientFactory,
     ILogger<RealUpdaterDownloader> logger) : IUpdaterDownloader
 {
-    private const string ReleasesUrl = "https://api.github.com/repos/M0LTE/dapps/releases/latest";
+    private const string ReleasesUrl = "https://api.github.com/repos/packet-net/dapps/releases/latest";
 
     public async Task<LatestReleaseInfo?> GetLatestAsync(string rid, CancellationToken ct)
     {

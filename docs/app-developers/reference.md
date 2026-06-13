@@ -20,7 +20,7 @@ const client = mqtt.connect("ws://<host>:5000/mqtt", {
 });
 ```
 
-paho-mqtt with `transport='websockets'` works the same way. A worked browser example is in [`examples/file-transfer/`](https://github.com/M0LTE/dapps/tree/master/examples/file-transfer) on the repo.
+paho-mqtt with `transport='websockets'` works the same way. A worked browser example is in [`examples/file-transfer/`](https://github.com/packet-net/dapps/tree/master/examples/file-transfer) on the repo.
 
 ### Topics
 

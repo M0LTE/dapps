@@ -1,6 +1,6 @@
 [Unit]
 Description=Periodic timer for DAPPS triggered-update worker
-Documentation=https://github.com/M0LTE/dapps
+Documentation=https://github.com/packet-net/dapps
 
 [Timer]
 # Fire on a 60s cadence. Each tick the worker checks for the

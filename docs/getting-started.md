@@ -3,7 +3,7 @@
 The shortest path from "I've heard of DAPPS" to "my node is forwarding messages":
 
 ```bash
-curl -sSL https://m0lte.github.io/dapps/install.sh | sudo bash
+curl -sSL https://packet-net.github.io/dapps/install.sh | sudo bash
 ```
 
 Then open `http://<your-host>:5000/` in a browser. The setup wizard asks for an admin password, then your callsign and which packet-node bearer to use - everything else is editable from the dashboard. No env vars, no config files to hand-edit.
@@ -37,7 +37,7 @@ DAPPS is pre-1.0. While it is, every running node checks a URL controlled by the
 The one-liner above does this on Linux+systemd:
 
 - Detects your architecture (`x86_64` / `aarch64` / `armv7l`).
-- Downloads the matching binary from [the latest GitHub Release](https://github.com/M0LTE/dapps/releases/latest) to `/opt/dapps/dapps`.
+- Downloads the matching binary from [the latest GitHub Release](https://github.com/packet-net/dapps/releases/latest) to `/opt/dapps/dapps`.
 - Creates a system user `dapps` and a state directory `/var/lib/dapps` (where the SQLite DB lives).
 - Drops two systemd units: `dapps.service` (the daemon) and `dapps-updater.service` + `.timer` (the supervised in-place updater that powers the dashboard's "Apply update" button).
 - Enables and starts both.

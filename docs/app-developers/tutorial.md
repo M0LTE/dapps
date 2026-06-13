@@ -19,7 +19,7 @@ We'll use MQTT in this tutorial. The same flow works against the REST endpoints 
 
 ## The full script
 
-The complete script lives in the repo at [`docs/examples/hello.py`](https://github.com/M0LTE/dapps/blob/master/docs/examples/hello.py). Drop it into a directory, run it, and skip ahead to [Try it out](#try-it-out) if you'd rather see it working before reading the explanation. Otherwise, read on - the next sections walk through it piece by piece.
+The complete script lives in the repo at [`docs/examples/hello.py`](https://github.com/packet-net/dapps/blob/master/docs/examples/hello.py). Drop it into a directory, run it, and skip ahead to [Try it out](#try-it-out) if you'd rather see it working before reading the explanation. Otherwise, read on - the next sections walk through it piece by piece.
 
 ## Step 1: connect to the broker
 

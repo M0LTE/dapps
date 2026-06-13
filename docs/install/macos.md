@@ -9,7 +9,7 @@ The release binary targets **Apple Silicon (arm64)** only. If you're on an Intel
 ```bash
 sudo mkdir -p /opt/dapps /var/lib/dapps
 sudo curl -L \
-  https://github.com/M0LTE/dapps/releases/latest/download/dapps-osx-arm64 \
+  https://github.com/packet-net/dapps/releases/latest/download/dapps-osx-arm64 \
   -o /opt/dapps/dapps
 sudo chmod +x /opt/dapps/dapps
 ```

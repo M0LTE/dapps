@@ -4,7 +4,7 @@ Windows runs DAPPS the same way Linux does - drop a binary on disk, run it. Ther
 
 ## 1. Drop the binary
 
-Download `dapps-win-x64.exe` from the [latest release](https://github.com/M0LTE/dapps/releases/latest) and put it somewhere sensible - `C:\Program Files\dapps\dapps.exe` is conventional.
+Download `dapps-win-x64.exe` from the [latest release](https://github.com/packet-net/dapps/releases/latest) and put it somewhere sensible - `C:\Program Files\dapps\dapps.exe` is conventional.
 
 ## 2. Run interactively first
 

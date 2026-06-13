@@ -14,11 +14,11 @@ The last two are browser apps (HTML + vanilla JS, MQTT-over-WebSocket via mqtt.j
 
 Run a DAPPS instance locally, replace `<your-callsign>` with your own throughout, and try the examples in any order.
 
-The Python sources live in the repo at [`docs/examples/`](https://github.com/M0LTE/dapps/tree/master/docs/examples). The browser ones live under [`examples/`](https://github.com/M0LTE/dapps/tree/master/examples) at the top level.
+The Python sources live in the repo at [`docs/examples/`](https://github.com/packet-net/dapps/tree/master/docs/examples). The browser ones live under [`examples/`](https://github.com/packet-net/dapps/tree/master/examples) at the top level.
 
 ## Group chat - `chat.py`
 
-[chat.py on GitHub](https://github.com/M0LTE/dapps/blob/master/docs/examples/chat.py)
+[chat.py on GitHub](https://github.com/packet-net/dapps/blob/master/docs/examples/chat.py)
 
 A line-mode chat app. Each line you type at the prompt is broadcast to a fixed list of peer callsigns; incoming lines from anyone are printed inline. Run the same script (with appropriate args) on every node that wants to participate - there is no central server, no registry, no membership protocol.
 
@@ -49,7 +49,7 @@ Type a line on any node; the others see it.
 
 ## Sensor publisher - `sensor.py`
 
-[sensor.py on GitHub](https://github.com/M0LTE/dapps/blob/master/docs/examples/sensor.py)
+[sensor.py on GitHub](https://github.com/packet-net/dapps/blob/master/docs/examples/sensor.py)
 
 A periodic publisher with no listening surface. Reads a (faked) sensor every N seconds and pushes a JSON reading to a list of subscriber callsigns. Pure submit-and-go - no `on_message`, no acks.
 
@@ -76,7 +76,7 @@ A subscriber on the receiving side would look like the `hello.py` shape: subscri
 
 ## Two-way pager - `pager.py`
 
-[pager.py on GitHub](https://github.com/M0LTE/dapps/blob/master/docs/examples/pager.py)
+[pager.py on GitHub](https://github.com/packet-net/dapps/blob/master/docs/examples/pager.py)
 
 A messenger app with two distinct CLI modes. Run with no arguments to listen for incoming pages; run `pager.py send <callsign> <message>` to fire off a single page and exit.
 
@@ -105,7 +105,7 @@ The receiver prints incoming messages with `[<source>] <text>` and notes the res
 
 ## File transfer (browser) - `examples/file-transfer/`
 
-[examples/file-transfer/index.html on GitHub](https://github.com/M0LTE/dapps/blob/master/examples/file-transfer/index.html)
+[examples/file-transfer/index.html on GitHub](https://github.com/packet-net/dapps/blob/master/examples/file-transfer/index.html)
 
 A single-page browser app: pick a file, type a destination callsign, click Send. The receiving end - any other browser tab pointed at any DAPPS daemon that the message can route to - shows the file with an inline preview if it's `image/*`, or a Download link otherwise.
 
@@ -138,7 +138,7 @@ Open `index.html` directly from disk; no static server needed. The app speaks MQ
 
 ## Long-form messenger (browser) - `examples/letters/`
 
-[examples/letters/index.html on GitHub](https://github.com/M0LTE/dapps/blob/master/examples/letters/index.html)
+[examples/letters/index.html on GitHub](https://github.com/packet-net/dapps/blob/master/examples/letters/index.html)
 
 A browser app for **long-form correspondence** - subject + multi-paragraph body, conversations grouped per peer, persistent across reloads via IndexedDB. Like email, not chat. Each DAPPS message is one letter; the wire envelope is JSON: `{v, subject, body, ts}`.
 

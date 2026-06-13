@@ -2,9 +2,9 @@ site_name: DAPPS
 site_description: >
   Distributed Asynchronous Packet Pub-Sub - operator and developer
   manual for running and building against a DAPPS node.
-site_url: https://m0lte.github.io/dapps/
-repo_url: https://github.com/M0LTE/dapps
-repo_name: M0LTE/dapps
+site_url: https://packet-net.github.io/dapps/
+repo_url: https://github.com/packet-net/dapps
+repo_name: packet-net/dapps
 edit_uri: edit/master/docs/
 
 theme:
@@ -65,7 +65,7 @@ markdown_extensions:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/M0LTE/dapps
+      link: https://github.com/packet-net/dapps
 
 # Files we deliberately don't surface in the site:
 # - examples/ contains executable Python sample apps the App

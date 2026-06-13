@@ -3,7 +3,7 @@
 On Linux+systemd, the install is one line:
 
 ```bash
-curl -sSL https://m0lte.github.io/dapps/install.sh | sudo bash
+curl -sSL https://packet-net.github.io/dapps/install.sh | sudo bash
 ```
 
 Detects arch, downloads the right binary, drops the systemd units, enables and starts. Configuration lives in the dashboard's `/Setup` wizard. See [Linux (systemd)](linux.md) for what the script does and the manual equivalent.
@@ -20,7 +20,7 @@ The release matrix:
 | Windows x64  | `win-x64`     | `dapps-win-x64.exe`             |
 | macOS ARM64  | `osx-arm64`   | `dapps-osx-arm64`               |
 
-[Latest release](https://github.com/M0LTE/dapps/releases/latest) on GitHub.
+[Latest release](https://github.com/packet-net/dapps/releases/latest) on GitHub.
 
 ## Pick a platform
 

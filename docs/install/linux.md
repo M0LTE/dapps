@@ -5,10 +5,10 @@ The recommended deployment.
 ## One-liner install
 
 ```bash
-curl -sSL https://m0lte.github.io/dapps/install.sh | sudo bash
+curl -sSL https://packet-net.github.io/dapps/install.sh | sudo bash
 ```
 
-Detects your architecture (`x86_64` / `aarch64` / `armv7l`), downloads the matching binary from the [latest GitHub Release](https://github.com/M0LTE/dapps/releases/latest), creates the `dapps` system user and `/var/lib/dapps` state directory, drops two systemd units (`dapps.service` and the privileged `dapps-updater.service` + `.timer`), and enables both. No env vars, no callsign yet - configuration happens in the dashboard once the daemon is up.
+Detects your architecture (`x86_64` / `aarch64` / `armv7l`), downloads the matching binary from the [latest GitHub Release](https://github.com/packet-net/dapps/releases/latest), creates the `dapps` system user and `/var/lib/dapps` state directory, drops two systemd units (`dapps.service` and the privileged `dapps-updater.service` + `.timer`), and enables both. No env vars, no callsign yet - configuration happens in the dashboard once the daemon is up.
 
 When it's done it prints the URL to open in a browser. The first request lands on `/Setup` - a two-step wizard for the admin password and your callsign + bearer. See [Getting started](../getting-started.md) for the full walk-through.
 
@@ -20,12 +20,12 @@ If you'd rather see what's happening, or if your distro has something unusual ab
 
 ### 1. Drop the binary
 
-Pick the right binary for your architecture from the [latest release](https://github.com/M0LTE/dapps/releases/latest):
+Pick the right binary for your architecture from the [latest release](https://github.com/packet-net/dapps/releases/latest):
 
 ```bash
 sudo mkdir -p /opt/dapps /var/lib/dapps
 sudo curl -L \
-  https://github.com/M0LTE/dapps/releases/latest/download/dapps-linux-x64 \
+  https://github.com/packet-net/dapps/releases/latest/download/dapps-linux-x64 \
   -o /opt/dapps/dapps
 sudo chmod +x /opt/dapps/dapps
 ```

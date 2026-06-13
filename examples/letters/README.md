@@ -24,7 +24,7 @@ Companion to [`file-transfer/`](../file-transfer/): same MQTT-over-WebSocket tra
 
 You need a DAPPS instance reachable from your browser. The simplest setup is a single instance on `localhost`:
 
-1. Start DAPPS the usual way ([Getting started](https://m0lte.github.io/dapps/getting-started/)). Set the callsign (e.g. `M0LTE-1`).
+1. Start DAPPS the usual way ([Getting started](https://packet-net.github.io/dapps/getting-started/)). Set the callsign (e.g. `M0LTE-1`).
 2. Open `index.html` directly from disk in a browser - double-click works on most desktop OSes, or `xdg-open` / `open` from the terminal.
 3. **First run only**: a modal asks for "Your callsign". Type the same callsign your DAPPS instance uses. Persisted in IndexedDB; you can change it later via the "change" link in the header.
 4. Click **Connect**. Default dashboard URL is `http://localhost:5000`; the app derives `ws://localhost:5000/mqtt` from it.

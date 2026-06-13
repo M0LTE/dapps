@@ -51,10 +51,10 @@ DAPPS_MESHCORE_KISS_PORT=8001
 
 MeshCore doing its own mesh routing under DAPPS is interesting. It means DAPPS's hop-count model and MeshCore's hop-count model are stacked: a DAPPS message that's "one hop" from DAPPS's perspective might traverse three MeshCore hops underneath. DAPPS uses cost hints rather than raw hop counts, so this works out, but it's worth understanding when you're tuning a multi-bearer setup.
 
-A separate design note covering the MeshCore-as-a-bearer trade-offs is in [docs/meshcore-backhaul-routing.md in the repo](https://github.com/M0LTE/dapps/blob/master/docs/meshcore-backhaul-routing.md). Most of it is still relevant; some of the concrete API sketches will be revised as the integration lands.
+A separate design note covering the MeshCore-as-a-bearer trade-offs is in [docs/meshcore-backhaul-routing.md in the repo](https://github.com/packet-net/dapps/blob/master/docs/meshcore-backhaul-routing.md). Most of it is still relevant; some of the concrete API sketches will be revised as the integration lands.
 
 ## When?
 
 Currently blocked on hardware availability for testing - we want a real two-radio setup in the loop before declaring it shippable rather than relying on emulation.
 
-If you've got a MeshCore radio and want to be a tester, [open an issue](https://github.com/M0LTE/dapps/issues).
+If you've got a MeshCore radio and want to be a tester, [open an issue](https://github.com/packet-net/dapps/issues).

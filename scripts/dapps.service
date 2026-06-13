@@ -1,6 +1,6 @@
 [Unit]
 Description=DAPPS - Distributed Asynchronous Packet Pub-Sub
-Documentation=https://github.com/M0LTE/dapps
+Documentation=https://github.com/packet-net/dapps
 After=network.target linbpq.service
 # We can start without linbpq up - DAPPS will retry the AGW connection
 # on its own - but ordering after linbpq makes the happy path quick.

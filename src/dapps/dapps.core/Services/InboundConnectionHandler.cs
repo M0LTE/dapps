@@ -81,7 +81,7 @@ public class InboundConnectionHandler(
                 }
                 else if (cmd == Command.Help)
                 {
-                    await stream.WriteUtf8AndFlush("This is DAPPS. See https://github.com/M0LTE/dapps/blob/master/README.md for details.\n");
+                    await stream.WriteUtf8AndFlush("This is DAPPS. See https://github.com/packet-net/dapps/blob/master/README.md for details.\n");
                 }
                 else if (cmd == Command.IHave)
                 {

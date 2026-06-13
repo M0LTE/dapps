@@ -121,4 +121,4 @@ See the [Troubleshooting](../troubleshooting.md) page for the AGW-specific failu
 
 The AGW protocol is well-defined and stable; any host that implements it should work. Direwolf in particular ships an AGW host as a built-in option. The configuration shape is the same: enable AGW, give DAPPS the callsign and host:port, register on connect.
 
-If you've got a non-BPQ AGW setup working, please [open an issue](https://github.com/M0LTE/dapps/issues) so we can document it here.
+If you've got a non-BPQ AGW setup working, please [open an issue](https://github.com/packet-net/dapps/issues) so we can document it here.

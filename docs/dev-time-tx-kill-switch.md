@@ -69,6 +69,6 @@ If polling that URL is itself a problem in your environment (an isolated network
 
 ## Source
 
-- Poller: [`src/dapps/dapps.core/Services/TxKillSwitchPoller.cs`](https://github.com/M0LTE/dapps/blob/master/src/dapps/dapps.core/Services/TxKillSwitchPoller.cs)
-- Gate composition: [`src/dapps/dapps.core/Services/SystemOptionsBackedTxGate.cs`](https://github.com/M0LTE/dapps/blob/master/src/dapps/dapps.core/Services/SystemOptionsBackedTxGate.cs)
-- Bearer-level enforcement: [`src/dapps/dapps.client/Tx/IDappsTxGate.cs`](https://github.com/M0LTE/dapps/blob/master/src/dapps/dapps.client/Tx/IDappsTxGate.cs)
+- Poller: [`src/dapps/dapps.core/Services/TxKillSwitchPoller.cs`](https://github.com/packet-net/dapps/blob/master/src/dapps/dapps.core/Services/TxKillSwitchPoller.cs)
+- Gate composition: [`src/dapps/dapps.core/Services/SystemOptionsBackedTxGate.cs`](https://github.com/packet-net/dapps/blob/master/src/dapps/dapps.core/Services/SystemOptionsBackedTxGate.cs)
+- Bearer-level enforcement: [`src/dapps/dapps.client/Tx/IDappsTxGate.cs`](https://github.com/packet-net/dapps/blob/master/src/dapps/dapps.client/Tx/IDappsTxGate.cs)

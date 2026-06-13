@@ -2,7 +2,7 @@
 #
 # DAPPS one-liner installer.
 #
-#   curl -sSL https://m0lte.github.io/dapps/install.sh | sudo bash
+#   curl -sSL https://packet-net.github.io/dapps/install.sh | sudo bash
 #
 # Detects arch, downloads the latest binary from the GitHub Release,
 # creates a system user, drops the systemd units, enables and starts.
@@ -15,7 +15,7 @@
 # instead, which goes through the supervised dapps-updater.)
 #
 # Linux + systemd only. macOS, Windows, and non-systemd Linux distros
-# can install manually - see https://m0lte.github.io/dapps/install/
+# can install manually - see https://packet-net.github.io/dapps/install/
 
 set -euo pipefail
 
@@ -24,7 +24,7 @@ PREFIX="${PREFIX:-/opt/dapps}"
 STATE_DIR="${STATE_DIR:-/var/lib/dapps}"
 SERVICE_USER="${SERVICE_USER:-dapps}"
 HTTP_BIND="${HTTP_BIND:-0.0.0.0:5000}"
-RELEASE_BASE="https://github.com/M0LTE/dapps/releases/latest/download"
+RELEASE_BASE="https://github.com/packet-net/dapps/releases/latest/download"
 
 # ── helpers ────────────────────────────────────────────────────────────
 say()  { printf '\033[1;36m::\033[0m %s\n' "$*"; }
@@ -32,11 +32,11 @@ warn() { printf '\033[1;33m!!\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31m!!\033[0m %s\n' "$*" >&2; exit 1; }
 
 require_root() {
-    [[ ${EUID:-$(id -u)} -eq 0 ]] || die "This installer needs root. Re-run with sudo, e.g. 'curl -sSL https://m0lte.github.io/dapps/install.sh | sudo bash'."
+    [[ ${EUID:-$(id -u)} -eq 0 ]] || die "This installer needs root. Re-run with sudo, e.g. 'curl -sSL https://packet-net.github.io/dapps/install.sh | sudo bash'."
 }
 
 require_systemd() {
-    command -v systemctl >/dev/null 2>&1 || die "systemd not found. This installer is Linux+systemd only. See https://m0lte.github.io/dapps/install/ for manual install on other platforms."
+    command -v systemctl >/dev/null 2>&1 || die "systemd not found. This installer is Linux+systemd only. See https://packet-net.github.io/dapps/install/ for manual install on other platforms."
     [[ -d /run/systemd/system ]] || die "systemd not running. Are you in a container or chroot?"
 }
 
@@ -62,7 +62,7 @@ detect_rid() {
             fi
             ;;
         armv7l|armv7|armhf) echo "linux-arm" ;;
-        *) die "Unsupported architecture: $arch. Build from source or open an issue at https://github.com/M0LTE/dapps/issues." ;;
+        *) die "Unsupported architecture: $arch. Build from source or open an issue at https://github.com/packet-net/dapps/issues." ;;
     esac
 }
 
@@ -121,7 +121,7 @@ download_binary() {
 
     # curl with -fsSL: fail on 4xx/5xx, silent, follow redirects.
     if ! curl -fsSL "$url" -o "$target.tmp"; then
-        die "Download failed. Check network connectivity and the release page at https://github.com/M0LTE/dapps/releases/latest"
+        die "Download failed. Check network connectivity and the release page at https://github.com/packet-net/dapps/releases/latest"
     fi
 
     chmod +x "$target.tmp"

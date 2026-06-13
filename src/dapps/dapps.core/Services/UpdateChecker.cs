@@ -27,7 +27,7 @@ public sealed class UpdateChecker(
     TimeProvider timeProvider,
     ILogger<UpdateChecker> logger) : BackgroundService
 {
-    private const string ReleasesUrl = "https://api.github.com/repos/M0LTE/dapps/releases/latest";
+    private const string ReleasesUrl = "https://api.github.com/repos/packet-net/dapps/releases/latest";
     // 1 hour: GitHub's unauthenticated rate limit is 60 req/hour/IP, so
     // one poll/hour is well within budget. 6h was too long for "I just
     // shipped, do my nodes see it?" - the dashboard would tell operators

@@ -1,6 +1,6 @@
 [Unit]
 Description=DAPPS triggered-update worker (privileged)
-Documentation=https://github.com/M0LTE/dapps
+Documentation=https://github.com/packet-net/dapps
 # We want to be sure dapps itself isn't actively transitioning when
 # we start; ConditionPathExists guards against the timer firing on a
 # host where dapps isn't installed at all.
