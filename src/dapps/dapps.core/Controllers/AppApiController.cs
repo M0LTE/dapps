@@ -71,7 +71,12 @@ public class AppApiController(Database database) : ControllerBase
     public async Task<IActionResult> Ack(string app, string id)
     {
         if (!HttpContext.IsAuthorisedForApp(app)) return Forbid();
-        await database.MarkLocallyDelivered(id);
+        // Scope the ack to this app's own messages. The id is a content
+        // hash supplied by the caller, so acking by id alone would let
+        // one app suppress delivery of another app's messages. Ack stays
+        // idempotent: a no-op (already ack'd, or not this app's message)
+        // still returns NoContent.
+        await database.MarkLocallyDelivered(id, app);
         return NoContent();
     }
 }

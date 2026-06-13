@@ -48,10 +48,28 @@ public class Database(
         return rows;
     }
 
-    public async Task MarkLocallyDelivered(string id)
+    /// <summary>
+    /// Mark an inbound message delivered, scoped to the app that owns it.
+    /// Only flips the row when <paramref name="id"/> names a message
+    /// destined for <paramref name="appName"/> on this node (destination
+    /// <c>app@local-callsign[-ssid]</c>, same shape as
+    /// <see cref="GetUnacknowledgedLocalMessagesForApp"/>).
+    ///
+    /// The id is attacker-influenceable - it's a 7-hex-char content hash
+    /// (~28 bits), guessable when the payload is known - so the ack must
+    /// not trust it on its own. Without the app scope, any authenticated
+    /// app could ack (and thereby suppress delivery of) another app's
+    /// messages. Returns the number of rows updated; 0 means no such
+    /// undelivered/delivered message exists for this app, so the caller
+    /// can treat it as a no-op (ack is idempotent).
+    /// </summary>
+    public async Task<int> MarkLocallyDelivered(string id, string appName)
     {
-        await DbInfo.GetAsyncConnection().ExecuteAsync(
-            "update messages set locallydelivered=1 where id=?", id);
+        var local = options.CurrentValue.Callsign.Split('-')[0];
+        var prefix = $"{appName}@{local}";
+        return await DbInfo.GetAsyncConnection().ExecuteAsync(
+            "update messages set locallydelivered=1 where id=? and (destination=? or destination like ?)",
+            id, prefix, $"{prefix}-%");
     }
 
     /// <summary>

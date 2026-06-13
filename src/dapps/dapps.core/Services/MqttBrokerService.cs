@@ -395,8 +395,13 @@ public sealed class MqttBrokerService(
             {
                 try
                 {
-                    await database.MarkLocallyDelivered(id);
-                    logger.LogInformation("MQTT: ack received for {0}", id);
+                    // Scope the ack to ackApp's own messages - the id
+                    // rides in the (attacker-controlled) payload, so
+                    // acking by id alone would let one app suppress
+                    // another app's inbound delivery.
+                    var acked = await database.MarkLocallyDelivered(id, ackApp);
+                    logger.LogInformation("MQTT: ack received for {0} (app {1}, rows={2})",
+                        id, ackApp, acked);
                 }
                 catch (Exception ex)
                 {

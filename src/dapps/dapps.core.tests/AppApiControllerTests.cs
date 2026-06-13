@@ -139,6 +139,24 @@ public sealed class AppApiControllerTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Ack_OpenMode_CannotAckAnotherAppsMessage()
+    {
+        // Open mode (no bearer auth stamped) still proceeds past the
+        // controller's IsAuthorisedForApp gate - but the ack must be
+        // scoped to the named app's own messages. The id is a content
+        // hash the caller supplies, so acking "yourapp"'s message by id
+        // while claiming to be "myapp" must be a no-op.
+        await database.SaveMessage("xyz9999", "x"u8.ToArray(), salt: null,
+            destination: "yourapp@N0CALL", sourceCallsign: "G0SRC", additionalProperties: "{}", ttl: null);
+
+        var result = await controller.Ack("myapp", "xyz9999");
+
+        result.Should().BeOfType<NoContentResult>("ack stays idempotent even when it's a no-op");
+        (await database.GetUnacknowledgedLocalMessagesForApp("yourapp")).Should().HaveCount(1,
+            "another app's message must not be ack'd via a guessed/known id");
+    }
+
+    [Fact]
     public async Task Ack_AuthMismatchesPathApp_Returns403_AndLeavesUnacked()
     {
         await database.SaveMessage("xyz9999", "x"u8.ToArray(), salt: null,
